@@ -23,6 +23,15 @@ export interface AppInfo {
   screenshotActive: boolean;
 }
 
+/**
+ * BackgroundSwatch is one preset rendered against the sample screenshot, for
+ * the settings page's live previews.
+ */
+export interface BackgroundSwatch {
+  id: string;
+  image: string;
+}
+
 /** Batch is the state of a running compression pass. */
 export interface Batch {
   running: boolean;
@@ -94,7 +103,8 @@ export interface ScreenshotStyle {
   background: string;
   /**
    * Padding is the breathing room around the shot as a percentage of its
-   * longer edge: 0, 6, 10 or 16.
+   * longer edge: 0, 6, 10 or 16. Zero keeps the rounded corners but adds
+   * no background or shadow, so the output is the bare rounded shot.
    */
   padding: number;
 }
@@ -153,6 +163,15 @@ export const AnyPic = {
   /** AddPaths adds files, or the images inside directories. */
   addPaths(paths: string[]): Promise<AddResult> {
     return call("AnyPic.AddPaths", paths);
+  },
+  /**
+   * BeautifySwatches renders every background preset plus the auto gradient
+   * against a sample screenshot — the newest queued screenshot, or a synthetic
+   * window when none is queued — so picking a background shows the real style
+   * instead of a bare color chip.
+   */
+  beautifySwatches(): Promise<BackgroundSwatch[]> {
+    return call("AnyPic.BeautifySwatches");
   },
   /** Cancel stops a compression pass. */
   cancel(): Promise<void> {

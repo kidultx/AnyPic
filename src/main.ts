@@ -82,6 +82,11 @@ let savePending = false;
 let isMac = navigator.platform.toLowerCase().includes("mac");
 let lastFocused: HTMLElement | null = null;
 let recordingShortcut = false;
+/* Live beautify previews keyed by background id; rendered by the backend
+   against the newest queued screenshot (or a synthetic window). */
+let beautifySwatches: Map<string, string> | null = null;
+let beautifySwatchesLoading = false;
+let beautifySwatchesStale = true;
 
 const rowCache = new Map<number, HTMLElement>();
 const previewCache = new Map<number, Preview>();
@@ -119,11 +124,30 @@ const BEAUTIFY_BACKGROUNDS: Record<string, string> = {
   paper: "纸白",
 };
 
+/* Fallback chip colors for the swatch grid; once the backend's live previews
+   arrive, the real rendered thumbnails take over. */
+const BEAUTIFY_FALLBACKS: Record<string, string> = {
+  auto: "linear-gradient(135deg, #a8edea, #d3a8f3 45%, #ff9d6f)",
+  breeze: "linear-gradient(135deg, #CF2F98, #6A3DEC)",
+  candy: "linear-gradient(135deg, #A58EFB, #E9BFF8)",
+  crimson: "linear-gradient(135deg, #FF6363, #733434)",
+  falcon: "linear-gradient(135deg, #BDE3EC, #363654)",
+  meadow: "linear-gradient(135deg, #59D499, #A0872D)",
+  midnight: "linear-gradient(135deg, #4CC8C8, #202033)",
+  raindrop: "linear-gradient(135deg, #8EC7FB, #1C55AA)",
+  sunset: "linear-gradient(135deg, #FFCF73, #FF7A2F)",
+  ink: "#4F46E5",
+  graphite: "#1F2937",
+  paper: "#F4F1EA",
+};
+
 function upsertItem(item: Item) {
   const index = items.findIndex((existing) => existing.id === item.id);
   if (index === -1) items.push(item);
   else items[index] = item;
   previewCache.delete(item.id);
+  // The beautify previews render against the newest queued screenshot.
+  if (item.screenshot) beautifySwatchesStale = true;
 }
 
 /* ------------------------------------------------------------------ */
@@ -256,11 +280,16 @@ function applySnapshot(snapshot: Snapshot, includeSettings = true) {
   // A thumbnail may have arrived before the method's response. Keep it when
   // the queue-only snapshot was taken just before the thumbnail finished.
   const previousThumbs = new Map(items.map((item) => [item.id, item.thumb]));
+  const previousScreenshot = items.some((item) => item.screenshot);
   items = snapshot.items.map((item) => {
     if (item.thumb) return item;
     const thumb = previousThumbs.get(item.id);
     return thumb ? { ...item, thumb } : item;
   });
+  // The beautify previews render against the newest queued screenshot.
+  if (previousScreenshot !== items.some((item) => item.screenshot)) {
+    beautifySwatchesStale = true;
+  }
   if (includeSettings) {
     settings = { ...defaultSettings(), ...snapshot.settings };
     applyTheme(settings.theme);
@@ -1142,6 +1171,7 @@ async function clearQueue() {
     items = [];
     compressedSignature = "";
     batch = { running: false, total: 0, done: 0, failed: 0, canceled: false };
+    beautifySwatchesStale = true;
     renderAll();
     return;
   }
@@ -1380,6 +1410,8 @@ function syncBeautifyUI() {
   const toggle = $<HTMLInputElement>("#beautifyToggle");
   if (toggle) toggle.checked = on;
   $("#beautifyOptions").hidden = !on;
+  const grid = $("#beautifyGrid");
+  if (!grid.childElementCount) renderBeautifyGrid();
   $$<HTMLButtonElement>("#beautifyGrid button").forEach((button) => {
     const active = button.dataset.bg === style.background;
     button.setAttribute("aria-checked", String(active));
@@ -1390,6 +1422,68 @@ function syncBeautifyUI() {
     button.setAttribute("aria-pressed", String(active));
   });
   $("#beautifyHint").textContent = BEAUTIFY_BACKGROUNDS[style.background] ?? "自动取色";
+  if (on && beautifySwatchesStale && !beautifySwatchesLoading) {
+    void refreshBeautifySwatches();
+  }
+}
+
+/* The swatch grid renders immediately from fallback colors, then swaps in
+   the backend's real previews of the current screenshot when they land. */
+function renderBeautifyGrid() {
+  const grid = $("#beautifyGrid");
+  grid.innerHTML = "";
+  for (const [id, label] of Object.entries(BEAUTIFY_BACKGROUNDS)) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "beautify-swatch";
+    button.dataset.bg = id;
+    button.title = label;
+    button.setAttribute("role", "radio");
+    button.setAttribute("aria-checked", "false");
+    const chip = document.createElement("span");
+    chip.className = "swatch-fallback";
+    chip.setAttribute("aria-hidden", "true");
+    chip.style.background = BEAUTIFY_FALLBACKS[id] ?? "#888";
+    const thumb = document.createElement("img");
+    thumb.className = "swatch-thumb";
+    thumb.hidden = true;
+    thumb.alt = "";
+    thumb.setAttribute("aria-hidden", "true");
+    button.append(chip, thumb);
+    grid.appendChild(button);
+  }
+  applyBeautifySwatches();
+}
+
+async function refreshBeautifySwatches() {
+  if (demoMode || beautifySwatchesLoading) return;
+  beautifySwatchesLoading = true;
+  try {
+    const swatches = await AnyPic.beautifySwatches();
+    beautifySwatches = new Map(swatches.map((s) => [s.id, s.image]));
+    beautifySwatchesStale = false;
+    applyBeautifySwatches();
+  } catch {
+    /* keep the fallback chips; previews are cosmetic */
+  } finally {
+    beautifySwatchesLoading = false;
+  }
+}
+
+/* applyBeautifySwatches swaps fallback chips for rendered previews; ids the
+   backend did not return keep their fallback. */
+function applyBeautifySwatches() {
+  if (!beautifySwatches) return;
+  $$("#beautifyGrid .beautify-swatch").forEach((button) => {
+    const image = beautifySwatches?.get(button.dataset.bg ?? "");
+    if (!image) return;
+    const thumb = button.querySelector<HTMLImageElement>(".swatch-thumb");
+    const chip = button.querySelector<HTMLElement>(".swatch-fallback");
+    if (!thumb || !chip) return;
+    if (thumb.getAttribute("src") !== image) thumb.src = image;
+    thumb.hidden = false;
+    chip.hidden = true;
+  });
 }
 
 function syncSettingsToUI() {

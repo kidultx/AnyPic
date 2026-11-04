@@ -5,6 +5,8 @@ import (
 	"image/color"
 	"image/draw"
 	"math"
+	"os"
+	"sort"
 	"strconv"
 
 	"github.com/disintegration/imaging"
@@ -21,7 +23,8 @@ type ScreenshotStyle struct {
 	// derive a matching gradient from the screenshot's own edge colors.
 	Background string `json:"background"`
 	// Padding is the breathing room around the shot as a percentage of its
-	// longer edge: 0, 6, 10 or 16.
+	// longer edge: 0, 6, 10 or 16. Zero keeps the rounded corners but adds
+	// no background or shadow, so the output is the bare rounded shot.
 	Padding int `json:"padding"`
 }
 
@@ -90,10 +93,120 @@ func paddingPx(percent, longEdge int) int {
 	return clampInt(longEdge*percent/100, 20, 420)
 }
 
-// cornerRadius scales with the shot but stays in a band where it reads as a
-// rounded window rather than a circle or a sharp card.
+// BackgroundSwatch is one preset rendered against the sample screenshot, for
+// the settings page's live previews.
+type BackgroundSwatch struct {
+	ID    string `json:"id"`
+	Image string `json:"image"`
+}
+
+// beautifySwatchSide is the rendered preview's larger side; small enough for
+// a settings grid, large enough for the shadow to stay legible.
+const beautifySwatchSide = 96
+
+// BeautifySwatches renders every background preset plus the auto gradient
+// against a sample screenshot — the newest queued screenshot, or a synthetic
+// window when none is queued — so picking a background shows the real style
+// instead of a bare color chip.
+func (a *AnyPic) BeautifySwatches() ([]BackgroundSwatch, error) {
+	sample, err := a.screenshotSample()
+	if err != nil {
+		return nil, err
+	}
+	style := ScreenshotStyle{Mode: "on", Padding: 6}
+	swatchMax := beautifySwatchSide
+	ids := make([]string, 0, len(backgroundPresets)+1)
+	ids = append(ids, "auto")
+	for id := range backgroundPresets {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids[1:])
+
+	swatches := make([]BackgroundSwatch, 0, len(ids))
+	for _, id := range ids {
+		style.Background = id
+		decorated := decorateScreenshot(sample, style)
+		img := imaging.Fit(decorated, swatchMax, swatchMax, imaging.Lanczos)
+		s, err := dataURL(img, false, 85)
+		if err != nil {
+			return nil, err
+		}
+		swatches = append(swatches, BackgroundSwatch{ID: id, Image: s})
+	}
+	return swatches, nil
+}
+
+// screenshotSample picks the image the swatches render against: the newest
+// screenshot in the queue so the preview matches what the user will ship,
+// scaled down for speed, or a synthetic window mock when the queue is empty.
+func (a *AnyPic) screenshotSample() (image.Image, error) {
+	a.mu.Lock()
+	var path string
+	for i := len(a.items) - 1; i >= 0; i-- {
+		if a.items[i].Screenshot {
+			path = a.items[i].Path
+			break
+		}
+	}
+	a.mu.Unlock()
+
+	if path != "" {
+		f, err := os.Open(path)
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+		img, err := imaging.Decode(f)
+		if err != nil {
+			return nil, err
+		}
+		// The style math is resolution aware; a mid-size proxy is enough
+		// for a 96px preview and keeps the render instant.
+		return imaging.Fit(img, 640, 640, imaging.Linear), nil
+	}
+	return syntheticWindowShot(), nil
+}
+
+// syntheticWindowShot draws a small mock app window — a title bar, a sidebar
+// and a content area — so the swatches still read as real screenshot styles
+// before anything is queued.
+func syntheticWindowShot() image.Image {
+	const w, h, bar, side = 320, 200, 24, 76
+	img := image.NewNRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			var c color.NRGBA
+			switch {
+			case y < bar:
+				c = color.NRGBA{R: 236, G: 237, B: 240, A: 255}
+			case x < side:
+				c = color.NRGBA{R: 246, G: 247, B: 249, A: 255}
+			default:
+				c = color.NRGBA{R: 255, G: 255, B: 255, A: 255}
+			}
+			img.SetNRGBA(x, y, c)
+		}
+	}
+	// Traffic lights and a couple of content strokes give the sampler
+	// something with actual hue to pick up.
+	for i, col := range [3]color.NRGBA{
+		{R: 255, G: 95, B: 87, A: 255},
+		{R: 255, G: 189, B: 46, A: 255},
+		{R: 39, G: 201, B: 63, A: 255},
+	} {
+		fillRoundedRect(img, image.Rect(10+i*14, 9, 20+i*14, 19), 5, col)
+	}
+	fillRoundedRect(img, image.Rect(88, 38, 300, 52), 4, color.NRGBA{R: 229, G: 231, B: 235, A: 255})
+	fillRoundedRect(img, image.Rect(88, 62, 260, 76), 4, color.NRGBA{R: 229, G: 231, B: 235, A: 255})
+	fillRoundedRect(img, image.Rect(88, 86, 285, 100), 4, color.NRGBA{R: 79, G: 70, B: 229, A: 255})
+	return img
+}
+
+// cornerRadius scales with the shot — 4% of the short edge — so a 4K
+// capture keeps the same visual weight as a small one, inside a band where
+// it still reads as a rounded window rather than a circle or a sharp card.
 func cornerRadius(shortEdge int) int {
-	return clampInt(shortEdge*4/100, 10, 28)
+	return clampInt(shortEdge*4/100, 10, 120)
 }
 
 // backgroundColors resolves the two gradient stops. Unknown ids fall through
@@ -141,9 +254,38 @@ func autoBackgroundColors(src image.Image) (color.NRGBA, color.NRGBA) {
 		return mustHex(pair[0]), mustHex(pair[1])
 	}
 	base := color.NRGBA{R: uint8(rs / n), G: uint8(gs / n), B: uint8(bs / n), A: 255}
+	// The gradient frames the shot, so its ends need to sit clearly away
+	// from the shot's own tones: a light screenshot against a light top
+	// stop reads as one blurred blob. Clamping the base lightness before
+	// mixing keeps both stops at a usable distance for any source.
+	base = clampLightness(base, 0.30, 0.72)
 	white := color.NRGBA{R: 255, G: 255, B: 255, A: 255}
 	black := color.NRGBA{A: 255}
-	return mixColor(base, white, 0.35), mixColor(base, black, 0.30)
+	return mixColor(base, white, 0.45), mixColor(base, black, 0.30)
+}
+
+// clampLightness pins a color's perceived lightness to [lo, hi] by scaling
+// all channels by one factor — hue ratios survive, chroma shrinks or grows
+// with the tone, which is what a background tint wants.
+func clampLightness(c color.NRGBA, lo, hi float64) color.NRGBA {
+	r, g, b := float64(c.R)/255, float64(c.G)/255, float64(c.B)/255
+	mx, mn := max(r, g, b), min(r, g, b)
+	l := (mx + mn) / 2
+	switch {
+	case l < lo:
+		// Lift off black; stop early if a channel would clip to white.
+		t := min(lo/max(l, 1e-6), 1/max(mx, 1e-6))
+		r, g, b = r*t, g*t, b*t
+	case l > hi:
+		// Pull back from white; lightness scales with the same factor.
+		r, g, b = r*(hi/l), g*(hi/l), b*(hi/l)
+	}
+	return color.NRGBA{
+		R: uint8(math.Round(r * 255)),
+		G: uint8(math.Round(g * 255)),
+		B: uint8(math.Round(b * 255)),
+		A: 255,
+	}
 }
 
 // paintGradient fills the canvas with a diagonal two-stop gradient.
@@ -166,10 +308,15 @@ func paintGradient(canvas *image.NRGBA, from, to color.NRGBA) {
 // drawShadow blurs a rounded-rect silhouette of the shot and pastes it
 // slightly below the image position. The layer is kept to the silhouette
 // plus a blur margin so a 4K screenshot does not blur a 4K canvas.
+//
+// The shot itself is centered; only the shadow is nudged down, so the
+// visible breathing room stays even while the shadow still reads as cast
+// from above. The blur margin absorbs the offset: pasting shifted up-left
+// by margin keeps the blurred layer inside the canvas.
 func drawShadow(canvas *image.NRGBA, w, h, pad, radius int) {
 	sigma := clampFloat(float64(radius)*1.1, 10, 28)
 	offset := clampInt(radius*3/5, 6, 18)
-	margin := int(math.Ceil(sigma * 3))
+	margin := int(math.Ceil(sigma * 3)) + offset
 
 	layer := image.NewNRGBA(image.Rect(0, 0, w+2*margin, h+2*margin))
 	fillRoundedRect(layer, image.Rect(margin, margin, margin+w, margin+h), radius, color.NRGBA{A: 70})

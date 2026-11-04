@@ -63,11 +63,59 @@ func TestAutoBackgroundFollowsImageColor(t *testing.T) {
 		}
 	}
 	from, to := autoBackgroundColors(src)
-	if from.R > 120 || from.G > 120 || from.B < 60 {
+	if from.B < 100 || from.B < from.R {
 		t.Fatalf("from color %v is not a lightened navy", from)
 	}
 	if to.R >= from.R || to.B >= from.B {
 		t.Fatalf("gradient should run light to dark, got %v -> %v", from, to)
+	}
+}
+
+func TestAutoBackgroundClampsLightness(t *testing.T) {
+	// A near-white screenshot would otherwise melt into a near-white
+	// background: the top stop must stay clearly lighter, the bottom stop
+	// clearly darker, than the shot's own edge tone.
+	white := image.NewNRGBA(image.Rect(0, 0, 60, 60))
+	for y := 0; y < 60; y++ {
+		for x := 0; x < 60; x++ {
+			white.SetNRGBA(x, y, color.NRGBA{R: 245, G: 245, B: 245, A: 255})
+		}
+	}
+	from, to := autoBackgroundColors(white)
+	// The top stop must be at most ~0.86 lightness so a 245-gray shot still
+	// separates from it, and the bottom stop must sit well below the shot.
+	if from.R < 200 || from.R > 225 {
+		t.Fatalf("light screenshot gave a top stop %v with no headroom", from)
+	}
+	if to.R > 200 {
+		t.Fatalf("light screenshot gave a bottom stop %v that matches the shot", to)
+	}
+	if !(to.R < from.R && to.G < from.G && to.B < from.B) {
+		t.Fatalf("gradient should run light to dark, got %v -> %v", from, to)
+	}
+
+	// A near-black shot gets lifted off pure black for the same reason.
+	black := image.NewNRGBA(image.Rect(0, 0, 60, 60))
+	for y := 0; y < 60; y++ {
+		for x := 0; x < 60; x++ {
+			black.SetNRGBA(x, y, color.NRGBA{A: 255})
+		}
+	}
+	darkFrom, darkTo := autoBackgroundColors(black)
+	if darkFrom.R < 60 || darkFrom.G < 60 || darkFrom.B < 60 {
+		t.Fatalf("dark screenshot gave a top stop %v that matches the shot", darkFrom)
+	}
+	if !(darkTo.R < darkFrom.R && darkTo.G < darkFrom.G && darkTo.B < darkFrom.B) {
+		t.Fatalf("gradient should run light to dark, got %v -> %v", darkFrom, darkTo)
+	}
+}
+
+func TestCornerRadiusScalesWithResolution(t *testing.T) {
+	if got := cornerRadius(400); got != 16 {
+		t.Fatalf("small shot radius %d, want 16", got)
+	}
+	if got := cornerRadius(2160); got != 86 {
+		t.Fatalf("4K short-edge radius %d, want 86", got)
 	}
 }
 
