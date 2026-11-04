@@ -695,11 +695,10 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 
 	// Fresh captures can be decorated before anything else runs, so the
 	// padding counts toward the resize limit and the style survives every
-	// later step untouched.
+	// later step untouched. The style travels with the batch settings so a
+	// concurrent save can never split a run across two looks.
 	if screenshot {
-		a.mu.Lock()
-		style := a.settings.ScreenshotStyle
-		a.mu.Unlock()
+		style := s.ScreenshotStyle
 		if style.Mode == "on" {
 			img = decorateScreenshot(img, style)
 		}

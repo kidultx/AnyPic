@@ -146,9 +146,10 @@ func TestCompressDecoratesScreenshot(t *testing.T) {
 	writePNG(t, src, gradientImage(600, 400, false))
 
 	service := &AnyPic{tempDir: t.TempDir(), settings: defaultSettings()}
-	service.settings.ScreenshotStyle = ScreenshotStyle{Mode: "on", Background: "sunset", Padding: 6}
+	style := ScreenshotStyle{Mode: "on", Background: "sunset", Padding: 6}
+	service.settings.ScreenshotStyle = style
 	plain, err := service.compressOne(context.Background(), 1, src, "PNG", "shot.png", false, Settings{
-		Format: "png", Suffix: "-plain",
+		Format: "png", Suffix: "-plain", ScreenshotStyle: style,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -157,7 +158,7 @@ func TestCompressDecoratesScreenshot(t *testing.T) {
 		t.Fatalf("plain image grew to %dx%d", plain.width, plain.height)
 	}
 	decorated, err := service.compressOne(context.Background(), 2, src, "PNG", "shot.png", true, Settings{
-		Format: "png", Suffix: "-pretty",
+		Format: "png", Suffix: "-pretty", ScreenshotStyle: style,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -178,6 +179,31 @@ func TestCompressDecoratesScreenshot(t *testing.T) {
 	if _, _, _, a := decoded.At(0, 0).RGBA(); a != 0xffff {
 		t.Fatal("corner of the decorated output is not the background")
 	}
+}
+
+func TestShadowSitsBelowAndCenters(t *testing.T) {
+	src := gradientImage(400, 300, false)
+	out := decorateScreenshot(src, ScreenshotStyle{Mode: "on", Background: "ink", Padding: 10})
+	pad := 40
+	// The shadow is offset downward: a pixel just below the shot is darker
+	// than the matching pixel just above it.
+	above := luma(out.At(pad+200, pad-12))
+	below := luma(out.At(pad+200, pad+300+12))
+	if below >= above {
+		t.Fatalf("shadow sits at the wrong end of the shot: above %.1f, below %.1f", above, below)
+	}
+	// No horizontal offset: equal distances left and right of the shot must
+	// darken equally (the sign bug put the shadow off to one side).
+	left := luma(out.At(pad-12, pad+150))
+	right := luma(out.At(pad+400+12, pad+150))
+	if d := left - right; d > 6 || d < -6 {
+		t.Fatalf("shadow is horizontally shifted: left %.1f, right %.1f", left, right)
+	}
+}
+
+func luma(c color.Color) float64 {
+	r, g, b, _ := c.RGBA()
+	return 0.2126*float64(r>>8) + 0.7152*float64(g>>8) + 0.0722*float64(b>>8)
 }
 
 func sameColor(a, b color.Color) bool {

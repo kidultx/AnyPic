@@ -168,10 +168,11 @@ export const AnyPic = {
    * BeautifySwatches renders every background preset plus the auto gradient
    * against a sample screenshot — the newest queued screenshot, or a synthetic
    * window when none is queued — so picking a background shows the real style
-   * instead of a bare color chip.
+   * instead of a bare color chip. The caller's padding is honoured so the
+   * preview matches what compressing will produce.
    */
-  beautifySwatches(): Promise<BackgroundSwatch[]> {
-    return call("AnyPic.BeautifySwatches");
+  beautifySwatches(style: ScreenshotStyle): Promise<BackgroundSwatch[]> {
+    return call("AnyPic.BeautifySwatches", style);
   },
   /** Cancel stops a compression pass. */
   cancel(): Promise<void> {

@@ -72,7 +72,10 @@ func decorateScreenshot(src image.Image, style ScreenshotStyle) image.Image {
 	}
 
 	pad := paddingPx(style.Padding, max(w, h))
-	radius := cornerRadius(min(w, h))
+	// The radius never exceeds half the short edge, so a thumb-sized source
+	// degrades to a pill instead of feeding the distance field an absurd
+	// value.
+	radius := min(cornerRadius(min(w, h)), min(w, h)/2)
 
 	shot := roundCorners(src, radius)
 	from, to := backgroundColors(style, src)
@@ -107,13 +110,15 @@ const beautifySwatchSide = 96
 // BeautifySwatches renders every background preset plus the auto gradient
 // against a sample screenshot — the newest queued screenshot, or a synthetic
 // window when none is queued — so picking a background shows the real style
-// instead of a bare color chip.
-func (a *AnyPic) BeautifySwatches() ([]BackgroundSwatch, error) {
+// instead of a bare color chip. The caller's padding is honoured so the
+// preview matches what compressing will produce.
+func (a *AnyPic) BeautifySwatches(style ScreenshotStyle) ([]BackgroundSwatch, error) {
 	sample, err := a.screenshotSample()
 	if err != nil {
 		return nil, err
 	}
-	style := ScreenshotStyle{Mode: "on", Padding: 6}
+	style = normalizeScreenshotStyle(style)
+	style.Mode = "on"
 	swatchMax := beautifySwatchSide
 	ids := make([]string, 0, len(backgroundPresets)+1)
 	ids = append(ids, "auto")
@@ -270,6 +275,12 @@ func autoBackgroundColors(src image.Image) (color.NRGBA, color.NRGBA) {
 func clampLightness(c color.NRGBA, lo, hi float64) color.NRGBA {
 	r, g, b := float64(c.R)/255, float64(c.G)/255, float64(c.B)/255
 	mx, mn := max(r, g, b), min(r, g, b)
+	if mx <= 1e-6 {
+		// Pure black has no hue to preserve; lift it to a neutral gray so a
+		// black-edged shot still gets a gradient with some range.
+		v := uint8(math.Round(lo * 255))
+		return color.NRGBA{R: v, G: v, B: v, A: 255}
+	}
 	l := (mx + mn) / 2
 	switch {
 	case l < lo:
@@ -311,8 +322,7 @@ func paintGradient(canvas *image.NRGBA, from, to color.NRGBA) {
 //
 // The shot itself is centered; only the shadow is nudged down, so the
 // visible breathing room stays even while the shadow still reads as cast
-// from above. The blur margin absorbs the offset: pasting shifted up-left
-// by margin keeps the blurred layer inside the canvas.
+// from above.
 func drawShadow(canvas *image.NRGBA, w, h, pad, radius int) {
 	sigma := clampFloat(float64(radius)*1.1, 10, 28)
 	offset := clampInt(radius*3/5, 6, 18)
@@ -321,7 +331,11 @@ func drawShadow(canvas *image.NRGBA, w, h, pad, radius int) {
 	layer := image.NewNRGBA(image.Rect(0, 0, w+2*margin, h+2*margin))
 	fillRoundedRect(layer, image.Rect(margin, margin, margin+w, margin+h), radius, color.NRGBA{A: 70})
 	blurred := imaging.Blur(layer, sigma)
-	draw.Draw(canvas, canvas.Bounds(), blurred, image.Pt(pad-margin, pad+offset-margin), draw.Over)
+	// Draw maps the source point to the destination origin: the silhouette
+	// at (margin, margin) must land at (pad, pad+offset). Padding zeroes
+	// this out if the sign flips, so keep the arithmetic explicit.
+	origin := image.Pt(margin-pad, margin-pad-offset)
+	draw.Draw(canvas, canvas.Bounds(), blurred, origin, draw.Over)
 }
 
 // roundCorners copies src and multiplies the alpha of the four corner

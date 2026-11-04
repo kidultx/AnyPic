@@ -87,6 +87,9 @@ let recordingShortcut = false;
 let beautifySwatches: Map<string, string> | null = null;
 let beautifySwatchesLoading = false;
 let beautifySwatchesStale = true;
+/* Padding the current previews were rendered with, so changing the padding
+   control refreshes them. */
+let beautifyPreviewPadding = -1;
 
 const rowCache = new Map<number, HTMLElement>();
 const previewCache = new Map<number, Preview>();
@@ -141,13 +144,25 @@ const BEAUTIFY_FALLBACKS: Record<string, string> = {
   paper: "#F4F1EA",
 };
 
+function newestScreenshotID(): number | null {
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (items[i]!.screenshot) return items[i]!.id;
+  }
+  return null;
+}
+
 function upsertItem(item: Item) {
   const index = items.findIndex((existing) => existing.id === item.id);
-  if (index === -1) items.push(item);
+  const isNew = index === -1;
+  if (isNew) items.push(item);
   else items[index] = item;
   previewCache.delete(item.id);
-  // The beautify previews render against the newest queued screenshot.
-  if (item.screenshot) beautifySwatchesStale = true;
+  // A fresh capture becomes the sample the beautifier previews render
+  // against; status updates for an existing item must not re-render them.
+  if (isNew && item.screenshot) {
+    beautifySwatchesStale = true;
+    if (!$("#beautifyOptions").hidden) void refreshBeautifySwatches();
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -280,16 +295,14 @@ function applySnapshot(snapshot: Snapshot, includeSettings = true) {
   // A thumbnail may have arrived before the method's response. Keep it when
   // the queue-only snapshot was taken just before the thumbnail finished.
   const previousThumbs = new Map(items.map((item) => [item.id, item.thumb]));
-  const previousScreenshot = items.some((item) => item.screenshot);
+  const previousSample = newestScreenshotID();
   items = snapshot.items.map((item) => {
     if (item.thumb) return item;
     const thumb = previousThumbs.get(item.id);
     return thumb ? { ...item, thumb } : item;
   });
   // The beautify previews render against the newest queued screenshot.
-  if (previousScreenshot !== items.some((item) => item.screenshot)) {
-    beautifySwatchesStale = true;
-  }
+  if (newestScreenshotID() !== previousSample) beautifySwatchesStale = true;
   if (includeSettings) {
     settings = { ...defaultSettings(), ...snapshot.settings };
     applyTheme(settings.theme);
@@ -1422,7 +1435,7 @@ function syncBeautifyUI() {
     button.setAttribute("aria-pressed", String(active));
   });
   $("#beautifyHint").textContent = BEAUTIFY_BACKGROUNDS[style.background] ?? "自动取色";
-  if (on && beautifySwatchesStale && !beautifySwatchesLoading) {
+  if (on && !beautifySwatchesLoading && (beautifySwatchesStale || beautifyPreviewPadding !== style.padding)) {
     void refreshBeautifySwatches();
   }
 }
@@ -1457,11 +1470,17 @@ function renderBeautifyGrid() {
 
 async function refreshBeautifySwatches() {
   if (demoMode || beautifySwatchesLoading) return;
+  const style = { ...defaultSettings().screenshotStyle, ...settings.screenshotStyle };
+  if (style.mode !== "on" || $("#beautifyOptions").hidden) {
+    beautifySwatchesStale = true;
+    return;
+  }
   beautifySwatchesLoading = true;
   try {
-    const swatches = await AnyPic.beautifySwatches();
+    const swatches = await AnyPic.beautifySwatches(style);
     beautifySwatches = new Map(swatches.map((s) => [s.id, s.image]));
     beautifySwatchesStale = false;
+    beautifyPreviewPadding = style.padding;
     applyBeautifySwatches();
   } catch {
     /* keep the fallback chips; previews are cosmetic */
