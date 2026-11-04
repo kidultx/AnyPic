@@ -1,0 +1,9 @@
+node_modules/
+/dist/
+/build/
+/.mygo/
+mygo_windows_*.syso
+anypic
+.claude-scratch/
+.agents/
+.DS_Store

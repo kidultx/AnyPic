@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="AnyPic 是一款在本机运行的批量图片压缩工具。" />
+    <title>AnyPic</title>
+    <link rel="stylesheet" href="./src/style.css" />
+    <script>
+      try {
+        const mode = localStorage.getItem("anypic-theme") || "system";
+        const dark = mode === "dark" || (mode === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+      } catch (_) {}
+    </script>
+  </head>
+  <body>
+    <svg class="svg-sprite" aria-hidden="true">
+      <symbol id="i-add" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
+      <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3" /><circle cx="8.5" cy="8.5" r="1.4" /><path d="M21 15.5 16.5 11 5 21" /></symbol>
+      <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3Z" /><path d="m14.5 5.5 3 3" /></symbol>
+      <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.2l1.3-2h6l1.3 2h1.2A2.5 2.5 0 0 1 20 8.5v8a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5v-8Z" /><circle cx="12" cy="12.5" r="3.5" /></symbol>
+      <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9Z" /></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m7 9.5 5 5 5-5" /></symbol>
+      <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" /><circle cx="12" cy="12" r="3" /></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 21h16" /></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6.5 7l.9 13h9.2l.9-13M10 11v5M14 11v5" /></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 6.5" /></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 7.5V13M12 16.5h.01" /></symbol>
+      <symbol id="i-loader" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-9 9" /><path d="M3 12a9 9 0 0 1 9-9" opacity=".25" /></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.8 13.4A8.6 8.6 0 0 1 10.6 3.2 8.7 8.7 0 1 0 20.8 13.4Z" /></symbol>
+      <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12.5" rx="2" /><path d="M8.5 20.5h7M12 16.5v4" /></symbol>
+      <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.5" /></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11" /><circle cx="4.5" cy="6" r=".8" /><circle cx="4.5" cy="12" r=".8" /><circle cx="4.5" cy="18" r=".8" /></symbol>
+      <symbol id="i-compare" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M12 4v16" /><path d="m7 9 3 3-3 3M17 9l-3 3 3 3" /></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 6v5h-5" /><path d="M19.2 10A7.5 7.5 0 1 0 20 15" /></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8.5 10V7a3.5 3.5 0 0 1 7 0v3" /></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 11v5.5M12 7.5h.01" /></symbol>
+      <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" /></symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16" /></symbol>
+    </svg>
+
+    <div class="app">
+      <header class="titlebar">
+        <div class="brand">
+          <span class="logo" aria-hidden="true">
+            <img class="logo-light" src="./src/assets/logo-light.png" alt="" />
+            <img class="logo-dark" src="./src/assets/logo-dark.png" alt="" />
+          </span>
+          <span class="wordmark">AnyPic</span>
+          <span class="titlebar-sep" aria-hidden="true"></span>
+          <span class="window-subtitle">图片压缩</span>
+        </div>
+
+        <div class="titlebar-note">
+          <svg aria-hidden="true" class="icon"><use href="#i-lock" /></svg>
+          <span>本地处理</span>
+        </div>
+
+        <div class="titlebar-actions">
+          <button class="icon-btn" id="themeBtn" title="切换主题" aria-label="切换主题">
+            <svg aria-hidden="true" class="icon"><use href="#i-monitor" id="themeIcon" /></svg>
+          </button>
+          <button class="icon-btn" id="infoBtn" title="关于 AnyPic" aria-label="关于 AnyPic">
+            <svg aria-hidden="true" class="icon"><use href="#i-info" /></svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <aside class="sidebar">
+          <div class="sidebar-scroll">            <section class="settings-block">
+              <div class="block-head">
+                <h2>压缩设置</h2>
+                <button class="text-button" id="resetBtn" type="button" title="恢复推荐设置">重置</button>
+              </div>
+
+              <div class="field">
+                <div class="field-label">
+                  <label>输出格式</label>
+                  <span class="field-hint" id="formatHint">保持原格式</span>
+                </div>
+                <div class="segmented" id="formatSeg" role="group" aria-label="输出格式">
+                  <button data-format="auto" class="active" aria-pressed="true">自动</button>
+                  <button data-format="jpeg" aria-pressed="false">JPG</button>
+                  <button data-format="png" aria-pressed="false">PNG</button>
+                  <button data-format="webp" aria-pressed="false">WebP</button>
+                </div>
+              </div>
+
+              <div class="field quality-field">
+                <div class="field-label">
+                  <label for="quality">质量</label>
+                  <span class="quality-readout"><b id="qualityValue">82</b><small>%</small></span>
+                </div>
+                <div class="range-wrap">
+                  <input id="quality" type="range" min="30" max="100" step="1" value="82" />
+                  <div class="range-track-fill" id="qualityFill"></div>
+                </div>
+                <div class="range-scale">
+                  <span>更小</span>
+                  <span id="qualityLabel" class="quality-label">平衡</span>
+                  <span>更好</span>
+                </div>
+              </div>
+
+              <div class="field-row">
+                <label for="maxDim">最大边长</label>
+                <div class="select-wrap">
+                  <select id="maxDim">
+                    <option value="0">保持原尺寸</option>
+                    <option value="3840">3840 px</option>
+                    <option value="2560">2560 px</option>
+                    <option value="1920">1920 px</option>
+                    <option value="1280">1280 px</option>
+                    <option value="800">800 px</option>
+                  </select>
+                  <svg aria-hidden="true" class="icon select-chevron"><use href="#i-chevron" /></svg>
+                </div>
+              </div>
+
+              <div class="field-row">
+                <label for="suffix">文件名后缀</label>
+                <input id="suffix" class="text-input" type="text" value="-anypic" maxlength="32" spellcheck="false" />
+              </div>
+
+              <div class="tip-card" id="tipCard">
+                <svg aria-hidden="true" class="icon tip-icon"><use href="#i-info" /></svg>
+                <div>
+                  <strong id="tipTitle">保持原格式</strong>
+                  <p id="tipText">在保持原格式的同时优化体积。</p>
+                </div>
+              </div>
+            </section>
+
+            <section class="settings-block shortcut-block">
+              <div class="block-head">
+                <h2>截图</h2>
+              </div>
+              <div class="shortcut-row">
+                <label for="shortcutBtn">快捷键</label>
+                <button class="shortcut-input" id="shortcutBtn" type="button" title="点击后按下新的组合键；关闭窗口后仍可用">
+                  <span class="shortcut-value" id="shortcutValue">⌘⌥S</span>
+                  <svg aria-hidden="true" class="icon shortcut-edit" id="shortcutEdit"><use href="#i-pencil" /></svg>
+                </button>
+              </div>
+              <p class="shortcut-hint" id="shortcutHint" hidden>按住修饰键再按一个键，Esc 取消</p>
+              <label class="toggle-row">
+                <span>截图后复制到剪贴板</span>
+                <input class="switch-input" id="clipboardToggle" type="checkbox" checked />
+                <span class="switch" aria-hidden="true"></span>
+              </label>
+              <button class="text-button screen-permission" id="screenPermissionBtn" type="button" hidden>
+                截图只有壁纸？检查屏幕录制权限
+              </button>
+            </section>
+
+            <section class="settings-block">
+              <div class="block-head">
+                <h2>保存位置</h2>
+              </div>
+              <button class="destination" id="outputBtn" type="button">
+                <svg aria-hidden="true" class="icon destination-icon"><use href="#i-folder" /></svg>
+                <span id="outputLabel">原图旁边</span>
+                <svg aria-hidden="true" class="icon destination-arrow"><use href="#i-chevron" /></svg>
+              </button>
+              <button class="text-button reset-location" id="resetLocation" type="button" hidden>改为保存到原图旁边</button>
+            </section>
+
+            <section class="settings-block" id="windowSettings">
+              <div class="block-head">
+                <h2>窗口</h2>
+              </div>
+              <label class="toggle-row">
+                <span>开机时启动 AnyPic</span>
+                <input class="switch-input" id="openAtLoginToggle" type="checkbox" />
+                <span class="switch" aria-hidden="true"></span>
+              </label>
+              <label class="toggle-row">
+                <span>关闭窗口后隐藏 Dock 图标</span>
+                <input class="switch-input" id="dockToggle" type="checkbox" checked />
+                <span class="switch" aria-hidden="true"></span>
+              </label>
+            </section>
+          </div>
+
+          <div class="sidebar-actions">
+            <button class="primary-btn" id="compressBtn" type="button" disabled>
+              <span class="primary-label">压缩全部</span>
+              <span class="primary-spinner" aria-hidden="true"></span>
+              <kbd class="mod-key" data-shortcut="compress">⌘↩</kbd>
+            </button>
+            <button class="cancel-btn" id="cancelBtn" type="button" hidden>取消压缩</button>
+          </div>
+          <div class="side-edge" id="sideEdge" role="separator" aria-orientation="vertical" aria-label="调整侧栏宽度" tabindex="0"></div>
+        </aside>
+
+        <main class="stage">
+          <header class="stage-head">
+            <div class="stage-title">
+              <div class="stage-title-row">
+                <h1>图片</h1>
+                <span class="count-badge" id="countBadge">0</span>
+                <span class="stale-badge" id="staleBadge" role="status" hidden>设置已更改</span>
+              </div>
+              <p class="stage-summary" id="stats" hidden>
+                <span>原始 <strong id="statOriginal">0 KB</strong></span>
+                <span class="summary-seg" id="summaryDone">
+                  <svg aria-hidden="true" class="icon summary-arrow"><use href="#i-arrow-right" /></svg>
+                  <span>压缩后 <strong id="statCompressed">暂无</strong></span>
+                </span>
+                <span class="summary-seg" id="summarySaved">
+                  <span class="summary-dot" aria-hidden="true"></span>
+                  <span class="summary-saved">节省 <strong id="statSaved">暂无</strong></span>
+                  <span class="summary-foot" id="statSavedFoot"></span>
+                </span>
+              </p>
+            </div>
+            <div class="stage-tools">
+              <button class="secondary-btn small" id="screenshotBtn" type="button" title="截取屏幕区域">
+                <svg aria-hidden="true" class="icon"><use href="#i-camera" /></svg>
+                截图
+              </button>
+              <button class="primary-btn compact" id="addBtn" type="button">
+                <svg aria-hidden="true" class="icon"><use href="#i-add" /></svg>
+                添加
+              </button>
+            </div>
+          </header>
+
+          <div class="stage-body">
+            <div class="empty-state" id="emptyState">
+              <div class="empty-icon">
+                <svg aria-hidden="true" class="icon"><use href="#i-image" /></svg>
+              </div>
+              <h2>拖入图片开始压缩</h2>
+              <p>支持 JPG、PNG、WebP、静态 GIF、BMP 和 TIFF</p>
+              <div class="empty-actions">
+                <button class="primary-btn compact" id="emptyAddBtn" type="button">选择图片…</button>
+                <span>或按 <kbd class="mod-key" data-shortcut="open">⌘O</kbd></span>
+              </div>
+            </div>
+
+            <div class="queue" id="queue" hidden>
+              <div class="queue-toolbar">
+                <div class="queue-tabs" id="queueTabs" role="tablist" aria-label="筛选图片">
+                  <button class="queue-tab active" data-filter="all" role="tab" aria-selected="true">全部 <span id="tabAllCount">0</span></button>
+                  <button class="queue-tab" data-filter="done" role="tab" aria-selected="false">已完成 <span id="tabDoneCount">0</span></button>
+                  <button class="queue-tab" data-filter="error" role="tab" aria-selected="false">失败 <span id="tabErrorCount">0</span></button>
+                </div>
+                <div class="queue-tools">
+                  <div class="view-switch" id="viewSwitch" role="group" aria-label="视图">
+                    <button data-view="list" class="active" title="列表视图" aria-label="列表视图" aria-pressed="true"><svg aria-hidden="true" class="icon"><use href="#i-list" /></svg></button>
+                    <button data-view="grid" title="网格视图" aria-label="网格视图" aria-pressed="false"><svg aria-hidden="true" class="icon"><use href="#i-grid" /></svg></button>
+                  </div>
+                  <span class="queue-divider" aria-hidden="true"></span>
+                  <button class="icon-btn subtle" id="clearBtn" type="button" title="清空列表" aria-label="清空列表" disabled>
+                    <svg aria-hidden="true" class="icon"><use href="#i-trash" /></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="queue-columns" id="queueColumns">
+                <span>名称</span>
+                <span>结果</span>
+                <span></span>
+              </div>
+              <div class="queue-scroll" id="queueScroll">
+                <div class="queue-list" id="queueList"></div>
+                <div class="queue-empty-filter" id="queueEmptyFilter" hidden>没有符合筛选条件的图片</div>
+              </div>
+            </div>
+          </div>
+
+          <footer class="stage-footer" id="stageFooter" hidden>
+            <div class="batch-block">
+              <span class="batch-status" id="batchStatus">准备就绪</span>
+              <div class="progress" role="progressbar" aria-label="压缩进度">
+                <span id="progressFill"></span>
+              </div>
+              <span class="batch-percent" id="batchPercent">0%</span>
+            </div>
+            <div class="batch-actions">
+              <button class="secondary-btn small" id="exportBtn" type="button" disabled>
+                <svg aria-hidden="true" class="icon"><use href="#i-download" /></svg>
+                导出
+              </button>
+            </div>
+          </footer>
+        </main>
+      </div>
+    </div>
+
+    <div class="drop-overlay" id="dropOverlay" aria-hidden="true">
+      <div class="drop-overlay-inner">
+        <div class="drop-overlay-icon"><svg aria-hidden="true" class="icon"><use href="#i-upload" /></svg></div>
+        <h3>松手添加图片</h3>
+        <p>支持多张图片或整个文件夹</p>
+      </div>
+    </div>
+
+    <div class="modal" id="previewModal" aria-hidden="true">
+      <div class="modal-backdrop" data-close-modal></div>
+      <article class="preview-card" role="dialog" aria-modal="true" aria-labelledby="previewTitle">
+        <header class="preview-head">
+          <div class="preview-title">
+            <div>
+              <h3 id="previewTitle">图片预览</h3>
+              <p id="previewMeta">暂无</p>
+            </div>
+          </div>
+          <div class="preview-head-actions">
+            <button class="secondary-btn small" id="previewExportBtn" type="button">
+              <svg aria-hidden="true" class="icon"><use href="#i-download" /></svg>
+              导出
+            </button>
+            <button class="icon-btn" id="previewClose" type="button" aria-label="关闭"><svg aria-hidden="true" class="icon"><use href="#i-x" /></svg></button>
+          </div>
+        </header>
+        <div class="compare" id="compare">
+          <div class="compare-loading" id="compareLoading"><span class="loader"></span><p>正在生成预览…</p></div>
+          <div class="compare-frame" id="compareFrame" hidden>
+            <img class="compare-img compare-before" id="previewBefore" alt="原图" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" draggable="false" />
+            <div class="compare-after-wrap" id="previewAfterWrap">
+              <img class="compare-img compare-after" id="previewAfter" alt="压缩后" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" draggable="false" />
+            </div>
+            <span class="compare-label label-before">原图</span>
+            <span class="compare-label label-after">压缩后</span>
+            <div class="compare-handle" id="compareHandle">
+              <span class="compare-line"></span>
+              <span class="compare-knob"><svg aria-hidden="true" class="icon"><use href="#i-compare" /></svg></span>
+            </div>
+            <div class="compare-hint" id="compareHint">拖动分割线查看细节</div>
+          </div>
+        </div>
+        <footer class="preview-foot">
+          <div class="preview-stats">
+            <strong id="previewOriginalSize">暂无</strong>
+            <div class="preview-arrow"><svg aria-hidden="true" class="icon"><use href="#i-arrow-right" /></svg></div>
+            <strong id="previewCompressedSize">暂无</strong>
+            <span class="preview-save" id="previewSaved">暂无</span>
+          </div>
+          <div class="preview-details" id="previewDetails">暂无</div>
+        </footer>
+      </article>
+    </div>
+
+    <div class="modal confirm-modal" id="confirmModal" aria-hidden="true">
+      <div class="modal-backdrop" data-close-confirm></div>
+      <article class="confirm-card" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle">
+        <div class="confirm-head">
+          <span class="confirm-icon"><svg aria-hidden="true" class="icon"><use href="#i-alert" /></svg></span>
+          <h3 id="confirmTitle">确认操作</h3>
+        </div>
+        <p id="confirmBody">确定要执行此操作吗？</p>
+        <div class="confirm-actions">
+          <button class="secondary-btn" id="confirmCancel" type="button">取消</button>
+          <button class="danger-btn" id="confirmOk" type="button">清空队列</button>
+        </div>
+      </article>
+    </div>
+
+    <div class="modal about-modal" id="aboutModal" aria-hidden="true">
+      <div class="modal-backdrop" data-close-about></div>
+      <article class="about-card" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+        <div class="about-head">
+          <div class="about-logo">
+            <img class="logo-light" src="./src/assets/logo-light.png" alt="" />
+            <img class="logo-dark" src="./src/assets/logo-dark.png" alt="" />
+          </div>
+          <div>
+            <h3 id="aboutTitle">AnyPic</h3>
+            <p class="about-version" id="aboutVersion">0.1.0</p>
+          </div>
+        </div>
+        <p class="about-desc">本地图片压缩工具。支持批量处理、格式转换和前后对比。</p>
+        <dl class="about-facts">
+          <div><dt>图片处理</dt><dd>完全在本机完成</dd></div>
+          <div><dt>支持输出</dt><dd>JPG / PNG / WebP</dd></div>
+          <div><dt>桌面框架</dt><dd>MyGo + Go</dd></div>
+        </dl>
+        <button class="secondary-btn" id="aboutClose" type="button">关闭</button>
+      </article>
+    </div>
+
+    <div class="toast-stack" id="toasts" aria-live="polite"></div>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

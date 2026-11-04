@@ -1,0 +1,22 @@
+{
+  "name": "anypic",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "mygo dev",
+    "prebuild": "if [ -z \"$CI\" ]; then security unlock-keychain -p anypic-local \"$HOME/Library/Keychains/anypic-signing.keychain-db\" || true; fi",
+    "build": "mygo build",
+    "generate": "mygo generate",
+    "dev:web": "vite",
+    "build:web": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "mygo-runtime": "^0.6.4"
+  },
+  "devDependencies": {
+    "mygo-cli": "^0.6.4",
+    "typescript": "^7",
+    "vite": "^8"
+  }
+}

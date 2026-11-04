@@ -1,0 +1,97 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platforms: darwin/universal
+            artifact-dir: build/darwin-universal
+            files: |
+              AnyPic*.dmg
+          - os: ubuntu-latest
+            platforms: linux/amd64
+            artifact-dir: build/linux-amd64
+            files: |
+              anypic_*.deb
+              anypic-*.tar.gz
+              install.sh
+          - os: windows-latest
+            platforms: windows/amd64
+            artifact-dir: build/windows-amd64
+            files: |
+              *Setup*.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Go checks
+        run: |
+          go vet ./...
+          go test -race -count=1 ./...
+
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: bunx mygo build -platform darwin/universal
+
+      - name: Build (Linux)
+        if: runner.os == 'Linux'
+        run: bunx mygo build -platform linux/amd64
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        run: bunx mygo build -platform windows/amd64
+
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          mkdir -p release
+          while IFS= read -r pattern; do
+            [ -z "$pattern" ] && continue
+            cp ${{ matrix.artifact-dir }}/$pattern release/ 2>/dev/null || true
+          done <<< "${{ matrix.files }}"
+          ls -la release/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnyPic-${{ matrix.os }}
+          path: release/*
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: artifacts/*
