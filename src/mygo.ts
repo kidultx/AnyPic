@@ -59,6 +59,11 @@ export interface Item {
   hasAlpha: boolean;
   passedThrough: boolean;
   savedPercent: number;
+  /**
+   * Screenshot marks an image captured with AnyPic's own shortcut, the
+   * only kind the screenshot beautifier may decorate.
+   */
+  screenshot: boolean;
 }
 
 /** Preview holds before and after previews for the comparison view. */
@@ -71,6 +76,27 @@ export interface Preview {
   beforeHeight: number;
   afterWidth: number;
   afterHeight: number;
+}
+
+/**
+ * ScreenshotStyle decorates fresh captures: the shot gets rounded corners, a
+ * soft shadow and a background that extends beyond it, so a bare screenshot
+ * reads as a finished picture. Mode "on" applies it to screenshots during
+ * compression; other images are never decorated.
+ */
+export interface ScreenshotStyle {
+  /** Mode is "off" or "on". */
+  mode: string;
+  /**
+   * Background picks a preset id from backgroundPresets, or "auto" to
+   * derive a matching gradient from the screenshot's own edge colors.
+   */
+  background: string;
+  /**
+   * Padding is the breathing room around the shot as a percentage of its
+   * longer edge: 0, 6, 10 or 16.
+   */
+  padding: number;
 }
 
 /** Settings are the compression preferences, persisted between launches. */
@@ -100,6 +126,11 @@ export interface Settings {
    * system login item is toggled through mygo, not stored only here.
    */
   openAtLogin: string;
+  /**
+   * ScreenshotStyle shapes how fresh captures are decorated before they
+   * are compressed: see ScreenshotStyle.
+   */
+  screenshotStyle: ScreenshotStyle;
 }
 
 /** SkippedFile says why a file was not added. */

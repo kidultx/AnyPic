@@ -100,8 +100,24 @@ function defaultSettings(): Settings {
     screenshotClipboard: "on",
     hideDockWhenTray: "on",
     openAtLogin: "off",
+    screenshotStyle: { mode: "off", background: "auto", padding: 10 },
   };
 }
+
+const BEAUTIFY_BACKGROUNDS: Record<string, string> = {
+  auto: "自动取色",
+  breeze: "Breeze",
+  candy: "Candy",
+  crimson: "Crimson",
+  falcon: "Falcon",
+  meadow: "Meadow",
+  midnight: "Midnight",
+  raindrop: "Raindrop",
+  sunset: "Sunset",
+  ink: "靛蓝",
+  graphite: "石墨",
+  paper: "纸白",
+};
 
 function upsertItem(item: Item) {
   const index = items.findIndex((existing) => existing.id === item.id);
@@ -292,6 +308,7 @@ function applyDemoState() {
       outputFormat: ready ? "" : outputFormat,
       outputName: ready ? "" : name.replace(/\.(jpg|png|tiff)$/i, "-anypic.webp"),
       thumb,
+      screenshot: false,
       hasAlpha: name.endsWith(".png"),
       passedThrough: false,
       savedPercent: ready ? 0 : saved,
@@ -700,6 +717,12 @@ function renderActions() {
     button.disabled = running;
   });
   $<HTMLInputElement>("#quality").disabled = running || settings.format === "png";
+  $$<HTMLButtonElement>("#beautifyGrid button").forEach((button) => {
+    button.disabled = running;
+  });
+  $$<HTMLButtonElement>("#beautifyPad button").forEach((button) => {
+    button.disabled = running;
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -733,6 +756,23 @@ function bindEvents() {
     const on = (event.target as HTMLInputElement).checked;
     void setSettings({ screenshotClipboard: on ? "on" : "off" });
     showToast(on ? "截图后将复制到剪贴板" : "截图后不再复制到剪贴板", "info");
+  });
+  $("#beautifyToggle").addEventListener("change", (event) => {
+    const on = (event.target as HTMLInputElement).checked;
+    void setSettings({ screenshotStyle: { ...settings.screenshotStyle, mode: on ? "on" : "off" } });
+    showToast(on ? "截图将在压缩时自动美化" : "截图美化已关闭", on ? "success" : "info");
+  });
+  $("#beautifyGrid").addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-bg]");
+    if (!button || button.disabled) return;
+    const background = button.dataset.bg ?? "auto";
+    void setSettings({ screenshotStyle: { ...settings.screenshotStyle, background } });
+  });
+  $("#beautifyPad").addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-pad]");
+    if (!button || button.disabled) return;
+    const padding = Number(button.dataset.pad);
+    void setSettings({ screenshotStyle: { ...settings.screenshotStyle, padding } });
   });
   $("#dockToggle").addEventListener("change", (event) => {
     const on = (event.target as HTMLInputElement).checked;
@@ -1333,9 +1373,29 @@ function applySettingsFromBackend(next: Settings) {
   queueSave();
 }
 
+/* The beautifier's panel and swatch states follow the persisted style. */
+function syncBeautifyUI() {
+  const style = { ...defaultSettings().screenshotStyle, ...settings.screenshotStyle };
+  const on = style.mode === "on";
+  const toggle = $<HTMLInputElement>("#beautifyToggle");
+  if (toggle) toggle.checked = on;
+  $("#beautifyOptions").hidden = !on;
+  $$<HTMLButtonElement>("#beautifyGrid button").forEach((button) => {
+    const active = button.dataset.bg === style.background;
+    button.setAttribute("aria-checked", String(active));
+  });
+  $$<HTMLButtonElement>("#beautifyPad button").forEach((button) => {
+    const active = Number(button.dataset.pad) === style.padding;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  $("#beautifyHint").textContent = BEAUTIFY_BACKGROUNDS[style.background] ?? "自动取色";
+}
+
 function syncSettingsToUI() {
   const clipboardToggle = $<HTMLInputElement>("#clipboardToggle");
   if (clipboardToggle) clipboardToggle.checked = settings.screenshotClipboard !== "off";
+  syncBeautifyUI();
   const dockToggle = $<HTMLInputElement>("#dockToggle");
   if (dockToggle) dockToggle.checked = settings.hideDockWhenTray !== "off";
   const openAtLoginToggle = $<HTMLInputElement>("#openAtLoginToggle");

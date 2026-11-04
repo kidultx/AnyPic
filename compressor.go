@@ -65,6 +65,9 @@ type Item struct {
 	HasAlpha       bool    `json:"hasAlpha"`
 	PassedThrough  bool    `json:"passedThrough"`
 	SavedPercent   float64 `json:"savedPercent"`
+	// Screenshot marks an image captured with AnyPic's own shortcut, the
+	// only kind the screenshot beautifier may decorate.
+	Screenshot bool `json:"screenshot"`
 
 	compressedPath string
 	stale          bool
@@ -91,6 +94,9 @@ type Settings struct {
 	// OpenAtLogin starts AnyPic when the user logs in: "on" or "off". The
 	// system login item is toggled through mygo, not stored only here.
 	OpenAtLogin string `json:"openAtLogin"`
+	// ScreenshotStyle shapes how fresh captures are decorated before they
+	// are compressed: see ScreenshotStyle.
+	ScreenshotStyle ScreenshotStyle `json:"screenshotStyle"`
 }
 
 // Batch is the state of a running compression pass.
@@ -205,6 +211,7 @@ func defaultSettings() Settings {
 		ScreenshotClipboard: "on",
 		HideDockWhenTray:    "on",
 		OpenAtLogin:         "off",
+		ScreenshotStyle:     normalizeScreenshotStyle(ScreenshotStyle{Background: "auto", Padding: 10}),
 	}
 }
 
@@ -619,7 +626,7 @@ func (a *AnyPic) compressItem(ctx context.Context, id int64, s Settings) {
 	a.mu.Unlock()
 	_ = ItemChanged.Broadcast(snapshot)
 
-	result, err := a.compressOne(ctx, id, item.Path, item.Format, item.Name, s)
+	result, err := a.compressOne(ctx, id, item.Path, item.Format, item.Name, item.Screenshot, s)
 
 	a.mu.Lock()
 	item = a.byID[id]
@@ -671,7 +678,7 @@ type compressResult struct {
 	passedThrough bool
 }
 
-func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, name string, s Settings) (compressResult, error) {
+func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, name string, screenshot bool, s Settings) (compressResult, error) {
 	if err := ctx.Err(); err != nil {
 		return compressResult{}, err
 	}
@@ -684,6 +691,18 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 	f.Close()
 	if err != nil {
 		return compressResult{}, errors.New("图片解码失败，可能已损坏")
+	}
+
+	// Fresh captures can be decorated before anything else runs, so the
+	// padding counts toward the resize limit and the style survives every
+	// later step untouched.
+	if screenshot {
+		a.mu.Lock()
+		style := a.settings.ScreenshotStyle
+		a.mu.Unlock()
+		if style.Mode == "on" {
+			img = decorateScreenshot(img, style)
+		}
 	}
 
 	resized := false
@@ -1200,6 +1219,7 @@ func normalizeSettings(s Settings) Settings {
 	if s.OpenAtLogin != "on" {
 		s.OpenAtLogin = "off"
 	}
+	s.ScreenshotStyle = normalizeScreenshotStyle(s.ScreenshotStyle)
 	return s
 }
 

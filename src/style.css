@@ -1043,6 +1043,65 @@ body.side-drag * {
   display: none;
 }
 
+/* Screenshot beautifier: a swatch grid that reads like small color chips,
+   a segmented padding control, all in the pill register. */
+.beautify-options {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-2);
+}
+
+.beautify-options[hidden] {
+  display: none;
+}
+
+.beautify-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.beautify-swatch {
+  height: 30px;
+  border-radius: 8px;
+  background-color: var(--pill);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: box-shadow 0.12s ease;
+}
+
+.beautify-swatch:hover {
+  background-color: var(--pill-hover);
+}
+
+.beautify-swatch[aria-checked="true"] {
+  box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px var(--brand);
+}
+
+.beautify-swatch .swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.18);
+}
+
+.beautify-swatch .swatch-auto {
+  /* The auto swatch: a diagonal gradient that crosses several hues. */
+  background-image: linear-gradient(135deg, #a8edea, #d3a8f3 45%, #ff9d6f);
+}
+
+.beautify-pad {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.beautify-note {
+  margin: 10px 0 0;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .destination-icon {
   width: 32px;
   height: 32px;
