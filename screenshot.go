@@ -85,7 +85,6 @@ func (a *AnyPic) CaptureScreenshot(ctx context.Context) (AddResult, error) {
 	if err != nil {
 		return AddResult{}, fmt.Errorf("截图已保存到 %s，但无法加入队列：%w", path, err)
 	}
-	a.markScreenshot(path)
 	result.Copied = copied
 
 	// The shortcut may have fired while the app was behind another window;
@@ -98,29 +97,6 @@ func (a *AnyPic) CaptureScreenshot(ctx context.Context) (AddResult, error) {
 		win.Focus()
 	}
 	return result, nil
-}
-
-// markScreenshot flags the queue item for path as a capture taken inside
-// AnyPic, the only kind the screenshot beautifier may decorate. Images the
-// user adds themselves are never touched.
-func (a *AnyPic) markScreenshot(path string) {
-	a.mu.Lock()
-	var marked *Item
-	for _, item := range a.items {
-		if item.Path == path && !item.Screenshot {
-			item.Screenshot = true
-			marked = item
-			break
-		}
-	}
-	var snapshot Item
-	if marked != nil {
-		snapshot = *marked
-	}
-	a.mu.Unlock()
-	if marked != nil {
-		_ = ItemChanged.Broadcast(snapshot)
-	}
 }
 
 // OpenScreenRecordingSettings opens the macOS privacy pane where the user

@@ -79,7 +79,7 @@ func TestCompressJPEGProducesSmallerFile(t *testing.T) {
 	original := writeJPEG(t, src, gradientImage(1200, 800, false), 96)
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 1, src, "JPEG", "photo.jpg", false, Settings{
+	result, err := service.compressOne(context.Background(), 1, src, "JPEG", "photo.jpg", Settings{
 		Format: "jpeg", Quality: 55, Suffix: "-anypic",
 	})
 	if err != nil {
@@ -114,7 +114,7 @@ func TestCompressResizesLongEdge(t *testing.T) {
 	writePNG(t, src, gradientImage(1600, 900, false))
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 2, src, "PNG", "wide.png", false, Settings{
+	result, err := service.compressOne(context.Background(), 2, src, "PNG", "wide.png", Settings{
 		Format: "jpeg", Quality: 80, MaxDimension: 800, Suffix: "-min",
 	})
 	if err != nil {
@@ -134,7 +134,7 @@ func TestPNGKeepsTransparency(t *testing.T) {
 	writePNG(t, src, gradientImage(320, 240, true))
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 3, src, "PNG", "alpha.png", false, Settings{
+	result, err := service.compressOne(context.Background(), 3, src, "PNG", "alpha.png", Settings{
 		Format: "auto", Quality: 82, Suffix: "-anypic",
 	})
 	if err != nil {
@@ -166,7 +166,7 @@ func TestJPEGPassthroughWhenOriginalIsBetter(t *testing.T) {
 	original := writeJPEG(t, src, gradientImage(800, 600, false), 30)
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 4, src, "JPEG", "tiny.jpg", false, Settings{
+	result, err := service.compressOne(context.Background(), 4, src, "JPEG", "tiny.jpg", Settings{
 		Format: "jpeg", Quality: 100, Suffix: "-anypic",
 	})
 	if err != nil {
@@ -186,7 +186,7 @@ func TestWebPOutput(t *testing.T) {
 	writePNG(t, src, gradientImage(900, 600, false))
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 5, src, "PNG", "photo.png", false, Settings{
+	result, err := service.compressOne(context.Background(), 5, src, "PNG", "photo.png", Settings{
 		Format: "webp", Quality: 72, Suffix: "-anypic",
 	})
 	if err != nil {
@@ -215,7 +215,7 @@ func TestAlphaFlattenedForJPEG(t *testing.T) {
 	writePNG(t, src, gradientImage(400, 300, true))
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 6, src, "PNG", "alpha.png", false, Settings{
+	result, err := service.compressOne(context.Background(), 6, src, "PNG", "alpha.png", Settings{
 		Format: "jpeg", Quality: 82, Suffix: "-anypic",
 	})
 	if err != nil {
@@ -295,7 +295,7 @@ func TestWebPInputDecodes(t *testing.T) {
 	f.Close()
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 7, src, "WEBP", "input.webp", false, Settings{
+	result, err := service.compressOne(context.Background(), 7, src, "WEBP", "input.webp", Settings{
 		Format: "auto", Quality: 70, Suffix: "-anypic",
 	})
 	if err != nil {

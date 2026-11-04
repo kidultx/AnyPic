@@ -153,32 +153,6 @@
                 <input class="switch-input" id="clipboardToggle" type="checkbox" checked />
                 <span class="switch" aria-hidden="true"></span>
               </label>
-              <label class="toggle-row">
-                <span>截图自动美化</span>
-                <input class="switch-input" id="beautifyToggle" type="checkbox" />
-                <span class="switch" aria-hidden="true"></span>
-              </label>
-              <div class="beautify-options" id="beautifyOptions" hidden>
-                <div class="field">
-                  <div class="field-label">
-                    <label>背景</label>
-                    <span class="field-hint" id="beautifyHint">自动取色</span>
-                  </div>
-                  <div class="beautify-grid" id="beautifyGrid" role="radiogroup" aria-label="美化背景"></div>
-                </div>
-                <div class="field">
-                  <div class="field-label">
-                    <label>留白</label>
-                  </div>
-                  <div class="segmented beautify-pad" id="beautifyPad" role="group" aria-label="留白">
-                    <button data-pad="0" aria-pressed="false">无</button>
-                    <button data-pad="6" aria-pressed="false">紧凑</button>
-                    <button data-pad="10" class="active" aria-pressed="true">适中</button>
-                    <button data-pad="16" aria-pressed="false">宽松</button>
-                  </div>
-                </div>
-                <p class="beautify-note">美化在压缩时套用到截图：圆角、阴影与背景。「无」留白只保留圆角，不加背景和阴影。上方缩略图以当前预览图实时渲染。</p>
-              </div>
               <button class="text-button screen-permission" id="screenPermissionBtn" type="button" hidden>
                 截图只有壁纸？检查屏幕录制权限
               </button>

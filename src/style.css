@@ -1043,66 +1043,6 @@ body.side-drag * {
   display: none;
 }
 
-/* Screenshot beautifier: the swatch grid renders real styled previews of a
-   screenshot, so picking a background shows the finished look, all in the
-   pill register. */
-.beautify-options {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line-2);
-}
-
-.beautify-options[hidden] {
-  display: none;
-}
-
-.beautify-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.beautify-swatch {
-  border-radius: 8px;
-  overflow: hidden;
-  background-color: var(--pill);
-  transition: box-shadow 0.12s ease;
-}
-
-.beautify-swatch:hover {
-  background-color: var(--pill-hover);
-}
-
-.beautify-swatch[aria-checked="true"] {
-  box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px var(--brand);
-}
-
-.beautify-swatch .swatch-thumb {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-  display: block;
-}
-
-/* Until the backend renders the previews, chips fall back to the preset
-   colors via .swatch-fallback on the button. */
-.beautify-swatch .swatch-fallback {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  display: block;
-}
-
-.beautify-pad {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.beautify-note {
-  margin: 10px 0 0;
-  color: var(--text-faint);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
 .destination-icon {
   width: 32px;
   height: 32px;
