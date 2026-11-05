@@ -427,21 +427,108 @@ func TestQueueCompressExportFlow(t *testing.T) {
 	}
 }
 
-func decodeDataURLConfig(t *testing.T, s string) image.Config {
-	t.Helper()
-	comma := strings.IndexByte(s, ',')
-	if comma < 0 {
-		t.Fatalf("malformed data URL: %.32q", s)
+func TestAutoProcessDefaultsOn(t *testing.T) {
+	if got := normalizeSettings(Settings{}).AutoProcess; got != "on" {
+		t.Fatalf("missing preference normalized to %q, want on", got)
 	}
-	raw, err := base64.StdEncoding.DecodeString(s[comma+1:])
+	if got := normalizeSettings(Settings{AutoProcess: "off"}).AutoProcess; got != "off" {
+		t.Fatalf("explicit off normalized to %q", got)
+	}
+	if got := normalizeSettings(Settings{AutoProcess: "yes"}).AutoProcess; got != "on" {
+		t.Fatalf("unknown value normalized to %q, want on", got)
+	}
+}
+
+func TestCompressReadySkipsFinishedImages(t *testing.T) {
+	srcDir := t.TempDir()
+	writeJPEG(t, filepath.Join(srcDir, "one.jpg"), gradientImage(400, 300, false), 92)
+	writeJPEG(t, filepath.Join(srcDir, "two.jpg"), gradientImage(400, 300, false), 92)
+
+	service := newTestService(t)
+	if _, err := service.AddPaths([]string{srcDir}); err != nil {
+		t.Fatal(err)
+	}
+	settings := Settings{Format: "jpeg", Quality: 70, Suffix: "-anypic"}
+	if err := service.Compress(settings); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "first pass", func() bool {
+		state := service.State()
+		return !state.Batch.Running && state.Batch.Total == 2 && allStatus(state, statusDone, statusError)
+	})
+
+	// A third image arrives while the user keeps working; the automatic
+	// flow compresses only this one.
+	writeJPEG(t, filepath.Join(srcDir, "three.jpg"), gradientImage(400, 300, false), 92)
+	if _, err := service.AddPaths([]string{filepath.Join(srcDir, "three.jpg")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.CompressReady(settings); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "ready pass", func() bool {
+		state := service.State()
+		return !state.Batch.Running && state.Batch.Total == 1 && state.Items[2].Status == statusDone
+	})
+	if state := service.State(); state.Batch.Total != 1 {
+		t.Fatalf("second pass covered %d images, want only the new one", state.Batch.Total)
+	}
+}
+
+func TestExportProcessedWritesBesideOriginals(t *testing.T) {
+	srcDir := t.TempDir()
+	one := filepath.Join(srcDir, "one.jpg")
+	two := filepath.Join(srcDir, "two.png")
+	writeJPEG(t, one, gradientImage(400, 300, false), 92)
+	writePNG(t, two, gradientImage(400, 300, true))
+
+	service := newTestService(t)
+	if _, err := service.AddPaths([]string{srcDir}); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Compress(Settings{Format: "jpeg", Quality: 70, Suffix: "-small"}); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "compression", func() bool {
+		state := service.State()
+		return !state.Batch.Running && state.Batch.Total == 2 && allStatus(state, statusDone, statusError)
+	})
+
+	state := service.State()
+	exported, err := service.ExportProcessed([]int64{state.Items[0].ID, state.Items[1].ID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg, _, err := image.DecodeConfig(bytes.NewReader(raw))
-	if err != nil {
-		t.Fatal(err)
+	if exported.Count != 2 || len(exported.Paths) != 2 {
+		t.Fatalf("exported %d paths %v", exported.Count, exported.Paths)
 	}
-	return cfg
+	for _, path := range exported.Paths {
+		if filepath.Dir(path) != srcDir {
+			t.Fatalf("exported to %s, want it beside the original in %s", path, srcDir)
+		}
+		if !strings.Contains(filepath.Base(path), "-small") {
+			t.Fatalf("exported name %q ignores the suffix", filepath.Base(path))
+		}
+		if info, err := os.Stat(path); err != nil || info.Size() == 0 {
+			t.Fatalf("missing or empty export %s: %v", path, err)
+		}
+	}
+}
+
+func allStatus(state Snapshot, statuses ...string) bool {
+	for _, item := range state.Items {
+		ok := false
+		for _, status := range statuses {
+			if item.Status == status {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // The comparison view is blown up far beyond a queue thumbnail, so its data
@@ -489,6 +576,23 @@ func TestPreviewWithAlphaStaysPNG(t *testing.T) {
 	if cfg := decodeDataURLConfig(t, preview); cfg.Width != 800 || cfg.Height != 600 {
 		t.Fatalf("alpha preview is %dx%d, want 800x600", cfg.Width, cfg.Height)
 	}
+}
+
+func decodeDataURLConfig(t *testing.T, s string) image.Config {
+	t.Helper()
+	comma := strings.IndexByte(s, ',')
+	if comma < 0 {
+		t.Fatalf("malformed data URL: %.32q", s)
+	}
+	raw, err := base64.StdEncoding.DecodeString(s[comma+1:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cfg
 }
 
 func TestAnimatedGIFIsSkipped(t *testing.T) {

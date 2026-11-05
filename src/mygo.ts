@@ -82,6 +82,11 @@ export interface Settings {
   outputFolder: string;
   suffix: string;
   theme: string;
+  /**
+   * AutoProcess compresses additions — files, folders and captures —
+   * without the extra compress/export clicks: "on" or "off".
+   */
+  autoProcess: string;
   /** ScreenshotShortcut is the global accelerator that starts a capture. */
   screenshotShortcut: string;
   /**
@@ -119,7 +124,11 @@ export interface Snapshot {
 
 /** AnyPic is the service bound to the frontend. */
 export const AnyPic = {
-  /** AddPaths adds files, or the images inside directories. */
+  /**
+   * AddPaths adds files, or the images inside directories. Adding while a
+   * batch runs is allowed: the new images wait for the next pass, which the
+   * automatic flow starts as soon as the current one finishes.
+   */
   addPaths(paths: string[]): Promise<AddResult> {
     return call("AnyPic.AddPaths", paths);
   },
@@ -151,6 +160,22 @@ export const AnyPic = {
   compress(s: Settings): Promise<void> {
     return call("AnyPic.Compress", s);
   },
+  /**
+   * CompressReady starts a pass over the images that have not been compressed
+   * yet. The automatic flow uses it to pick up images added while an earlier
+   * pass was running without re-encoding the ones already finished.
+   */
+  compressReady(s: Settings): Promise<void> {
+    return call("AnyPic.CompressReady", s);
+  },
+  /**
+   * CopyItemToClipboard puts a compressed image on the clipboard, falling back
+   * to the original when compression did not finish. The clipboard takes PNG,
+   * so results encoded as JPEG or WebP are decoded and re-encoded first.
+   */
+  copyItemToClipboard(id: number): Promise<void> {
+    return call("AnyPic.CopyItemToClipboard", id);
+  },
   /** ExportAll writes every compressed image to the chosen folder. */
   exportAll(): Promise<ExportResult> {
     return call("AnyPic.ExportAll");
@@ -158,6 +183,14 @@ export const AnyPic = {
   /** ExportOne asks where to save one compressed image. */
   exportOne(id: number): Promise<ExportResult> {
     return call("AnyPic.ExportOne", id);
+  },
+  /**
+   * ExportProcessed saves the listed compressed images without asking where:
+   * into the configured output folder, or beside each original. It is the
+   * saving half of the automatic flow, so it never opens a dialog.
+   */
+  exportProcessed(ids: number[]): Promise<ExportResult> {
+    return call("AnyPic.ExportProcessed", ids);
   },
   /**
    * HideDockWhenTray reports whether the Dock icon should be removed while the

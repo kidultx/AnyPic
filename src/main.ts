@@ -82,6 +82,13 @@ let savePending = false;
 let isMac = navigator.platform.toLowerCase().includes("mac");
 let lastFocused: HTMLElement | null = null;
 let recordingShortcut = false;
+/* An automatic pass spans one or more batches: images added while it runs
+   join the same pass and are saved together when the queue settles. */
+let autoRun: { ids: Set<number>; copyIDs: number[] } | null = null;
+/* Guards the async gap between deciding to compress and the backend call. */
+let compressStarting = false;
+/* Where the last automatic pass saved its results, for the footer summary. */
+let lastSaved: { count: number; target: string; percent: number; path: string } | null = null;
 
 const rowCache = new Map<number, HTMLElement>();
 const previewCache = new Map<number, Preview>();
@@ -96,6 +103,7 @@ function defaultSettings(): Settings {
     outputFolder: "",
     suffix: "-anypic",
     theme: "system",
+    autoProcess: "on",
     screenshotShortcut: DEFAULT_SHORTCUT,
     screenshotClipboard: "on",
     hideDockWhenTray: "on",
@@ -368,6 +376,28 @@ function renderSettings() {
   $("#qualityFill").style.width = `${Math.max(0, Math.min(100, fill))}%`;
   $("#qualityLabel").textContent = qualityLabel(settings.quality);
 
+  const presets = [60, 82, 95];
+  const customQuality = !presets.includes(settings.quality);
+  $$<HTMLButtonElement>("#qualityPresets button").forEach((button) => {
+    const active = Number(button.dataset.quality) === settings.quality;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+    button.disabled = format === "png" || batch.running;
+  });
+  $("#qualityState").hidden = !customQuality;
+
+  const autoToggle = $<HTMLInputElement>("#autoProcessToggle");
+  if (document.activeElement !== autoToggle) autoToggle.checked = autoProcessEnabled();
+  $("#autoProcessNote").textContent = autoProcessEnabled()
+    ? "添加或截图后自动压缩并保存，只需粘贴。"
+    : "关闭后需手动点「压缩全部」，再点「导出」。";
+  $("#emptyTitle").textContent = autoProcessEnabled() ? "拖入图片，自动压缩保存" : "拖入图片开始压缩";
+  $("#emptyShotKey").textContent = formatShortcut(settings.screenshotShortcut);
+  $("#outputInlineBtn").hidden = !autoProcessEnabled();
+  $("#outputInlineLabel").textContent =
+    settings.outputMode === "folder" && settings.outputFolder ? shortenPath(settings.outputFolder) : "原图旁边";
+  $("#outputInlineBtn").title = settings.outputMode === "folder" && settings.outputFolder ? settings.outputFolder : "原图旁边";
+
   const qualityField = quality.closest(".quality-field");
   qualityField?.classList.toggle("disabled", format === "png");
   quality.disabled = format === "png" || batch.running;
@@ -411,6 +441,10 @@ function qualityLabel(quality: number): string {
   if (quality >= 60) return "更小体积";
   if (quality >= 45) return "强力压缩";
   return "极限压缩";
+}
+
+function autoProcessEnabled(): boolean {
+  return settings.autoProcess !== "off";
 }
 
 function renderStage() {
@@ -475,14 +509,9 @@ function renderQueue() {
     if (!visibleIds.has(id)) row.remove();
   }
 
-  const counts = {
-    all: items.length,
-    done: items.filter((item) => item.status === "done").length,
-    error: items.filter((item) => item.status === "error").length,
-  };
-  $("#tabAllCount").textContent = String(counts.all);
-  $("#tabDoneCount").textContent = String(counts.done);
-  $("#tabErrorCount").textContent = String(counts.error);
+  const failedCount = items.filter((item) => item.status === "error").length;
+  $("#tabErrorCount").textContent = String(failedCount);
+  $("#tabErrorCount").hidden = failedCount === 0;
   $$<HTMLButtonElement>(".queue-tab").forEach((button) => {
     const active = button.dataset.filter === filter;
     button.classList.toggle("active", active);
@@ -581,14 +610,18 @@ function updateRow(row: HTMLElement, item: Item) {
   }
 
   const name = row.querySelector<HTMLElement>(".item-name")!;
-  name.textContent = item.name;
+  name.innerHTML =
+    item.status === "ready" ? `${esc(item.name)}<span class="item-state">待处理</span>` : esc(item.name);
 
   const meta = row.querySelector<HTMLElement>(".item-meta")!;
   const formatClass = item.format.toLowerCase();
+  const output = item.status === "done" && item.outputFormat
+    ? `<span class="output-format">→ ${esc(item.outputFormat)}</span>`
+    : "";
   meta.innerHTML = `<span class="format-chip ${esc(formatClass)}">${esc(item.format || "IMG")}</span><span>${formatDimensions(
     item.width,
     item.height,
-  )}</span>`;
+  )}</span>${output}`;
 
   const error = row.querySelector<HTMLElement>(".item-error")!;
   if (item.status === "error" && item.error) {
@@ -601,6 +634,7 @@ function updateRow(row: HTMLElement, item: Item) {
   const sizes = row.querySelector<HTMLElement>(".result-sizes")!;
   const pill = row.querySelector<HTMLElement>(".saving-pill")!;
   pill.className = "saving-pill";
+  pill.hidden = false;
 
   if (item.status === "done") {
     if (item.passedThrough) {
@@ -614,10 +648,10 @@ function updateRow(row: HTMLElement, item: Item) {
         item.compressedSize,
       )}</strong>`;
       if (saved >= 0) {
-        pill.textContent = `${item.outputFormat || ""} −${pct(savedPct)}`.trim();
+        pill.textContent = `−${pct(savedPct)}`;
       } else {
         pill.classList.add("neutral");
-        pill.textContent = `${item.outputFormat || ""} +${pct(-savedPct)}`.trim();
+        pill.textContent = `+${pct(-savedPct)}`;
       }
     }
   } else if (item.status === "working") {
@@ -629,9 +663,10 @@ function updateRow(row: HTMLElement, item: Item) {
     pill.classList.add("error");
     pill.textContent = "失败";
   } else {
-    sizes.innerHTML = `<span>${formatBytes(item.originalSize)}</span><span>待压缩</span>`;
-    pill.classList.add("neutral");
-    pill.textContent = "待处理";
+    // A waiting image has no result yet; the faint "待处理" beside its name
+    // says so without looking like a result.
+    sizes.innerHTML = "";
+    pill.hidden = true;
   }
 
   const previewButton = row.querySelector<HTMLButtonElement>('[data-action="preview"]')!;
@@ -644,25 +679,71 @@ function updateRow(row: HTMLElement, item: Item) {
 
 function renderFooter() {
   if (items.length === 0) return;
+  const auto = autoProcessEnabled();
   const done = items.filter((item) => item.status === "done");
   const failed = items.filter((item) => item.status === "error");
+  const pending = items.filter((item) => item.status === "ready" || item.status === "working");
   const total = items.length;
   const completed = done.length + failed.length;
   const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   let status = "准备就绪";
-  if (batch.running) status = `正在压缩，${batch.done || completed} / ${batch.total || total}`;
-  else if (batch.canceled) status = "压缩已取消";
-  else if (done.length === total && total > 0) status = "压缩完成";
-  else if (failed.length > 0 && completed === total) status = "部分图片未能压缩";
-  else if (done.length > 0) status = `${done.length} 张已完成，${total - completed} 张待处理`;
+  let showOpen = false;
+  if (batch.running) {
+    status = `正在压缩，${batch.done || completed} / ${batch.total || total}`;
+  } else if (auto && lastSaved) {
+    status = `已保存 ${lastSaved.count} 张到 ${lastSaved.target} · 省 ${lastSaved.percent}%`;
+    showOpen = lastSaved.path !== "";
+  } else if (batch.canceled) {
+    status = "压缩已取消";
+  } else if (auto) {
+    status = done.length > 0 && pending.length === 0 ? "压缩完成" : "准备就绪";
+  } else if (done.length === total) {
+    status = "压缩完成";
+  } else if (failed.length > 0 && completed === total) {
+    status = "部分图片未能压缩";
+  } else if (done.length > 0) {
+    status = `${done.length} 张已完成，${total - completed} 张待处理`;
+  }
 
   $("#batchStatus").textContent = status;
+  $("#openSavedBtn").hidden = !showOpen;
   $("#batchPercent").textContent = `${percent}%`;
   $("#progressFill").style.transform = `scaleX(${percent / 100})`;
-  $<HTMLButtonElement>("#exportBtn").disabled = batch.running || done.length === 0;
-  $("#exportBtn").title = done.length === 0 ? "先压缩图片" : `导出 ${done.length} 张压缩后的图片`;
+  renderStageAction();
+}
 
+/* The footer carries the one action that matches the mode: capturing in the
+   automatic flow, compressing then exporting in the manual one. */
+function renderStageAction() {
+  const button = $<HTMLButtonElement>("#stageActionBtn");
+  const label = $("#stageActionLabel");
+  const auto = autoProcessEnabled();
+  const done = items.filter((item) => item.status === "done").length;
+  const pending = items.some((item) => item.status === "ready" || item.status === "working");
+
+  let action: "screenshot" | "compress" | "export";
+  if (auto) action = "screenshot";
+  else if (!batch.running && done > 0 && !pending && !dirty) action = "export";
+  else action = "compress";
+  button.dataset.action = action;
+
+  if (action === "screenshot") {
+    setUseIcon("stageActionIcon", "camera");
+    label.textContent = "截图";
+    button.title = `截取屏幕区域（${formatShortcut(settings.screenshotShortcut)}）`;
+    button.disabled = false;
+  } else if (action === "export") {
+    setUseIcon("stageActionIcon", "download");
+    label.textContent = "导出";
+    button.title = `导出 ${done} 张压缩后的图片`;
+    button.disabled = false;
+  } else {
+    setUseIcon("stageActionIcon", "refresh");
+    label.textContent = batch.running ? "压缩中…" : dirty ? "重新压缩" : "压缩全部";
+    button.title = batch.running ? "正在压缩" : "压缩队列中的图片";
+    button.disabled = batch.running || items.length === 0;
+  }
 }
 
 function renderActions() {
@@ -687,9 +768,15 @@ function renderActions() {
               : "开始压缩";
   }
 
+  // The automatic flow has no use for a second, large compress button; the
+  // footer owns the action. Hiding the whole block leaves no empty gap.
+  $("#sidebarActions").hidden = autoProcessEnabled();
   $("#cancelBtn").hidden = !running;
   $<HTMLButtonElement>("#clearBtn").disabled = running || items.length === 0;
   $<HTMLButtonElement>("#addBtn").disabled = running;
+  // In the automatic flow the footer owns the capture action, so the toolbar
+  // copy steps aside — except on an empty queue, where the footer is hidden.
+  $<HTMLButtonElement>("#screenshotBtn").hidden = autoProcessEnabled() && items.length > 0;
   $<HTMLButtonElement>("#screenshotBtn").disabled = running;
   $<HTMLButtonElement>("#emptyAddBtn").disabled = running;
   $<HTMLButtonElement>("#outputBtn").disabled = running;
@@ -700,6 +787,9 @@ function renderActions() {
     button.disabled = running;
   });
   $<HTMLInputElement>("#quality").disabled = running || settings.format === "png";
+  $$<HTMLButtonElement>("#qualityPresets button").forEach((button) => {
+    button.disabled = running || settings.format === "png";
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -720,9 +810,18 @@ function bindEvents() {
   $("#screenshotBtn").addEventListener("click", () => void captureScreenshot());
   $("#compressBtn").addEventListener("click", () => void compressAll());
   $("#cancelBtn").addEventListener("click", () => void cancelCompression());
-  $("#exportBtn").addEventListener("click", () => void exportAll());
+  $("#stageActionBtn").addEventListener("click", () => {
+    const action = $<HTMLButtonElement>("#stageActionBtn").dataset.action;
+    if (action === "screenshot") void captureScreenshot();
+    else if (action === "export") void exportAll();
+    else void compressAll();
+  });
+  $("#openSavedBtn").addEventListener("click", () => {
+    if (lastSaved) void AnyPic.revealPath(lastSaved.path);
+  });
   $("#clearBtn").addEventListener("click", () => void clearQueue());
   $("#outputBtn").addEventListener("click", () => void chooseOutputFolder());
+  $("#outputInlineBtn").addEventListener("click", () => void chooseOutputFolder());
   $("#resetLocation").addEventListener("click", () => void setSettings({ outputMode: "alongside" }));
   $("#themeBtn").addEventListener("click", cycleTheme);
   $("#shortcutBtn").addEventListener("click", () => {
@@ -733,6 +832,11 @@ function bindEvents() {
     const on = (event.target as HTMLInputElement).checked;
     void setSettings({ screenshotClipboard: on ? "on" : "off" });
     showToast(on ? "截图后将复制到剪贴板" : "截图后不再复制到剪贴板", "info");
+  });
+  $("#autoProcessToggle").addEventListener("change", (event) => {
+    const on = (event.target as HTMLInputElement).checked;
+    void setSettings({ autoProcess: on ? "on" : "off" });
+    showToast(on ? "添加后自动压缩并保存" : "已改为手动压缩和导出", "info");
   });
   $("#dockToggle").addEventListener("change", (event) => {
     const on = (event.target as HTMLInputElement).checked;
@@ -803,6 +907,12 @@ function bindEvents() {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-format]");
     if (!button || button.disabled) return;
     void setSettings({ format: button.dataset.format ?? "auto" });
+  });
+
+  $("#qualityPresets").addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-quality]");
+    if (!button || button.disabled) return;
+    void setSettings({ quality: Number(button.dataset.quality) });
   });
 
   const quality = $<HTMLInputElement>("#quality");
@@ -962,7 +1072,6 @@ function bindEvents() {
 /* ------------------------------------------------------------------ */
 
 async function pickFiles() {
-  if (batch.running) return;
   if (demoMode) {
     showToast("浏览器预览模式：请在 MyGo 桌面应用中选择图片", "info");
     return;
@@ -976,16 +1085,19 @@ async function pickFiles() {
 }
 
 async function captureScreenshot() {
-  if (batch.running) return;
   if (demoMode) {
     showToast("浏览器预览模式无法截屏，请在 MyGo 桌面应用中使用", "info");
     return;
   }
   try {
+    // The backend decides whether to copy and whether to stay in the
+    // background from its own settings; make sure a just-toggled switch has
+    // reached it before the capture starts.
+    await flushSave();
     const result = await AnyPic.captureScreenshot();
     // A fresh capture is "ready", so a done/error filter would hide it.
     if (result.added > 0) filter = "all";
-    applyAddResult(result);
+    applyAddResult(result, "screenshot");
     if (result.copied) showToast("截图已复制到剪贴板", "info");
   } catch (error) {
     // Canceling the region selection, or a second press while the first
@@ -1000,8 +1112,10 @@ function isCaptureNotice(error: unknown) {
   return message.includes("已取消截图") || message.includes("正在截图中");
 }
 
+type AddSource = "files" | "screenshot";
+
 async function addPaths(paths: string[]) {
-  if (batch.running || demoMode || paths.length === 0) return;
+  if (demoMode || paths.length === 0) return;
   try {
     const result = await AnyPic.addPaths(paths);
     applyAddResult(result);
@@ -1010,57 +1124,104 @@ async function addPaths(paths: string[]) {
   }
 }
 
-function applyAddResult(result: { snapshot: Snapshot; added: number; skipped: { name: string; reason: string }[] }) {
+function applyAddResult(
+  result: { snapshot: Snapshot; added: number; skipped: { name: string; reason: string }[] },
+  source: AddSource = "files",
+): void {
+  const known = new Set(items.map((item) => item.id));
   applySnapshot(result.snapshot, false);
-  if (result.added === 0 && result.skipped.length === 0) {
-    renderAll();
-    return;
-  }
+  const newIDs = items.filter((item) => !known.has(item.id)).map((item) => item.id);
+  const auto = autoProcessEnabled() && !demoMode && result.added > 0;
+
   if (result.added > 0) {
-    showToast(`已添加 ${result.added} 张图片${result.skipped.length ? `，跳过 ${result.skipped.length} 个文件` : ""}`, "success");
+    // The automatic flow folds the addition into one merged completion
+    // toast; a separate "added" toast on top would just be noise.
+    if (!auto) {
+      showToast(`已添加 ${result.added} 张图片${result.skipped.length ? `，跳过 ${result.skipped.length} 个文件` : ""}`, "success");
+    }
     if (result.skipped.length > 0) {
       const first = result.skipped[0]!;
       showToast(`${first.name}：${first.reason}`, "info");
     }
-    setTimeout(() => $("#queueScroll").scrollTo({ top: $("#queueScroll").scrollHeight, behavior: "smooth" }), 100);
+    if (!auto) {
+      setTimeout(() => $("#queueScroll").scrollTo({ top: $("#queueScroll").scrollHeight, behavior: "smooth" }), 100);
+    }
   } else if (result.skipped.length > 0) {
     const first = result.skipped[0]!;
     showToast(`${first.name}：${first.reason}`, "error");
   }
+
   renderAll();
+  if (auto) startAutoRun(newIDs, source === "screenshot");
 }
 
-async function compressAll() {
-  if (batch.running || items.length === 0) return;
+function startAutoRun(ids: number[], fromScreenshot: boolean) {
+  if (ids.length === 0) return;
+  autoRun ??= { ids: new Set<number>(), copyIDs: [] };
+  for (const id of ids) autoRun.ids.add(id);
+  if (fromScreenshot) autoRun.copyIDs.push(ids[ids.length - 1]!);
+  // A pass in progress picks the new images up when it ends; the start
+  // guard covers the async gap before the backend call.
+  if (batch.running || compressStarting) return;
+  void compressAll(true);
+}
+
+async function compressAll(auto = false) {
+  if (batch.running || compressStarting || items.length === 0) return;
+
+  const ready = items.filter((item) => item.status === "ready");
+  if (auto && ready.length === 0) return;
+  if (auto && !autoRun) autoRun = { ids: new Set<number>(), copyIDs: [] };
+  if (auto) for (const item of ready) autoRun!.ids.add(item.id);
+
+  compressStarting = true;
   dirty = false;
+  lastSaved = null;
   markDirty();
 
   if (demoMode) {
+    compressStarting = false;
     await demoCompress();
     return;
   }
 
+  // Auto-process saves to the configured folder as soon as the pass ends;
+  // persist a just-changed destination before the backend reads it.
+  await flushSave();
+
   const runSignature = signature(settings);
-  items = items.map((item) => ({
-    ...item,
-    status: "ready",
-    error: "",
-    compressedSize: 0,
-    savedPercent: 0,
-    passedThrough: false,
-    outputFormat: "",
-    outputName: "",
-  }));
-  batch = { running: true, total: items.length, done: 0, failed: 0, canceled: false };
+  if (!auto) {
+    items = items.map((item) => ({
+      ...item,
+      status: "ready",
+      error: "",
+      compressedSize: 0,
+      savedPercent: 0,
+      passedThrough: false,
+      outputFormat: "",
+      outputName: "",
+    }));
+  }
+  const total = auto ? items.filter((item) => item.status === "ready").length : items.length;
+  if (total === 0) {
+    compressStarting = false;
+    autoRun = null;
+    return;
+  }
+  batch = { running: true, total, done: 0, failed: 0, canceled: false };
   scheduleRender();
   try {
-    await AnyPic.compress(settings);
+    if (auto) await AnyPic.compressReady(settings);
+    else await AnyPic.compress(settings);
     compressedSignature = runSignature;
     markDirty();
   } catch (error) {
     batch = { ...batch, running: false };
-    showError(error, "无法开始压缩");
+    autoRun = null;
+    showError(error, auto ? "自动处理失败" : "无法开始压缩");
     renderAll();
+  } finally {
+    compressStarting = false;
   }
 }
 
@@ -1101,6 +1262,7 @@ async function clearQueue() {
   if (demoMode) {
     items = [];
     compressedSignature = "";
+    lastSaved = null;
     batch = { running: false, total: 0, done: 0, failed: 0, canceled: false };
     renderAll();
     return;
@@ -1110,6 +1272,7 @@ async function clearQueue() {
     applySnapshot(snapshot, false);
     compressedSignature = "";
     dirty = false;
+    lastSaved = null;
     renderAll();
     showToast("队列已清空", "success");
   } catch (error) {
@@ -1334,6 +1497,8 @@ function applySettingsFromBackend(next: Settings) {
 }
 
 function syncSettingsToUI() {
+  const autoToggle = $<HTMLInputElement>("#autoProcessToggle");
+  if (autoToggle) autoToggle.checked = autoProcessEnabled();
   const clipboardToggle = $<HTMLInputElement>("#clipboardToggle");
   if (clipboardToggle) clipboardToggle.checked = settings.screenshotClipboard !== "off";
   const dockToggle = $<HTMLInputElement>("#dockToggle");
@@ -1387,20 +1552,97 @@ function handleBatch(next: Batch) {
   if (wasRunning && !next.running) {
     compressedSignature = signature(settings);
     markDirty();
-    const done = items.filter((item) => item.status === "done").length;
-    const failed = items.filter((item) => item.status === "error").length;
-    if (next.canceled) {
-      showToast("压缩已取消", "info");
-    } else if (failed > 0) {
-      showToast(`压缩完成：${done} 张成功，${failed} 张失败`, "error");
+    if (autoRun) {
+      if (next.canceled) {
+        autoRun = null;
+        showToast("压缩已取消", "info");
+      } else if (autoProcessEnabled() && items.some((item) => item.status === "ready")) {
+        // Images arrived while the pass ran; fold them into the same
+        // automatic run and save everything once it settles.
+        void compressAll(true);
+      } else {
+        void finishAutoRun();
+      }
     } else {
-      const doneOriginal = items.filter((item) => item.status === "done").reduce((sum, item) => sum + item.originalSize, 0);
-      const doneCompressed = items.filter((item) => item.status === "done").reduce((sum, item) => sum + item.compressedSize, 0);
-      const saved = Math.max(0, doneOriginal - doneCompressed);
-      showToast(`压缩完成，共省下 ${formatBytes(saved)}`, "success");
+      showBatchResult(next);
     }
   }
   scheduleRender();
+}
+
+function showBatchResult(next: Batch) {
+  const done = items.filter((item) => item.status === "done");
+  const failed = items.filter((item) => item.status === "error").length;
+  if (next.canceled) {
+    showToast("压缩已取消", "info");
+    return;
+  }
+  if (failed > 0) {
+    showToast(`压缩完成：${done.length} 张成功，${failed} 张失败`, "error");
+    return;
+  }
+  const original = done.reduce((sum, item) => sum + item.originalSize, 0);
+  const compressed = done.reduce((sum, item) => sum + item.compressedSize, 0);
+  const saved = Math.max(0, original - compressed);
+  showToast(`压缩完成，共省下 ${formatBytes(saved)}`, "success");
+}
+
+/* Ends an automatic run: copies the capture (when there was one), saves the
+   results without a dialog, and reports everything in one toast. */
+async function finishAutoRun() {
+  const run = autoRun;
+  autoRun = null;
+  if (!run) return;
+  if (!autoProcessEnabled()) {
+    showBatchResult(batch);
+    return;
+  }
+
+  const ids = [...run.ids];
+  const idSet = new Set(ids);
+  const done = items.filter((item) => idSet.has(item.id) && item.status === "done");
+  const failed = items.filter((item) => idSet.has(item.id) && item.status === "error");
+
+  let copied = false;
+  if (run.copyIDs.length > 0 && settings.screenshotClipboard !== "off") {
+    try {
+      await AnyPic.copyItemToClipboard(run.copyIDs[run.copyIDs.length - 1]!);
+      copied = true;
+    } catch (error) {
+      showError(error, "无法复制到剪贴板");
+    }
+  }
+
+  if (done.length === 0) {
+    if (failed.length > 0) showToast(`${failed.length} 张图片未能处理`, "error");
+    return;
+  }
+
+  const original = done.reduce((sum, item) => sum + item.originalSize, 0);
+  const compressed = done.reduce((sum, item) => sum + item.compressedSize, 0);
+  const saved = Math.max(0, original - compressed);
+  const percent = original > 0 ? Math.round((saved / original) * 100) : 0;
+
+  try {
+    const result = await AnyPic.exportProcessed(ids);
+    const first = result.paths[0] ?? "";
+    lastSaved = {
+      count: result.paths.length || done.length,
+      target: result.folder ? shortenPath(result.folder) : "原图旁边",
+      percent,
+      path: result.folder || first,
+    };
+    if (failed.length > 0) {
+      showToast(`${failed.length} 张图片未能处理`, "error");
+    } else if (copied) {
+      // The footer already reports the save; the copy still earns a nudge.
+      showToast("已复制到剪贴板", "info");
+    }
+    scheduleRender();
+  } catch (error) {
+    lastSaved = null;
+    showError(error, "自动保存失败");
+  }
 }
 
 /* ------------------------------------------------------------------ */

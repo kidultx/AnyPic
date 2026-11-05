@@ -67,13 +67,18 @@ func (a *AnyPic) CaptureScreenshot(ctx context.Context) (AddResult, error) {
 	// Copying is explicit. When the capture tool itself wrote to the
 	// clipboard (Windows/Linux) and the preference is off, clear it again.
 	// A file-based capture never touches the clipboard in the first place.
+	//
+	// With auto-process on, the page copies the compressed result once the
+	// pass finishes, so the capture is not put on the clipboard twice. The
+	// tool-provided copy stays meanwhile as a fallback.
 	a.mu.Lock()
 	copyToClipboard := a.settings.ScreenshotClipboard != "off"
+	autoProcess := a.settings.AutoProcess == "on"
 	a.mu.Unlock()
 	copied := false
-	if copyToClipboard {
+	if copyToClipboard && !autoProcess {
 		copied = mygo.Clipboard.WriteImage(data) == nil
-	} else if viaClipboard {
+	} else if !copyToClipboard && viaClipboard {
 		mygo.Clipboard.Clear()
 	}
 
@@ -88,13 +93,17 @@ func (a *AnyPic) CaptureScreenshot(ctx context.Context) (AddResult, error) {
 	result.Copied = copied
 
 	// The shortcut may have fired while the app was behind another window;
-	// bring it forward now that the capture is done.
-	if win := mygo.CallerWindow(ctx); win != nil {
-		if win.IsMinimized() {
-			win.Restore()
+	// bring it forward now that the capture is done. The zero-click flow
+	// leaves the app in the background instead: the user is about to paste,
+	// not to open the queue.
+	if !(autoProcess && copyToClipboard) {
+		if win := mygo.CallerWindow(ctx); win != nil {
+			if win.IsMinimized() {
+				win.Restore()
+			}
+			win.Show()
+			win.Focus()
 		}
-		win.Show()
-		win.Focus()
 	}
 	return result, nil
 }

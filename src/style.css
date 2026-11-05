@@ -745,6 +745,102 @@ body.side-drag * {
   color: var(--text-soft);
 }
 
+/* The three semantic quality presets; the numeric slider lives behind the
+   disclosure below them. */
+.quality-presets {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.auto-process-row {
+  margin-top: 0;
+}
+
+/* A single, quiet line under the automatic toggle: where results land is
+   part of the answer for anyone who uses the automatic flow, so it does not
+   hide behind the disclosure. */
+.output-inline {
+  display: block;
+  margin-top: 6px;
+  padding: 0;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.output-inline:hover {
+  color: var(--text-soft);
+  text-decoration: none;
+}
+
+.output-inline span {
+  color: var(--text-soft);
+}
+
+.field-note {
+  margin: 5px 0 0;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* Everything that is not part of the everyday path sits behind this one
+   disclosure, so the sidebar opens with just quality and auto-processing. */
+.more-settings {
+  margin-top: 7px;
+}
+
+.more-settings-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background-color: var(--card);
+  box-shadow: var(--shadow-card);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  line-height: 1.4;
+  text-transform: uppercase;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  transition: color 0.1s ease;
+}
+
+.more-settings-summary::-webkit-details-marker {
+  display: none;
+}
+
+.more-settings-summary:hover {
+  color: var(--text-soft);
+}
+
+.more-settings-summary .icon {
+  width: 14px;
+  height: 14px;
+  color: var(--text-faint);
+  transition: transform 0.15s ease;
+}
+
+.more-settings[open] .more-settings-summary .icon {
+  transform: rotate(180deg);
+}
+
+.more-settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-top: 7px;
+}
+
+.more-settings-body .settings-block + .settings-block {
+  margin-top: 0;
+}
+
 .field-row {
   display: flex;
   min-height: 0;
@@ -1460,6 +1556,11 @@ body.side-drag * {
   padding: 0 16px;
 }
 
+.empty-state .empty-hint {
+  margin-top: 14px;
+  font-size: 11.5px;
+}
+
 /* ---------- queue ---------- */
 
 .queue {
@@ -1680,6 +1781,15 @@ body.side-drag * {
   white-space: nowrap;
 }
 
+/* Pending is a state of the item, not a result, so it sits softly beside the
+   name and leaves the result column empty. */
+.item-state {
+  margin-left: 6px;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 400;
+}
+
 .item-meta {
   display: flex;
   align-items: center;
@@ -1689,6 +1799,11 @@ body.side-drag * {
   color: var(--text-faint);
   font-size: 11px;
   white-space: nowrap;
+}
+
+.output-format {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .format-chip {
@@ -1909,10 +2024,18 @@ body.side-drag * {
 
 .batch-status {
   overflow: hidden;
+  flex: 0 1 auto;
+  min-width: 0;
   color: var(--text-soft);
   font-size: 12px;
   font-weight: 500;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.footer-open {
+  flex: 0 0 auto;
+  font-size: 11.5px;
   white-space: nowrap;
 }
 
@@ -1928,6 +2051,7 @@ body.side-drag * {
 
 .progress {
   flex: 0 1 200px;
+  min-width: 40px;
   height: 4px;
   overflow: hidden;
   border-radius: 999px;
@@ -1947,6 +2071,7 @@ body.side-drag * {
 
 .batch-actions {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 8px;
 }
@@ -2578,6 +2703,18 @@ body.side-drag * {
 }
 
 @media (max-width: 1040px) {
+  .stage-footer {
+    gap: 10px;
+  }
+
+  .batch-block {
+    gap: 10px;
+  }
+
+  .progress {
+    flex-basis: 110px;
+  }
+
   .queue-item {
     grid-template-columns: 36px minmax(0, 1fr) 208px 84px;
   }

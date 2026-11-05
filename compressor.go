@@ -79,6 +79,9 @@ type Settings struct {
 	OutputFolder string `json:"outputFolder"`
 	Suffix       string `json:"suffix"`
 	Theme        string `json:"theme"`
+	// AutoProcess compresses additions — files, folders and captures —
+	// without the extra compress/export clicks: "on" or "off".
+	AutoProcess string `json:"autoProcess"`
 	// ScreenshotShortcut is the global accelerator that starts a capture.
 	ScreenshotShortcut string `json:"screenshotShortcut"`
 	// ScreenshotClipboard keeps a fresh capture on the clipboard: "on" or
@@ -201,6 +204,7 @@ func defaultSettings() Settings {
 		OutputMode:          "alongside",
 		Suffix:              "-anypic",
 		Theme:               "system",
+		AutoProcess:         "on",
 		ScreenshotShortcut:  DefaultScreenshotShortcut,
 		ScreenshotClipboard: "on",
 		HideDockWhenTray:    "on",
@@ -235,14 +239,10 @@ func (a *AnyPic) HideDockWhenTray() bool {
 	return a.settings.HideDockWhenTray != "off"
 }
 
-// AddPaths adds files, or the images inside directories.
+// AddPaths adds files, or the images inside directories. Adding while a
+// batch runs is allowed: the new images wait for the next pass, which the
+// automatic flow starts as soon as the current one finishes.
 func (a *AnyPic) AddPaths(paths []string) (AddResult, error) {
-	a.mu.Lock()
-	if a.running {
-		a.mu.Unlock()
-		return AddResult{}, errors.New("正在压缩，请稍候再添加图片")
-	}
-	a.mu.Unlock()
 	return a.addPaths(paths)
 }
 
@@ -517,6 +517,17 @@ func (a *AnyPic) ChooseOutputFolder(ctx context.Context) (Settings, error) {
 
 // Compress starts compressing every image in the queue.
 func (a *AnyPic) Compress(s Settings) error {
+	return a.startCompression(s, false)
+}
+
+// CompressReady starts a pass over the images that have not been compressed
+// yet. The automatic flow uses it to pick up images added while an earlier
+// pass was running without re-encoding the ones already finished.
+func (a *AnyPic) CompressReady(s Settings) error {
+	return a.startCompression(s, true)
+}
+
+func (a *AnyPic) startCompression(s Settings, onlyReady bool) error {
 	s = normalizeSettings(s)
 
 	a.mu.Lock()
@@ -524,16 +535,23 @@ func (a *AnyPic) Compress(s Settings) error {
 		a.mu.Unlock()
 		return errors.New("已经有一轮压缩正在进行")
 	}
-	if len(a.items) == 0 {
-		a.mu.Unlock()
-		return errors.New("请先添加图片")
-	}
 	ids := make([]int64, 0, len(a.items))
 	for _, item := range a.items {
+		if onlyReady && item.Status != statusReady {
+			continue
+		}
 		ids = append(ids, item.ID)
 		item.stale = false
 		item.Status = statusReady
 		item.Error = ""
+	}
+	if len(ids) == 0 {
+		a.mu.Unlock()
+		if onlyReady {
+			// Nothing to do is not an error for an automatic pass.
+			return nil
+		}
+		return errors.New("请先添加图片")
 	}
 	a.settings = s
 	a.running = true
@@ -871,6 +889,102 @@ func (a *AnyPic) ExportAll(ctx context.Context) (ExportResult, error) {
 	return result, nil
 }
 
+// ExportProcessed saves the listed compressed images without asking where:
+// into the configured output folder, or beside each original. It is the
+// saving half of the automatic flow, so it never opens a dialog.
+func (a *AnyPic) ExportProcessed(ids []int64) (ExportResult, error) {
+	a.mu.Lock()
+	if a.running {
+		a.mu.Unlock()
+		return ExportResult{}, errors.New("请等待压缩完成")
+	}
+	want := make(map[int64]bool, len(ids))
+	for _, id := range ids {
+		want[id] = true
+	}
+	done := make([]Item, 0, len(ids))
+	for _, item := range a.items {
+		if want[item.ID] && item.Status == statusDone {
+			done = append(done, *item)
+		}
+	}
+	folder := a.settings.OutputFolder
+	mode := a.settings.OutputMode
+	a.mu.Unlock()
+
+	if len(done) == 0 {
+		return ExportResult{}, errors.New("还没有可导出的图片")
+	}
+
+	result := ExportResult{}
+	dirs := map[string]bool{}
+	for _, item := range done {
+		destDir := item.Dir
+		if mode == "folder" && folder != "" {
+			destDir = folder
+		}
+		src := item.compressedPath
+		if item.PassedThrough || src == "" {
+			src = item.Path
+		}
+		dest := uniquePath(filepath.Join(destDir, item.OutputName))
+		if err := copyFile(src, dest); err != nil {
+			return result, fmt.Errorf("保存 %s 失败: %w", item.Name, err)
+		}
+		result.Paths = append(result.Paths, dest)
+		result.Count++
+		if result.Folder == "" {
+			result.Folder = destDir
+		}
+		dirs[destDir] = true
+	}
+	// A single folder is worth offering to reveal; mixed "alongside" outputs
+	// are spread over several folders, so the caller reveals the first file.
+	if len(dirs) > 1 {
+		result.Folder = ""
+	}
+	return result, nil
+}
+
+var pngSignature = []byte("\x89PNG\r\n\x1a\n")
+
+// CopyItemToClipboard puts a compressed image on the clipboard, falling back
+// to the original when compression did not finish. The clipboard takes PNG,
+// so results encoded as JPEG or WebP are decoded and re-encoded first.
+func (a *AnyPic) CopyItemToClipboard(id int64) error {
+	a.mu.Lock()
+	item := a.byID[id]
+	if item == nil {
+		a.mu.Unlock()
+		return errors.New("图片不存在")
+	}
+	src := item.Path
+	if item.Status == statusDone && item.compressedPath != "" && !item.PassedThrough {
+		src = item.compressedPath
+	}
+	a.mu.Unlock()
+
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return errors.New("无法读取图片")
+	}
+	if !bytes.HasPrefix(data, pngSignature) {
+		img, err := imaging.Decode(bytes.NewReader(data), imaging.AutoOrientation(true))
+		if err != nil {
+			return errors.New("无法复制图片")
+		}
+		var buf bytes.Buffer
+		if err := png.Encode(&buf, img); err != nil {
+			return errors.New("无法复制图片")
+		}
+		data = buf.Bytes()
+	}
+	if err := mygo.Clipboard.WriteImage(data); err != nil {
+		return errors.New("无法写入剪贴板")
+	}
+	return nil
+}
+
 // ExportOne asks where to save one compressed image.
 func (a *AnyPic) ExportOne(ctx context.Context, id int64) (ExportResult, error) {
 	a.mu.Lock()
@@ -1204,6 +1318,11 @@ func normalizeSettings(s Settings) Settings {
 	case "system", "light", "dark":
 	default:
 		s.Theme = "system"
+	}
+	// Auto-process is the default: older settings files have no preference,
+	// and turning the one-step flow on is the friendlier reading of that.
+	if s.AutoProcess != "off" {
+		s.AutoProcess = "on"
 	}
 	s.ScreenshotShortcut = strings.TrimSpace(s.ScreenshotShortcut)
 	if s.ScreenshotShortcut == "" {

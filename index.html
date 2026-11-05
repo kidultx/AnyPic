@@ -72,128 +72,160 @@
 
       <div class="workspace">
         <aside class="sidebar">
-          <div class="sidebar-scroll">            <section class="settings-block">
+          <div class="sidebar-scroll">
+            <section class="settings-block">
               <div class="block-head">
                 <h2>压缩设置</h2>
                 <button class="text-button" id="resetBtn" type="button" title="恢复推荐设置">重置</button>
               </div>
 
-              <div class="field">
-                <div class="field-label">
-                  <label>输出格式</label>
-                  <span class="field-hint" id="formatHint">保持原格式</span>
-                </div>
-                <div class="segmented" id="formatSeg" role="group" aria-label="输出格式">
-                  <button data-format="auto" class="active" aria-pressed="true">自动</button>
-                  <button data-format="jpeg" aria-pressed="false">JPG</button>
-                  <button data-format="png" aria-pressed="false">PNG</button>
-                  <button data-format="webp" aria-pressed="false">WebP</button>
-                </div>
-              </div>
-
               <div class="field quality-field">
                 <div class="field-label">
-                  <label for="quality">质量</label>
-                  <span class="quality-readout"><b id="qualityValue">82</b><small>%</small></span>
+                  <label>质量</label>
+                  <span class="field-hint" id="qualityState" hidden>自定义</span>
                 </div>
-                <div class="range-wrap">
-                  <input id="quality" type="range" min="30" max="100" step="1" value="82" />
-                  <div class="range-track-fill" id="qualityFill"></div>
-                </div>
-                <div class="range-scale">
-                  <span>更小</span>
-                  <span id="qualityLabel" class="quality-label">平衡</span>
-                  <span>更好</span>
+                <div class="segmented quality-presets" id="qualityPresets" role="group" aria-label="压缩质量">
+                  <button data-quality="60" aria-pressed="false">更小</button>
+                  <button data-quality="82" class="active" aria-pressed="true">平衡</button>
+                  <button data-quality="95" aria-pressed="false">更清晰</button>
                 </div>
               </div>
 
-              <div class="field-row">
-                <label for="maxDim">最大边长</label>
-                <div class="select-wrap">
-                  <select id="maxDim">
-                    <option value="0">保持原尺寸</option>
-                    <option value="3840">3840 px</option>
-                    <option value="2560">2560 px</option>
-                    <option value="1920">1920 px</option>
-                    <option value="1280">1280 px</option>
-                    <option value="800">800 px</option>
-                  </select>
-                  <svg aria-hidden="true" class="icon select-chevron"><use href="#i-chevron" /></svg>
-                </div>
-              </div>
-
-              <div class="field-row">
-                <label for="suffix">文件名后缀</label>
-                <input id="suffix" class="text-input" type="text" value="-anypic" maxlength="32" spellcheck="false" />
-              </div>
-
-              <div class="tip-card" id="tipCard">
-                <svg aria-hidden="true" class="icon tip-icon"><use href="#i-info" /></svg>
-                <div>
-                  <strong id="tipTitle">保持原格式</strong>
-                  <p id="tipText">在保持原格式的同时优化体积。</p>
-                </div>
-              </div>
-            </section>
-
-            <section class="settings-block shortcut-block">
-              <div class="block-head">
-                <h2>截图</h2>
-              </div>
-              <div class="shortcut-row">
-                <label for="shortcutBtn">快捷键</label>
-                <button class="shortcut-input" id="shortcutBtn" type="button" title="点击后按下新的组合键；关闭窗口后仍可用">
-                  <span class="shortcut-value" id="shortcutValue">⌘⌥S</span>
-                  <svg aria-hidden="true" class="icon shortcut-edit" id="shortcutEdit"><use href="#i-pencil" /></svg>
-                </button>
-              </div>
-              <p class="shortcut-hint" id="shortcutHint" hidden>按住修饰键再按一个键，Esc 取消</p>
-              <label class="toggle-row">
-                <span>截图后复制到剪贴板</span>
-                <input class="switch-input" id="clipboardToggle" type="checkbox" checked />
+              <label class="toggle-row auto-process-row">
+                <span>添加后自动处理</span>
+                <input class="switch-input" id="autoProcessToggle" type="checkbox" checked />
                 <span class="switch" aria-hidden="true"></span>
               </label>
-              <button class="text-button screen-permission" id="screenPermissionBtn" type="button" hidden>
-                截图只有壁纸？检查屏幕录制权限
+              <p class="field-note" id="autoProcessNote">添加或截图后自动压缩并保存，只需粘贴。</p>
+              <button class="text-button output-inline" id="outputInlineBtn" type="button">
+                保存到 <span id="outputInlineLabel">原图旁边</span> ›
               </button>
             </section>
 
-            <section class="settings-block">
-              <div class="block-head">
-                <h2>保存位置</h2>
-              </div>
-              <button class="destination" id="outputBtn" type="button">
-                <svg aria-hidden="true" class="icon destination-icon"><use href="#i-folder" /></svg>
-                <span id="outputLabel">原图旁边</span>
-                <svg aria-hidden="true" class="icon destination-arrow"><use href="#i-chevron" /></svg>
-              </button>
-              <button class="text-button reset-location" id="resetLocation" type="button" hidden>改为保存到原图旁边</button>
-            </section>
+            <details class="more-settings" id="moreSettings">
+              <summary class="more-settings-summary">
+                <span>更多设置</span>
+                <svg aria-hidden="true" class="icon"><use href="#i-chevron" /></svg>
+              </summary>
+              <div class="more-settings-body">
+                <section class="settings-block">
+                  <div class="field quality-field">
+                    <div class="field-label">
+                      <label for="quality">质量数值</label>
+                      <span class="quality-readout"><b id="qualityValue">82</b><small>%</small></span>
+                    </div>
+                    <div class="range-wrap">
+                      <input id="quality" type="range" min="30" max="100" step="1" value="82" />
+                      <div class="range-track-fill" id="qualityFill"></div>
+                    </div>
+                    <div class="range-scale">
+                      <span>更小</span>
+                      <span id="qualityLabel" class="quality-label">平衡</span>
+                      <span>更好</span>
+                    </div>
+                  </div>
 
-            <section class="settings-block" id="windowSettings">
-              <div class="block-head">
-                <h2>窗口</h2>
+                  <div class="field">
+                    <div class="field-label">
+                      <label>输出格式</label>
+                      <span class="field-hint" id="formatHint">保持原格式</span>
+                    </div>
+                    <div class="segmented" id="formatSeg" role="group" aria-label="输出格式">
+                      <button data-format="auto" class="active" aria-pressed="true">自动</button>
+                      <button data-format="jpeg" aria-pressed="false">JPG</button>
+                      <button data-format="png" aria-pressed="false">PNG</button>
+                      <button data-format="webp" aria-pressed="false">WebP</button>
+                    </div>
+                  </div>
+
+                  <div class="field-row">
+                    <label for="maxDim">最大边长</label>
+                    <div class="select-wrap">
+                      <select id="maxDim">
+                        <option value="0">保持原尺寸</option>
+                        <option value="3840">3840 px</option>
+                        <option value="2560">2560 px</option>
+                        <option value="1920">1920 px</option>
+                        <option value="1280">1280 px</option>
+                        <option value="800">800 px</option>
+                      </select>
+                      <svg aria-hidden="true" class="icon select-chevron"><use href="#i-chevron" /></svg>
+                    </div>
+                  </div>
+
+                  <div class="field-row">
+                    <label for="suffix">文件名后缀</label>
+                    <input id="suffix" class="text-input" type="text" value="-anypic" maxlength="32" spellcheck="false" />
+                  </div>
+
+                  <div class="tip-card" id="tipCard">
+                    <svg aria-hidden="true" class="icon tip-icon"><use href="#i-info" /></svg>
+                    <div>
+                      <strong id="tipTitle">保持原格式</strong>
+                      <p id="tipText">在保持原格式的同时优化体积。</p>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="settings-block shortcut-block">
+                  <div class="block-head">
+                    <h2>截图</h2>
+                  </div>
+                  <div class="shortcut-row">
+                    <label for="shortcutBtn">快捷键</label>
+                    <button class="shortcut-input" id="shortcutBtn" type="button" title="点击后按下新的组合键；关闭窗口后仍可用">
+                      <span class="shortcut-value" id="shortcutValue">⌘⌥S</span>
+                      <svg aria-hidden="true" class="icon shortcut-edit" id="shortcutEdit"><use href="#i-pencil" /></svg>
+                    </button>
+                  </div>
+                  <p class="shortcut-hint" id="shortcutHint" hidden>按住修饰键再按一个键，Esc 取消</p>
+                  <label class="toggle-row">
+                    <span>截图后复制到剪贴板</span>
+                    <input class="switch-input" id="clipboardToggle" type="checkbox" checked />
+                    <span class="switch" aria-hidden="true"></span>
+                  </label>
+                  <button class="text-button screen-permission" id="screenPermissionBtn" type="button" hidden>
+                    截图只有壁纸？检查屏幕录制权限
+                  </button>
+                </section>
+
+                <section class="settings-block">
+                  <div class="block-head">
+                    <h2>保存位置</h2>
+                  </div>
+                  <button class="destination" id="outputBtn" type="button">
+                    <svg aria-hidden="true" class="icon destination-icon"><use href="#i-folder" /></svg>
+                    <span id="outputLabel">原图旁边</span>
+                    <svg aria-hidden="true" class="icon destination-arrow"><use href="#i-chevron" /></svg>
+                  </button>
+                  <button class="text-button reset-location" id="resetLocation" type="button" hidden>改为保存到原图旁边</button>
+                </section>
+
+                <section class="settings-block" id="windowSettings">
+                  <div class="block-head">
+                    <h2>窗口</h2>
+                  </div>
+                  <label class="toggle-row">
+                    <span>开机时启动 AnyPic</span>
+                    <input class="switch-input" id="openAtLoginToggle" type="checkbox" />
+                    <span class="switch" aria-hidden="true"></span>
+                  </label>
+                  <label class="toggle-row">
+                    <span>关闭窗口后隐藏 Dock 图标</span>
+                    <input class="switch-input" id="dockToggle" type="checkbox" checked />
+                    <span class="switch" aria-hidden="true"></span>
+                  </label>
+                </section>
               </div>
-              <label class="toggle-row">
-                <span>开机时启动 AnyPic</span>
-                <input class="switch-input" id="openAtLoginToggle" type="checkbox" />
-                <span class="switch" aria-hidden="true"></span>
-              </label>
-              <label class="toggle-row">
-                <span>关闭窗口后隐藏 Dock 图标</span>
-                <input class="switch-input" id="dockToggle" type="checkbox" checked />
-                <span class="switch" aria-hidden="true"></span>
-              </label>
-            </section>
+            </details>
           </div>
 
-          <div class="sidebar-actions">
+          <div class="sidebar-actions" id="sidebarActions">
             <button class="primary-btn" id="compressBtn" type="button" disabled>
               <span class="primary-label">压缩全部</span>
               <span class="primary-spinner" aria-hidden="true"></span>
               <kbd class="mod-key" data-shortcut="compress">⌘↩</kbd>
             </button>
-            <button class="cancel-btn" id="cancelBtn" type="button" hidden>取消压缩</button>
           </div>
           <div class="side-edge" id="sideEdge" role="separator" aria-orientation="vertical" aria-label="调整侧栏宽度" tabindex="0"></div>
         </aside>
@@ -236,20 +268,21 @@
               <div class="empty-icon">
                 <svg aria-hidden="true" class="icon"><use href="#i-image" /></svg>
               </div>
-              <h2>拖入图片开始压缩</h2>
+              <h2 id="emptyTitle">拖入图片开始压缩</h2>
               <p>支持 JPG、PNG、WebP、静态 GIF、BMP 和 TIFF</p>
               <div class="empty-actions">
                 <button class="primary-btn compact" id="emptyAddBtn" type="button">选择图片…</button>
                 <span>或按 <kbd class="mod-key" data-shortcut="open">⌘O</kbd></span>
               </div>
+              <p class="empty-hint">按 <kbd class="mod-key" id="emptyShotKey">⌘⌥S</kbd> 直接截图，压缩后自动复制</p>
             </div>
 
             <div class="queue" id="queue" hidden>
               <div class="queue-toolbar">
                 <div class="queue-tabs" id="queueTabs" role="tablist" aria-label="筛选图片">
-                  <button class="queue-tab active" data-filter="all" role="tab" aria-selected="true">全部 <span id="tabAllCount">0</span></button>
-                  <button class="queue-tab" data-filter="done" role="tab" aria-selected="false">已完成 <span id="tabDoneCount">0</span></button>
-                  <button class="queue-tab" data-filter="error" role="tab" aria-selected="false">失败 <span id="tabErrorCount">0</span></button>
+                  <button class="queue-tab active" data-filter="all" role="tab" aria-selected="true">全部</button>
+                  <button class="queue-tab" data-filter="done" role="tab" aria-selected="false">已完成</button>
+                  <button class="queue-tab" data-filter="error" role="tab" aria-selected="false">失败 <span id="tabErrorCount" hidden>0</span></button>
                 </div>
                 <div class="queue-tools">
                   <div class="view-switch" id="viewSwitch" role="group" aria-label="视图">
@@ -281,11 +314,13 @@
                 <span id="progressFill"></span>
               </div>
               <span class="batch-percent" id="batchPercent">0%</span>
+              <button class="text-button footer-open" id="openSavedBtn" type="button" hidden>打开文件夹</button>
             </div>
             <div class="batch-actions">
-              <button class="secondary-btn small" id="exportBtn" type="button" disabled>
-                <svg aria-hidden="true" class="icon"><use href="#i-download" /></svg>
-                导出
+              <button class="secondary-btn small" id="cancelBtn" type="button" hidden>取消</button>
+              <button class="primary-btn compact" id="stageActionBtn" type="button">
+                <svg aria-hidden="true" class="icon"><use href="#i-camera" id="stageActionIcon" /></svg>
+                <span id="stageActionLabel">压缩全部</span>
               </button>
             </div>
           </footer>
