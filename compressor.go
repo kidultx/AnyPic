@@ -1037,7 +1037,7 @@ func (a *AnyPic) makeThumb(id int64) {
 	if max(b.Dx(), b.Dy()) > thumbMaxSide {
 		img = imaging.Fit(img, thumbMaxSide, thumbMaxSide, imaging.Lanczos)
 	}
-	thumb, err := dataURL(img, hasAlpha, 80)
+	thumb, err := dataURL(img, hasAlpha, 80, thumbMaxSide)
 	if err != nil {
 		return
 	}
@@ -1317,14 +1317,18 @@ func flattenOnWhite(img image.Image) *image.RGBA {
 	return dst
 }
 
-func dataURL(img image.Image, alpha bool, quality int) (string, error) {
+// dataURL encodes an image for the page, capping its larger side at maxSide.
+// The queue thumbnails and the larger preview use the same encoding but very
+// different limits, so the limit belongs to the caller.
+func dataURL(img image.Image, alpha bool, quality, maxSide int) (string, error) {
 	b := img.Bounds()
-	if max(b.Dx(), b.Dy()) > thumbMaxSide {
-		img = imaging.Fit(img, thumbMaxSide, thumbMaxSide, imaging.Lanczos)
+	if max(b.Dx(), b.Dy()) > maxSide {
+		img = imaging.Fit(img, maxSide, maxSide, imaging.Lanczos)
 	}
 	var buf bytes.Buffer
 	mime := "image/jpeg"
 	if alpha {
+		// PNG keeps transparency; quality does not apply to this branch.
 		enc := png.Encoder{CompressionLevel: png.BestSpeed}
 		if err := enc.Encode(&buf, img); err != nil {
 			return "", err
@@ -1356,7 +1360,7 @@ func previewImage(path string) (string, int, int, error) {
 		w, h = b.Dx(), b.Dy()
 	}
 	alpha := imageHasAlpha(img, "")
-	s, err := dataURL(img, alpha, 90)
+	s, err := dataURL(img, alpha, 90, previewMaxSide)
 	return s, w, h, err
 }
 

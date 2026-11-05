@@ -444,6 +444,53 @@ func decodeDataURLConfig(t *testing.T, s string) image.Config {
 	return cfg
 }
 
+// The comparison view is blown up far beyond a queue thumbnail, so its data
+// URL must keep the full preview size instead of the thumbnail's 360 px cap.
+func TestPreviewKeepsItsOwnResolution(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "large.png")
+	writePNG(t, path, gradientImage(1200, 900, false))
+
+	preview, w, h, err := previewImage(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w != 1200 || h != 900 {
+		t.Fatalf("preview reports %dx%d, want 1200x900", w, h)
+	}
+	if !strings.HasPrefix(preview, "data:image/jpeg;base64,") {
+		t.Fatalf("opaque preview should be a JPEG data URL")
+	}
+	if cfg := decodeDataURLConfig(t, preview); cfg.Width != 1200 || cfg.Height != 900 {
+		t.Fatalf("preview image is %dx%d, want the full 1200x900", cfg.Width, cfg.Height)
+	}
+}
+
+func TestThumbnailStaysThumbSized(t *testing.T) {
+	s, err := dataURL(gradientImage(1200, 900, false), false, 80, thumbMaxSide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg := decodeDataURLConfig(t, s); cfg.Width != thumbMaxSide {
+		t.Fatalf("thumbnail is %d px wide, want %d", cfg.Width, thumbMaxSide)
+	}
+}
+
+func TestPreviewWithAlphaStaysPNG(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "alpha.png")
+	writePNG(t, path, gradientImage(800, 600, true))
+
+	preview, _, _, err := previewImage(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(preview, "data:image/png;base64,") {
+		t.Fatalf("transparent preview must keep the PNG branch, got %.24q", preview)
+	}
+	if cfg := decodeDataURLConfig(t, preview); cfg.Width != 800 || cfg.Height != 600 {
+		t.Fatalf("alpha preview is %dx%d, want 800x600", cfg.Width, cfg.Height)
+	}
+}
+
 func TestAnimatedGIFIsSkipped(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "loop.gif")
