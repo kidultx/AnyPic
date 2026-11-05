@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"image"
 	"image/color"
 	"image/gif"
@@ -423,6 +425,23 @@ func TestQueueCompressExportFlow(t *testing.T) {
 	if got := service.State().Items; len(got) != 0 {
 		t.Fatalf("queue not empty after clear: %d", len(got))
 	}
+}
+
+func decodeDataURLConfig(t *testing.T, s string) image.Config {
+	t.Helper()
+	comma := strings.IndexByte(s, ',')
+	if comma < 0 {
+		t.Fatalf("malformed data URL: %.32q", s)
+	}
+	raw, err := base64.StdEncoding.DecodeString(s[comma+1:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cfg
 }
 
 func TestAnimatedGIFIsSkipped(t *testing.T) {

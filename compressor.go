@@ -680,7 +680,7 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 	if err != nil {
 		return compressResult{}, errors.New("无法读取原图")
 	}
-	img, err := imaging.Decode(f, imaging.AutoOrientation(true))
+	img, err := decodeImage(f, true)
 	f.Close()
 	if err != nil {
 		return compressResult{}, errors.New("图片解码失败，可能已损坏")
@@ -988,6 +988,28 @@ func (a *AnyPic) persistSettings() error {
 	return os.WriteFile(a.statePath, data, 0o644)
 }
 
+// decodeImage decodes an image, falling back to the JPEG-strip TIFF reader
+// for files the standard decoder rejects (see tiff_jpeg.go).
+func decodeImage(f *os.File, autoOrientation bool) (image.Image, error) {
+	var img image.Image
+	var err error
+	if autoOrientation {
+		img, err = imaging.Decode(f, imaging.AutoOrientation(true))
+	} else {
+		img, err = imaging.Decode(f)
+	}
+	if err == nil {
+		return img, nil
+	}
+	if _, seekErr := f.Seek(0, io.SeekStart); seekErr != nil {
+		return nil, err
+	}
+	if img, tiffErr := decodeJPEGTIFF(f); tiffErr == nil {
+		return img, nil
+	}
+	return nil, err
+}
+
 func (a *AnyPic) makeThumb(id int64) {
 	a.thumbSem <- struct{}{}
 	defer func() { <-a.thumbSem }()
@@ -1005,7 +1027,7 @@ func (a *AnyPic) makeThumb(id int64) {
 	if err != nil {
 		return
 	}
-	img, err := imaging.Decode(f)
+	img, err := decodeImage(f, false)
 	f.Close()
 	if err != nil {
 		return
@@ -1322,7 +1344,7 @@ func previewImage(path string) (string, int, int, error) {
 		return "", 0, 0, err
 	}
 	defer f.Close()
-	img, err := imaging.Decode(f, imaging.AutoOrientation(true))
+	img, err := decodeImage(f, true)
 	if err != nil {
 		return "", 0, 0, err
 	}
