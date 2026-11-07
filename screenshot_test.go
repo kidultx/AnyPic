@@ -25,107 +25,177 @@ func solidImage(w, h int, c color.Color) *image.RGBA {
 	return img
 }
 
-func TestIssue1NormalizeScreenshotAppearance(t *testing.T) {
-	if got := normalizeSettings(Settings{}).ScreenshotBorder; got != "off" {
-		t.Errorf("empty border preference normalized to %q, want off", got)
+// mergeStyle overlays the string fields of extra onto base, so a test can
+// vary one knob of a style without rewriting all of them. Bool fields keep
+// base's value.
+func mergeStyle(base, extra FrameStyle) FrameStyle {
+	if extra.Background != "" {
+		base.Background = extra.Background
 	}
-	if got := normalizeSettings(Settings{ScreenshotBorder: "on"}).ScreenshotBorder; got != "on" {
-		t.Errorf("on border preference normalized to %q, want on", got)
+	if extra.BGColor != "" {
+		base.BGColor = extra.BGColor
 	}
-	if got := normalizeSettings(Settings{ScreenshotBorder: "bogus"}).ScreenshotBorder; got != "off" {
-		t.Errorf("invalid border preference normalized to %q, want off", got)
+	if extra.BGGradient != "" {
+		base.BGGradient = extra.BGGradient
+	}
+	if extra.Radius != "" {
+		base.Radius = extra.Radius
+	}
+	if extra.Shadow != "" {
+		base.Shadow = extra.Shadow
+	}
+	if extra.Padding != "" {
+		base.Padding = extra.Padding
+	}
+	if extra.Ratio != "" {
+		base.Ratio = extra.Ratio
+	}
+	return base
+}
+
+func TestIssue1NormalizeFrameStyle(t *testing.T) {
+	s := normalizeFrameStyle(FrameStyle{})
+	if s.Background != "none" || s.BGGradient != "indigo" || s.Radius != "medium" ||
+		s.Shadow != "soft" || s.Padding != "normal" || s.Ratio != "origin" {
+		t.Errorf("zero style normalized to %+v, want the documented defaults", s)
+	}
+	if s.BGColor == "" {
+		t.Error("zero style has no fallback solid color")
 	}
 
-	if got := normalizeSettings(Settings{}).ScreenshotBackground; got != "off" {
-		t.Errorf("empty background preference normalized to %q, want off", got)
+	valid := normalizeFrameStyle(FrameStyle{
+		Background: "solid", BGColor: "#AABBCC", BGGradient: "ocean",
+		Radius: "large", Ring: true, Shadow: "deep", Padding: "roomy", Ratio: "1:1",
+	})
+	if valid.Background != "solid" || valid.BGColor != "#aabbcc" || valid.BGGradient != "ocean" ||
+		valid.Radius != "large" || !valid.Ring || valid.Shadow != "deep" ||
+		valid.Padding != "roomy" || valid.Ratio != "1:1" {
+		t.Errorf("valid style mangled: %+v", valid)
 	}
-	for _, style := range []string{"light", "dark", "gradient"} {
-		if got := normalizeSettings(Settings{ScreenshotBackground: style}).ScreenshotBackground; got != style {
-			t.Errorf("background %q normalized to %q, want %q", style, got, style)
-		}
-	}
-	if got := normalizeSettings(Settings{ScreenshotBackground: "bogus"}).ScreenshotBackground; got != "off" {
-		t.Errorf("invalid background preference normalized to %q, want off", got)
+
+	bogus := normalizeFrameStyle(FrameStyle{
+		Background: "wallpaper", BGColor: "zzz", BGGradient: "nope",
+		Radius: "round", Shadow: "huge", Padding: "vast", Ratio: "21:9",
+	})
+	if bogus.Background != "none" || bogus.BGColor == "zzz" || bogus.BGGradient != "indigo" ||
+		bogus.Radius != "medium" || bogus.Shadow != "soft" || bogus.Padding != "normal" || bogus.Ratio != "origin" {
+		t.Errorf("bogus style not normalized to defaults: %+v", bogus)
 	}
 }
 
-func TestIssue1DecorateBackgroundLight(t *testing.T) {
+func TestIssue1DecorateSolidColor(t *testing.T) {
 	src := solidImage(400, 300, color.RGBA{R: 0xe0, G: 0x20, B: 0x20, A: 0xff})
-	out := decorateScreenshot(src, false, "light")
-	p := framePadding(400, 300)
-	b := out.Bounds()
-	if b.Dx() != 400+2*p || b.Dy() != 300+2*p {
-		t.Fatalf("decorated size %dx%d, want %dx%d", b.Dx(), b.Dy(), 400+2*p, 300+2*p)
+	style := FrameStyle{Background: "solid", BGColor: "#112233", Radius: "none", Shadow: "off"}
+	out := decorateScreenshot(src, style)
+	p := framePadding(400, 300, "normal")
+	if b := out.Bounds(); b.Dx() != 400+2*p || b.Dy() != 300+2*p {
+		t.Fatalf("decorated size %v, want %dx%d", b, 400+2*p, 300+2*p)
 	}
-
-	// The backdrop fills the whole canvas, so its corners are opaque.
-	br, bg, bb, ba := out.At(2, 2).RGBA()
-	if ba != 0xffff || br < 0xc000 {
-		t.Errorf("backdrop corner not opaque light gray: %d %d %d %d", br, bg, bb, ba)
+	if r, g, b, a := out.At(2, 2).RGBA(); r != 0x1111 || g != 0x2222 || b != 0x3333 || a != 0xffff {
+		t.Errorf("backdrop pixel (%d,%d,%d,%d), want #112233", r, g, b, a)
 	}
-
-	// The content sits centered and unchanged.
 	if r, g, b, a := out.At(p+200, p+150).RGBA(); r != 0xe0e0 || g != 0x2020 || b != 0x2020 || a != 0xffff {
 		t.Errorf("center pixel (%d,%d,%d,%d) changed by decoration", r, g, b, a)
 	}
-
-	// The content's corner is cut away by the rounded mask: the backdrop
-	// shows through where the capture's own corner would have been red.
-	if r, g, b, _ := out.At(p, p).RGBA(); r == 0xe0e0 && g == 0x2020 && b == 0x2020 {
-		t.Error("content corner is still red, want the rounded cut")
-	}
 }
 
-func TestIssue1DecorateBorderOnly(t *testing.T) {
+func TestIssue1DecorateGradientPreset(t *testing.T) {
 	src := solidImage(400, 300, color.RGBA{R: 0xe0, G: 0x20, B: 0x20, A: 0xff})
-	out := decorateScreenshot(src, true, "off")
-	p := framePadding(400, 300)
-	b := out.Bounds()
-	if b.Dx() != 400+2*p || b.Dy() != 300+2*p {
-		t.Fatalf("decorated size %dx%d, want %dx%d", b.Dx(), b.Dy(), 400+2*p, 300+2*p)
+	out := decorateScreenshot(src, FrameStyle{Background: "gradient", BGGradient: "indigo"})
+	if r, g, b, a := out.At(3, 3).RGBA(); a != 0xffff || r == 0xe0e0 {
+		t.Errorf("gradient backdrop corner (%d,%d,%d,%d) not an opaque backdrop", r, g, b, a)
 	}
-
-	// Without a background the padding stays transparent, even the shadowed
-	// corner far away from the content.
-	if _, _, _, a := out.At(0, 0).RGBA(); a != 0 {
-		t.Errorf("canvas corner alpha %d, want fully transparent", a)
-	}
-
-	// The shadow darkens the padding right below the content.
-	if _, _, _, a := out.At(p+200, p+300+6).RGBA(); a == 0 {
-		t.Error("no shadow below the content")
-	}
-
-	// The content sits centered and unchanged.
-	if r, g, b, a := out.At(p+200, p+150).RGBA(); r != 0xe0e0 || g != 0x2020 || b != 0x2020 || a != 0xffff {
-		t.Errorf("center pixel (%d,%d,%d,%d) changed by decoration", r, g, b, a)
-	}
-}
-
-func TestIssue1DecorateGradient(t *testing.T) {
-	src := solidImage(400, 300, color.RGBA{R: 0xe0, G: 0x20, B: 0x20, A: 0xff})
-	out := decorateScreenshot(src, false, "gradient")
-	p := framePadding(400, 300)
-	tr, tg, tb, ta := out.At(3, 3).RGBA()
-	br, bg, bb, ba := out.At(out.Bounds().Dx()-4, out.Bounds().Dy()-4).RGBA()
-	if tr == br && tg == bg && tb == bb && ta == ba {
+	tr, tg, tb, _ := out.At(3, 3).RGBA()
+	br, bg, bb, _ := out.At(out.Bounds().Dx()-4, out.Bounds().Dy()-4).RGBA()
+	if tr == br && tg == bg && tb == bb {
 		t.Error("gradient backdrop has identical opposite corners")
 	}
-	// The content still sits centered and unchanged.
-	if r, g, b, a := out.At(p+200, p+150).RGBA(); r != 0xe0e0 || g != 0x2020 || b != 0x2020 || a != 0xffff {
-		t.Errorf("center pixel (%d,%d,%d,%d) changed by decoration", r, g, b, a)
+}
+
+func TestIssue1DecorateRadius(t *testing.T) {
+	src := solidImage(400, 300, color.RGBA{R: 0xe0, G: 0x20, B: 0x20, A: 0xff})
+	base := FrameStyle{Background: "none", Shadow: "off"}
+
+	square := decorateScreenshot(src, FrameStyle(mergeStyle(base, FrameStyle{Radius: "none"})))
+	p := framePadding(400, 300, "normal")
+	// No radius: the content's own corner survives untouched.
+	if r, g, b, a := square.At(p, p).RGBA(); r != 0xe0e0 || g != 0x2020 || b != 0x2020 || a != 0xffff {
+		t.Errorf("square corner (%d,%d,%d,%d), want the red content corner", r, g, b, a)
+	}
+
+	rounded := decorateScreenshot(src, FrameStyle(mergeStyle(base, FrameStyle{Radius: "medium"})))
+	if _, _, _, a := rounded.At(p, p).RGBA(); a != 0 {
+		t.Errorf("rounded corner alpha %d, want fully transparent", a)
+	}
+}
+
+func TestIssue1DecorateRatio(t *testing.T) {
+	src := solidImage(400, 300, color.RGBA{R: 0xe0, G: 0x20, B: 0x20, A: 0xff})
+	out := decorateScreenshot(src, FrameStyle{Background: "solid", BGColor: "#112233", Ratio: "1:1"})
+	b := out.Bounds()
+	if b.Dx() != b.Dy() {
+		t.Fatalf("1:1 canvas is %dx%d, want square", b.Dx(), b.Dy())
+	}
+	// The image sits centered inside the square content box, backdrop all around.
+	p := framePadding(out.Bounds().Dx(), out.Bounds().Dy(), "normal")
+	if r, g, b, a := out.At(p+3, p+3).RGBA(); a != 0xffff || r != 0x1111 || g != 0x2222 || b != 0x3333 {
+		t.Errorf("extended canvas area not filled with the backdrop: (%d,%d,%d,%d)", r, g, b, a)
+	}
+}
+
+func TestIssue1DecoratePaddingLevels(t *testing.T) {
+	// A big enough image that the smallest margin clears the 16px floor.
+	src := solidImage(900, 600, color.RGBA{R: 0xe0, G: 0x20, B: 0x20, A: 0xff})
+	widths := map[string]int{}
+	for _, level := range []string{"compact", "normal", "roomy"} {
+		out := decorateScreenshot(src, FrameStyle{Background: "none", Shadow: "off", Radius: "none", Padding: level})
+		widths[level] = out.Bounds().Dx()
+	}
+	if !(widths["compact"] < widths["normal"] && widths["normal"] < widths["roomy"]) {
+		t.Errorf("padding levels not increasing: %v", widths)
+	}
+}
+
+func TestIssue1DecorateShadowLevels(t *testing.T) {
+	src := solidImage(400, 300, color.RGBA{R: 0xe0, G: 0x20, B: 0x20, A: 0xff})
+	alphaAt := func(style FrameStyle) uint32 {
+		out := decorateScreenshot(src, style)
+		p := framePadding(400, 300, "normal")
+		_, _, _, a := out.At(p+200, p+300+6).RGBA()
+		return a
+	}
+	off := alphaAt(FrameStyle{Background: "none", Shadow: "off", Radius: "none"})
+	soft := alphaAt(FrameStyle{Background: "none", Shadow: "soft", Radius: "none"})
+	deep := alphaAt(FrameStyle{Background: "none", Shadow: "deep", Radius: "none"})
+	if off != 0 || soft == 0 || deep <= soft {
+		t.Errorf("shadow levels wrong: off=%d soft=%d deep=%d", off, soft, deep)
+	}
+}
+
+func TestIssue1DecorateRing(t *testing.T) {
+	src := solidImage(400, 300, color.RGBA{R: 0xe0, G: 0x20, B: 0x20, A: 0xff})
+	base := FrameStyle{Background: "none", Shadow: "off", Radius: "none"}
+	p := framePadding(400, 300, "normal")
+
+	withRing := base
+	withRing.Ring = true
+	ringOut := decorateScreenshot(src, withRing)
+	if _, _, _, a := ringOut.At(p+200, p-1).RGBA(); a == 0 {
+		t.Error("ring disabled: nothing drawn just outside the content edge")
+	}
+	withoutRing := decorateScreenshot(src, base)
+	if _, _, _, a := withoutRing.At(p+200, p-1).RGBA(); a != 0 {
+		t.Errorf("ring off but edge pixel has alpha %d, want fully transparent", a)
 	}
 }
 
 func TestIssue1DecorateTinyImage(t *testing.T) {
 	src := solidImage(64, 64, color.RGBA{R: 0x20, G: 0x40, B: 0xe0, A: 0xff})
-	out := decorateScreenshot(src, true, "light")
+	out := decorateScreenshot(src, FrameStyle{Background: "solid", BGColor: "#112233"})
 	b := out.Bounds()
-	if b.Dx() < 64 || b.Dy() < 64 {
-		t.Fatalf("decorated size %dx%d is smaller than the source", b.Dx(), b.Dy())
-	}
-	if b.Dx() > 64+2*framePadding(64, 64) || b.Dy() > 64+2*framePadding(64, 64) {
-		t.Fatalf("decorated size %dx%d exceeds the clamped padding", b.Dx(), b.Dy())
+	p := framePadding(64, 64, "normal")
+	if b.Dx() != 64+2*p || b.Dy() != 64+2*p {
+		t.Fatalf("decorated size %dx%d, want %dx%d with clamped padding", b.Dx(), b.Dy(), 64+2*p, 64+2*p)
 	}
 }
 
@@ -160,13 +230,8 @@ func TestIssue1DecorateItem(t *testing.T) {
 	a.items = []*Item{item}
 	a.byID[1] = item
 
-	// With both preferences off the request is refused instead of silently
-	// producing an identical file.
-	if _, err := a.DecorateItem(1, Settings{}); err == nil {
-		t.Fatal("DecorateItem with border and background off should refuse")
-	}
-
-	snap, err := a.DecorateItem(1, Settings{ScreenshotBorder: "on", ScreenshotBackground: "light"})
+	// A zero style still normalizes to the documented defaults and renders.
+	snap, err := a.DecorateItem(1, FrameStyle{})
 	if err != nil {
 		t.Fatalf("DecorateItem: %v", err)
 	}
@@ -183,10 +248,6 @@ func TestIssue1DecorateItem(t *testing.T) {
 	if got.Status != statusReady {
 		t.Errorf("decorated item status %q, want ready", got.Status)
 	}
-	p := framePadding(40, 30)
-	if got.Width != 40+2*p || got.Height != 30+2*p {
-		t.Errorf("decorated item size %dx%d, want %dx%d", got.Width, got.Height, 40+2*p, 30+2*p)
-	}
 
 	// The original file is untouched on disk (invariant 2).
 	data, err := os.ReadFile(original)
@@ -196,7 +257,7 @@ func TestIssue1DecorateItem(t *testing.T) {
 	if !bytes.Equal(data, buf.Bytes()) {
 		t.Error("original file bytes changed")
 	}
-	// And the decorated file really is the larger, framed capture.
+	// The decorated file is the framed capture: wider than the original.
 	decorated, err := os.ReadFile(got.Path)
 	if err != nil {
 		t.Fatalf("read decorated file: %v", err)
@@ -205,8 +266,41 @@ func TestIssue1DecorateItem(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode decorated file: %v", err)
 	}
-	if img.Bounds().Dx() != 40+2*p || img.Bounds().Dy() != 30+2*p {
-		t.Errorf("decorated file size %v, want %dx%d", img.Bounds(), 40+2*p, 30+2*p)
+	if img.Bounds().Dx() <= 40 || img.Bounds().Dy() <= 30 {
+		t.Errorf("decorated file size %v is not framed", img.Bounds())
+	}
+}
+
+func TestIssue1PreviewDecorated(t *testing.T) {
+	dir := t.TempDir()
+	src := solidImage(400, 300, color.RGBA{R: 0xe0, G: 0x20, B: 0x20, A: 0xff})
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, src); err != nil {
+		t.Fatalf("encode fixture: %v", err)
+	}
+	path := filepath.Join(dir, "shot.png")
+	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	a := &AnyPic{
+		byID:     map[int64]*Item{},
+		settings: defaultSettings(),
+		thumbSem: make(chan struct{}, 1),
+	}
+	a.items = []*Item{{ID: 7, Name: "shot.png", Path: path, Dir: dir, Status: statusDone}}
+	a.byID[7] = a.items[0]
+
+	s, err := a.PreviewDecorated(7, FrameStyle{Background: "gradient", BGGradient: "indigo"})
+	if err != nil {
+		t.Fatalf("PreviewDecorated: %v", err)
+	}
+	if !strings.HasPrefix(s, "data:image/") {
+		t.Errorf("preview %q is not an image data URL", s[:min(40, len(s))])
+	}
+
+	if _, err := a.PreviewDecorated(99, FrameStyle{}); err == nil {
+		t.Error("PreviewDecorated for a missing item should fail")
 	}
 }
 

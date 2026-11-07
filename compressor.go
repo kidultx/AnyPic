@@ -88,12 +88,6 @@ type Settings struct {
 	// "off". The capture tools write to the clipboard themselves, so "off"
 	// clears it again once the image has been read.
 	ScreenshotClipboard string `json:"screenshotClipboard"`
-	// ScreenshotBorder adds a border to captures — rounded corners, a
-	// hairline ring and a soft shadow: "on" or "off".
-	ScreenshotBorder string `json:"screenshotBorder"`
-	// ScreenshotBackground fills an expanded canvas behind captures:
-	// "off", "light", "dark" or "gradient".
-	ScreenshotBackground string `json:"screenshotBackground"`
 	// HideDockWhenTray removes the Dock icon while the window is hidden to
 	// the tray: "on" or "off". macOS only.
 	HideDockWhenTray string `json:"hideDockWhenTray"`
@@ -210,13 +204,11 @@ func defaultSettings() Settings {
 		OutputMode:          "alongside",
 		Suffix:              "-anypic",
 		Theme:               "system",
-		AutoProcess:          "on",
-		ScreenshotShortcut:   DefaultScreenshotShortcut,
-		ScreenshotClipboard:  "on",
-		ScreenshotBorder:     "off",
-		ScreenshotBackground: "off",
-		HideDockWhenTray:     "on",
-		OpenAtLogin:          "off",
+		AutoProcess:         "on",
+		ScreenshotShortcut:  DefaultScreenshotShortcut,
+		ScreenshotClipboard: "on",
+		HideDockWhenTray:    "on",
+		OpenAtLogin:         "off",
 	}
 }
 
@@ -498,18 +490,13 @@ func (a *AnyPic) RegisterScreenshotShortcut() error {
 	return replaceScreenshotShortcut("", acc)
 }
 
-// DecorateItem re-renders an image in the queue with the capture-appearance
-// preferences (border/background) and makes the decorated file the item's new
-// source. The original file stays on disk untouched; the decorated capture is
-// written beside it as 原名-美化.png and the item resets to ready so the
+// DecorateItem re-renders an image in the queue with the given FrameStyle —
+// the beautify workbench's apply — and makes the decorated file the item's
+// new source. The original file stays on disk untouched; the decorated image
+// is written beside it as 原名-美化.png and the item resets to ready so the
 // automatic flow picks it up.
-func (a *AnyPic) DecorateItem(id int64, s Settings) (Snapshot, error) {
-	s = normalizeSettings(s)
-	border := s.ScreenshotBorder == "on"
-	background := s.ScreenshotBackground
-	if !border && background == "off" {
-		return Snapshot{}, errors.New("请先在「更多设置 → 截图」里开启边框或选择背景")
-	}
+func (a *AnyPic) DecorateItem(id int64, style FrameStyle) (Snapshot, error) {
+	style = normalizeFrameStyle(style)
 
 	a.mu.Lock()
 	if a.running {
@@ -534,7 +521,7 @@ func (a *AnyPic) DecorateItem(id int64, s Settings) (Snapshot, error) {
 		return Snapshot{}, errors.New("图片解码失败")
 	}
 
-	out := decorateScreenshot(img, border, background)
+	out := decorateScreenshot(img, style)
 	var buf bytes.Buffer
 	enc := png.Encoder{CompressionLevel: png.DefaultCompression}
 	if err := enc.Encode(&buf, out); err != nil {
@@ -583,6 +570,34 @@ func (a *AnyPic) DecorateItem(id int64, s Settings) (Snapshot, error) {
 	go a.makeThumb(id)
 	_ = ItemChanged.Broadcast(snapshot)
 	return snap, nil
+}
+
+// PreviewDecorated renders the beautify workbench preview for one item at the
+// page's preview scale, as a data URL. It is read-only: nothing is written.
+func (a *AnyPic) PreviewDecorated(id int64, style FrameStyle) (string, error) {
+	a.mu.Lock()
+	item := a.byID[id]
+	if item == nil {
+		a.mu.Unlock()
+		return "", errors.New("图片不存在")
+	}
+	path := item.Path
+	a.mu.Unlock()
+
+	f, err := os.Open(path)
+	if err != nil {
+		return "", errors.New("无法读取图片")
+	}
+	img, err := decodeImage(f, true)
+	f.Close()
+	if err != nil {
+		return "", errors.New("图片解码失败")
+	}
+
+	out := decorateScreenshot(img, style)
+	// Without a backdrop the canvas keeps transparent margins, so the preview
+	// must carry alpha; a backdrop makes it fully opaque.
+	return dataURL(out, style.Background == "none", 90, previewMaxSide)
 }
 
 // ChooseOutputFolder picks a folder where exports are written.
@@ -1426,17 +1441,6 @@ func normalizeSettings(s Settings) Settings {
 	// Older settings files have no clipboard preference; copy is the default.
 	if s.ScreenshotClipboard != "off" {
 		s.ScreenshotClipboard = "on"
-	}
-	// The capture-appearance preferences only have the listed values. Older
-	// settings files have neither key, and anything unknown reads as off so
-	// old settings keep the old behavior.
-	if s.ScreenshotBorder != "on" {
-		s.ScreenshotBorder = "off"
-	}
-	switch s.ScreenshotBackground {
-	case "light", "dark", "gradient":
-	default:
-		s.ScreenshotBackground = "off"
 	}
 	// Older settings files have no Dock preference; hiding it is the default.
 	if s.HideDockWhenTray != "off" {

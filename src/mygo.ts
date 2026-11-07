@@ -40,6 +40,29 @@ export interface ExportResult {
   canceled: boolean;
 }
 
+/**
+ * FrameStyle describes one beautify render. Every string knob is normalized
+ * by normalizeFrameStyle, so an IPC caller can only produce a defined render.
+ */
+export interface FrameStyle {
+  /** "none", "solid", "gradient" */
+  background: string;
+  /** "#rrggbb" when solid */
+  backgroundColor: string;
+  /** preset id when gradient */
+  backgroundGradient: string;
+  /** "none", "small", "medium", "large" */
+  radius: string;
+  /** hairline ring around the content */
+  ring: boolean;
+  /** "off", "soft", "deep" */
+  shadow: string;
+  /** "compact", "normal", "roomy" */
+  padding: string;
+  /** "origin", "1:1", "4:3", "16:9" */
+  ratio: string;
+}
+
 /** Item is one image in the queue. */
 export interface Item {
   id: number;
@@ -95,16 +118,6 @@ export interface Settings {
    * clears it again once the image has been read.
    */
   screenshotClipboard: string;
-  /**
-   * ScreenshotBorder adds a border to captures — rounded corners, a
-   * hairline ring and a soft shadow: "on" or "off".
-   */
-  screenshotBorder: string;
-  /**
-   * ScreenshotBackground fills an expanded canvas behind captures:
-   * "off", "light", "dark" or "gradient".
-   */
-  screenshotBackground: string;
   /**
    * HideDockWhenTray removes the Dock icon while the window is hidden to
    * the tray: "on" or "off". macOS only.
@@ -187,14 +200,14 @@ export const AnyPic = {
     return call("AnyPic.CopyItemToClipboard", id);
   },
   /**
-   * DecorateItem re-renders an image in the queue with the capture-appearance
-   * preferences (border/background) and makes the decorated file the item's new
-   * source. The original file stays on disk untouched; the decorated capture is
-   * written beside it as 原名-美化.png and the item resets to ready so the
+   * DecorateItem re-renders an image in the queue with the given FrameStyle —
+   * the beautify workbench's apply — and makes the decorated file the item's
+   * new source. The original file stays on disk untouched; the decorated image
+   * is written beside it as 原名-美化.png and the item resets to ready so the
    * automatic flow picks it up.
    */
-  decorateItem(id: number, s: Settings): Promise<Snapshot> {
-    return call("AnyPic.DecorateItem", id, s);
+  decorateItem(id: number, style: FrameStyle): Promise<Snapshot> {
+    return call("AnyPic.DecorateItem", id, style);
   },
   /** ExportAll writes every compressed image to the chosen folder. */
   exportAll(): Promise<ExportResult> {
@@ -246,6 +259,13 @@ export const AnyPic = {
   /** Preview returns before/after images for the comparison view. */
   preview(id: number): Promise<Preview> {
     return call("AnyPic.Preview", id);
+  },
+  /**
+   * PreviewDecorated renders the beautify workbench preview for one item at the
+   * page's preview scale, as a data URL. It is read-only: nothing is written.
+   */
+  previewDecorated(id: number, style: FrameStyle): Promise<string> {
+    return call("AnyPic.PreviewDecorated", id, style);
   },
   /** RegisterScreenshotShortcut binds the stored shortcut once the app is ready. */
   registerScreenshotShortcut(): Promise<void> {

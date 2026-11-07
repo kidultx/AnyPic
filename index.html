@@ -185,23 +185,6 @@
                     <input class="switch-input" id="clipboardToggle" type="checkbox" checked />
                     <span class="switch" aria-hidden="true"></span>
                   </label>
-                  <label class="toggle-row">
-                    <span>截图加边框</span>
-                    <input class="switch-input" id="borderToggle" type="checkbox" />
-                    <span class="switch" aria-hidden="true"></span>
-                  </label>
-                  <div class="field frame-bg-field">
-                    <div class="field-label">
-                      <label>截图背景</label>
-                    </div>
-                    <div class="segmented" id="bgSeg" role="group" aria-label="截图背景">
-                      <button data-bg="off" class="active" aria-pressed="true">关闭</button>
-                      <button data-bg="light" aria-pressed="false">浅色</button>
-                      <button data-bg="dark" aria-pressed="false">深色</button>
-                      <button data-bg="gradient" aria-pressed="false">渐变</button>
-                    </div>
-                    <p class="field-note" id="frameNote">新截图自动套用；也可在列表里对截图补加。</p>
-                  </div>
                   <button class="text-button screen-permission" id="screenPermissionBtn" type="button" hidden>
                     截图只有壁纸？检查屏幕录制权限
                   </button>
@@ -365,6 +348,11 @@
             </div>
           </div>
           <div class="preview-head-actions">
+            <div class="preview-tabs" id="previewTabs" role="tablist" aria-label="预览模式">
+              <button class="preview-tab active" data-mode="compare" role="tab" aria-selected="true">对比</button>
+              <button class="preview-tab" data-mode="beautify" role="tab" aria-selected="false">美化</button>
+            </div>
+            <span class="queue-divider" aria-hidden="true"></span>
             <button class="secondary-btn small" id="previewExportBtn" type="button">
               <svg aria-hidden="true" class="icon"><use href="#i-download" /></svg>
               导出
@@ -387,6 +375,76 @@
             </div>
             <div class="compare-hint" id="compareHint">拖动分割线查看细节</div>
           </div>
+        </div>
+        <div class="beautify" id="beautify" hidden>
+          <div class="beautify-stage">
+            <div class="beautify-loading" id="beautifyLoading" hidden><span class="loader"></span></div>
+            <img class="beautify-img" id="beautifyImg" alt="美化预览" draggable="false" />
+          </div>
+          <aside class="beautify-controls">
+            <div class="beautify-field">
+              <span class="beautify-label">背景</span>
+              <div class="segmented beautify-seg" id="beautifyBgKind" role="group" aria-label="背景类型">
+                <button data-kind="none" aria-pressed="false">无</button>
+                <button data-kind="solid" aria-pressed="false">纯色</button>
+                <button data-kind="gradient" aria-pressed="false">渐变</button>
+              </div>
+              <div class="swatches" id="beautifySwatches" hidden></div>
+              <div class="swatches gradients" id="beautifyGradients" hidden></div>
+            </div>
+            <div class="beautify-field">
+              <span class="beautify-label">圆角</span>
+              <div class="segmented beautify-seg" id="beautifyRadius" role="group" aria-label="圆角">
+                <button data-radius="none" aria-pressed="false">关</button>
+                <button data-radius="small" aria-pressed="false">小</button>
+                <button data-radius="medium" aria-pressed="false">中</button>
+                <button data-radius="large" aria-pressed="false">大</button>
+              </div>
+            </div>
+            <div class="beautify-field-row">
+              <div class="beautify-field">
+                <span class="beautify-label">描边</span>
+                <label class="toggle-row beautify-toggle">
+                  <input class="switch-input" id="beautifyRing" type="checkbox" />
+                  <span class="switch" aria-hidden="true"></span>
+                </label>
+              </div>
+              <div class="beautify-field">
+                <span class="beautify-label">投影</span>
+                <div class="segmented beautify-seg" id="beautifyShadow" role="group" aria-label="投影">
+                  <button data-shadow="off" aria-pressed="false">关</button>
+                  <button data-shadow="soft" aria-pressed="false">浅</button>
+                  <button data-shadow="deep" aria-pressed="false">深</button>
+                </div>
+              </div>
+            </div>
+            <div class="beautify-field-row">
+              <div class="beautify-field">
+                <span class="beautify-label">边距</span>
+                <div class="segmented beautify-seg" id="beautifyPadding" role="group" aria-label="边距">
+                  <button data-padding="compact" aria-pressed="false">紧凑</button>
+                  <button data-padding="normal" aria-pressed="false">标准</button>
+                  <button data-padding="roomy" aria-pressed="false">宽松</button>
+                </div>
+              </div>
+              <div class="beautify-field">
+                <span class="beautify-label">比例</span>
+                <div class="segmented beautify-seg" id="beautifyRatio" role="group" aria-label="画布比例">
+                  <button data-ratio="origin" aria-pressed="false">原始</button>
+                  <button data-ratio="1:1" aria-pressed="false">1:1</button>
+                  <button data-ratio="4:3" aria-pressed="false">4:3</button>
+                  <button data-ratio="16:9" aria-pressed="false">16:9</button>
+                </div>
+              </div>
+            </div>
+            <div class="beautify-actions">
+              <button class="secondary-btn" id="beautifyReset" type="button">重置</button>
+              <button class="primary-btn compact" id="beautifyApply" type="button">
+                <svg aria-hidden="true" class="icon"><use href="#i-check" /></svg>
+                应用
+              </button>
+            </div>
+          </aside>
         </div>
         <footer class="preview-foot">
           <div class="preview-stats">

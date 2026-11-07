@@ -2243,6 +2243,34 @@ body.side-drag * {
   gap: 4px;
 }
 
+/* The mode tabs read as the queue's filter pills: same quiet track, the
+   active mode filled white — switching between 对比 and 美化 is a view
+   switch, not an action, so it stays out of the accent. */
+.preview-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background-color: var(--pill);
+  border-radius: 8px;
+}
+
+.preview-tab {
+  padding: 4px 14px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--ctl-fg);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.preview-tab.active {
+  background-color: var(--seg-thumb);
+  color: var(--text);
+  box-shadow: var(--seg-edge);
+}
+
 .compare {
   position: relative;
   flex: 1;
@@ -2440,6 +2468,145 @@ body.side-drag * {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Beautify workbench: the styled result on the left, the six knobs on the
+   right — a compact inspector column, not a second modal, so the image
+   stays the largest thing on screen. */
+.beautify {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 1fr 264px;
+  min-height: 0;
+}
+
+.beautify-stage {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(45deg, var(--checker-a) 25%, transparent 25%, transparent 75%, var(--checker-a) 75%),
+    linear-gradient(45deg, var(--checker-a) 25%, var(--checker-b) 25%, var(--checker-b) 75%, var(--checker-a) 75%);
+  background-position: 0 0, 8px 8px;
+  background-size: 16px 16px;
+}
+
+.beautify-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.beautify-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--preview-bg);
+}
+
+.beautify-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  padding: 16px;
+  overflow-y: auto;
+  border-left: 1px solid var(--line);
+  background-color: var(--card);
+}
+
+/* The knobs are the same pill language as the sidebar; grouping two small
+   ones per row keeps the inspector within one glance. */
+.beautify-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.beautify-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.beautify-label {
+  color: var(--ctl-fg);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.beautify-seg {
+  display: flex;
+}
+
+.beautify-seg button {
+  flex: 1;
+  padding-inline: 2px;
+  white-space: nowrap;
+}
+
+/* Swatches read as the actual fill: circles with a hairline edge, the chosen
+   one marked by the accent ring — color decision happens on the chips, not
+   in a dropdown. */
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.swatch.active {
+  box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px var(--primary);
+}
+
+.gradient-chip {
+  width: 34px;
+  border-radius: 7px;
+}
+
+/* The custom color input is styled as one more swatch so the picker does not
+   break the chip row. */
+#beautifyColor {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+
+.beautify-toggle {
+  justify-content: flex-start;
+  gap: 0;
+}
+
+.beautify-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.beautify-actions .primary-btn {
+  flex: 1;
+}
+
+/* The workbench keeps its two columns down to the app's 940px minimum:
+   the controls column scrolls on short windows instead of stacking, which
+   keeps the preview the largest surface at every supported size. */
 
 .confirm-card {
   width: min(380px, 100%);
