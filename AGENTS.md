@@ -72,15 +72,29 @@ go test -race ./...     # 全量跑，不是只跑你以为改动的包
 
 ## 提交与 PR
 
-- 一个提交，一个目标。
+- 一个提交，一个目标：两份报告分开修成两个提交，各自的验证记录各自带
+  ——这样 revert 拿走一个、留下另一个，review 也看得出哪个测试守哪个
+  改动。顺手修的东西单独成提交。
+- 提交主题写成「区域: 用户看得见的行为」，不写实现，如
+  `compressor: 动态 GIF/WebP 被明确跳过并说明原因，不再只保留第一帧`。
+- What was run 的记录住在提交 body 里——推送备注、聊天或只写在 PR 里都
+  不算，事后能读到的只有 body。大改动（>400 行或同时跨压缩 / 截图 /
+  UI 三个面）的 body 必须写：what was run、what was broken by hand、
+  what wasn't tried。
 - UI 改动的提交信息写明谁要的、为什么：issue `#号`、报告者，或自己的想法
   ——一句就够。每笔看得见的界面改动都要能回答「为什么存在」；站得住的
   设计理由沉淀为 `src/style.css` 的 token 注释。
-- 大改动（>400 行或同时跨压缩 / 截图 / UI 三个面）的 body 必须写：
-  what was run、what was broken by hand、what wasn't tried。
 - 行为变了 → README 对应节或子系统页在同一 PR 里更新；保契约的重构
   不需要改文档。
 - PR 描述写语义变更：触发条件 + before/after + 链到证明它的测试。
   这是给 reviewer 核对用的，不是 diff 转述。
+- 审查（自己审和审别人一样）：读 diff 不算 review——把 head 拉下来、
+  合到当前 main 上、跑一遍「验证」里的命令；再故意弄坏被守的代码（多坏
+  几种方式），确认新测试每一种都能抓住。
+- 提交后自查 `git show --stat HEAD`：列出的文件必须全是自己的——共用
+  checkout 时会把别人的改动带进自己的提交。
 - 发版：改 `mygo.config.ts` 的 `version` → tag `v*` → push → Actions 出
-  三平台草稿 Release，确认后发布（细节见 README「发布与 CI」）。
+  三平台草稿 Release，确认后发布（细节见 README「发布与 CI」）。tag 前
+  先 `git fetch --tags` 查下一个空闲版本；只有被 tag 的那个 commit 的 run
+  绿了才算（被下一次 push 取消的 run 不算）；点发布前核对三平台产物都在
+  ——tag 不是 release，对人说版本号之前先看产物。
