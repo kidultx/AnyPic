@@ -73,6 +73,9 @@ go test -race ./...     # 全量跑，不是只跑你以为改动的包
 ## 提交与 PR
 
 - 一个提交，一个目标。
+- UI 改动的提交信息写明谁要的、为什么：issue `#号`、报告者，或自己的想法
+  ——一句就够。每笔看得见的界面改动都要能回答「为什么存在」；站得住的
+  设计理由沉淀为 `src/style.css` 的 token 注释。
 - 大改动（>400 行或同时跨压缩 / 截图 / UI 三个面）的 body 必须写：
   what was run、what was broken by hand、what wasn't tried。
 - 行为变了 → README 对应节或子系统页在同一 PR 里更新；保契约的重构

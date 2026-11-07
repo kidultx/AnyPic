@@ -23,6 +23,8 @@
   --field: var(--pill);
   --field-hover: var(--pill-hover);
   --row-hover: #f6f6f8;
+  /* Selection is a 7% accent tint, not a fill: the row's own text keeps
+     its normal contrast, and selected reads as tint, not paint. */
   --row-selected: rgba(79, 70, 229, 0.07);
 
   --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", Inter,
@@ -30,6 +32,12 @@
   --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI",
     Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
 
+  /* The text ladder, measured on white (WCAG): --text 17:1 for body and
+     titles, --text-soft 8.6:1 for secondary, --ctl-fg 5.3:1 the control's
+     quiet text — chosen to stay 4.5:1 or better on every surface it sits on
+     (5.3 on pill, 5.4 canvas, 5.7 surface-alt). --muted and --text-faint
+     3.3-3.7:1 quiet labels only: anything a user must read goes one step
+     up. --text-disabled 2:1, a state you are not meant to read. */
   --text: #1c1c21;
   --text-soft: #4b4b53;
   --ctl-fg: #63636b;
@@ -65,7 +73,12 @@
   --brand-key-bg: rgba(255, 255, 255, 0.14);
   --brand-spinner-track: rgba(255, 255, 255, 0.45);
 
-  /* Status */
+  /* Status. One red for alarm: --alert is the fill — white ink on it reads
+     4.4:1 — and --alert-text is a step darker for red text on --alert-soft,
+     where the plain fill would fall a hair under 4.5. --success on its soft
+     ground reads 3.2:1: right for the dot and bold pill text, not for body
+     copy. --danger aliases --alert: one colour, two names, so generic
+     controls and status rows share one API. */
   --success: #189a58;
   --success-soft: #e4f6ec;
   --alert: #d64545;
@@ -106,7 +119,9 @@
   --shadow64: var(--shadow-modal);
   --shadow-range-thumb: 0 1px 2px rgba(0, 0, 0, 0.25);
 
-  /* Component surfaces */
+  /* Component surfaces. The preview's transparency checker is two near
+     grays: quiet enough to sit behind any image, and still legible as
+     "transparent here" — transparency is never flattened (invariant 3). */
   --preview-bg: #f0f0f2;
   --checker-a: #ececef;
   --checker-b: #e1e1e6;
