@@ -1,0 +1,66 @@
+name: Bug 报告
+description: 压缩、截图或界面问题的唯一入口
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        修复前会先在你描述的场景里复现，所以下面的字段越具体越好。
+        能附上出问题的原图（或能公开的链接）最理想——修复用的测试
+        fixture 会直接来自你的文件。
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 平台与系统
+      options:
+        - macOS（Apple Silicon）
+        - macOS（Intel）
+        - Windows
+        - Linux（X11）
+        - Linux（Wayland）
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: AnyPic 版本
+      placeholder: "0.1.3"
+    validations:
+      required: true
+  - type: textarea
+    id: image
+    attributes:
+      label: 图片情况
+      description: 输入格式、是否透明、是否动态 GIF/WebP、大致尺寸、有无 EXIF（如手机拍摄）
+      placeholder: "例：64×64 透明 PNG 图标，无 EXIF"
+    validations:
+      required: true
+  - type: textarea
+    id: settings
+    attributes:
+      label: AnyPic 设置
+      description: 输出格式（自动/JPG/PNG/WebP）、质量、是否限制长边、文件名后缀、保存位置（原图旁/指定目录）
+      placeholder: "例：输出自动，质量 82，长边 1920，后缀 -anypic，存原图旁"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 从添加图片到看到问题，每一步
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: 实际结果 vs 期望结果
+      placeholder: "实际：……；期望：……"
+    validations:
+      required: true
+  - type: checkboxes
+    id: extras
+    attributes:
+      label: 补充
+      options:
+        - label: 我可以提供出问题的原图（附件或链接）
+        - label: 我已搜索过，没有重复 issue

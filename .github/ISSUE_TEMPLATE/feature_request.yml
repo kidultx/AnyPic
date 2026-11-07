@@ -1,0 +1,24 @@
+name: 功能请求
+description: 新功能或行为改动的唯一入口
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你想解决什么问题
+      description: 说场景，不说方案——「我每周要处理一批截图，每次都要手动……」
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: 现在你是怎么做的
+      description: 用 AnyPic 现有功能（或其他工具）怎么绕
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: 范围
+      options:
+        - label: 这不改变任何一条 AGENTS.md 里写的不变量（如：本机处理无网络）
