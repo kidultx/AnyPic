@@ -87,7 +87,8 @@ let recordingShortcut = false;
 let autoRun: { ids: Set<number>; copyIDs: number[] } | null = null;
 /* Guards the async gap between deciding to compress and the backend call. */
 let compressStarting = false;
-/* Where the last automatic pass saved its results, for the footer summary. */
+/* Where the last automatic pass saved its results, for the footer summary.
+   percent is signed: negative when the pass produced larger files. */
 let lastSaved: { count: number; target: string; percent: number; path: string } | null = null;
 
 const rowCache = new Map<number, HTMLElement>();
@@ -690,9 +691,15 @@ function renderFooter() {
   let status = "准备就绪";
   let showOpen = false;
   if (batch.running) {
-    status = `正在压缩，${batch.done || completed} / ${batch.total || total}`;
+    // Overall queue progress: an auto pass runs a smaller batch on top of
+    // already-finished items, so batch.total is not the queue size and the
+    // bar above uses the same completed/total pair.
+    status = `正在压缩，${completed} / ${total}`;
   } else if (auto && lastSaved) {
-    status = `已保存 ${lastSaved.count} 张到 ${lastSaved.target} · 省 ${lastSaved.percent}%`;
+    const savings = lastSaved.percent >= 0
+      ? `省 ${lastSaved.percent}%`
+      : `增大 ${-lastSaved.percent}%`;
+    status = `已保存 ${lastSaved.count} 张到 ${lastSaved.target} · ${savings}`;
     showOpen = lastSaved.path !== "";
   } else if (batch.canceled) {
     status = "压缩已取消";
@@ -1620,7 +1627,9 @@ async function finishAutoRun() {
 
   const original = done.reduce((sum, item) => sum + item.originalSize, 0);
   const compressed = done.reduce((sum, item) => sum + item.compressedSize, 0);
-  const saved = Math.max(0, original - compressed);
+  // Signed on purpose: a pass that made files larger must reach the footer
+  // as "增大 N%" instead of being clamped into a misleading "省 0%".
+  const saved = original - compressed;
   const percent = original > 0 ? Math.round((saved / original) * 100) : 0;
 
   try {
