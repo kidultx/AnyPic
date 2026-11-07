@@ -107,6 +107,8 @@ function defaultSettings(): Settings {
     autoProcess: "on",
     screenshotShortcut: DEFAULT_SHORTCUT,
     screenshotClipboard: "on",
+    screenshotBorder: "off",
+    screenshotBackground: "off",
     hideDockWhenTray: "on",
     openAtLogin: "off",
   };
@@ -406,6 +408,13 @@ function renderSettings() {
   const maxDim = $<HTMLSelectElement>("#maxDim");
   if (document.activeElement !== maxDim) maxDim.value = String(settings.maxDimension);
 
+  $$<HTMLButtonElement>("#bgSeg button").forEach((button) => {
+    const active = button.dataset.bg === settings.screenshotBackground;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+    button.disabled = batch.running;
+  });
+
   const suffix = $<HTMLInputElement>("#suffix");
   if (document.activeElement !== suffix) suffix.value = settings.suffix;
 
@@ -541,6 +550,7 @@ function createRow(id: number): HTMLElement {
     </div>
     <div class="item-actions">
       <button class="icon-btn" data-action="preview" title="对比预览" aria-label="对比预览">${icon("eye")}</button>
+      <button class="icon-btn" data-action="decorate" title="按当前设置美化" aria-label="美化">${icon("sparkle")}</button>
       <button class="icon-btn" data-action="export" title="导出这张" aria-label="导出这张">${icon("download")}</button>
       <button class="icon-btn" data-action="remove" title="移除" aria-label="移除">${icon("x")}</button>
     </div>`;
@@ -557,6 +567,10 @@ function createRow(id: number): HTMLElement {
   row.querySelector<HTMLButtonElement>('[data-action="preview"]')?.addEventListener("click", (event) => {
     event.stopPropagation();
     void openPreview(id);
+  });
+  row.querySelector<HTMLButtonElement>('[data-action="decorate"]')?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    void decorateItem(id);
   });
   row.querySelector<HTMLButtonElement>('[data-action="export"]')?.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -671,9 +685,11 @@ function updateRow(row: HTMLElement, item: Item) {
   }
 
   const previewButton = row.querySelector<HTMLButtonElement>('[data-action="preview"]')!;
+  const decorateButton = row.querySelector<HTMLButtonElement>('[data-action="decorate"]')!;
   const exportButton = row.querySelector<HTMLButtonElement>('[data-action="export"]')!;
   const removeButton = row.querySelector<HTMLButtonElement>('[data-action="remove"]')!;
   previewButton.disabled = item.status !== "done";
+  decorateButton.disabled = batch.running;
   exportButton.disabled = item.status !== "done" || batch.running;
   removeButton.disabled = batch.running;
 }
@@ -839,6 +855,23 @@ function bindEvents() {
     const on = (event.target as HTMLInputElement).checked;
     void setSettings({ screenshotClipboard: on ? "on" : "off" });
     showToast(on ? "截图后将复制到剪贴板" : "截图后不再复制到剪贴板", "info");
+  });
+  $("#borderToggle").addEventListener("change", (event) => {
+    const on = (event.target as HTMLInputElement).checked;
+    void setSettings({ screenshotBorder: on ? "on" : "off" });
+    showToast(on ? "新截图将加上圆角、描边与投影" : "新截图不再加边框", "info");
+  });
+  $("#bgSeg").addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-bg]");
+    if (!button || button.disabled) return;
+    const style = button.dataset.bg ?? "off";
+    void setSettings({ screenshotBackground: style });
+    showToast(
+      style === "off"
+        ? "新截图不再加背景"
+        : `新截图将使用${style === "light" ? "浅色" : style === "dark" ? "深色" : "渐变"}背景`,
+      "info",
+    );
   });
   $("#autoProcessToggle").addEventListener("change", (event) => {
     const on = (event.target as HTMLInputElement).checked;
@@ -1341,6 +1374,31 @@ async function exportOne(id: number) {
   }
 }
 
+/* Applies the sidebar's capture-appearance preferences to an existing queue
+   item: the backend writes 原名-美化.png beside the original and the item
+   restarts, so the automatic flow saves it again. */
+async function decorateItem(id: number) {
+  const item = items.find((entry) => entry.id === id);
+  if (!item || batch.running) return;
+  if (demoMode) {
+    showToast("浏览器预览模式无法美化，请在 MyGo 桌面应用中使用", "info");
+    return;
+  }
+  if (settings.screenshotBorder === "off" && settings.screenshotBackground === "off") {
+    showToast("请先在「更多设置 → 截图」里开启边框或选择背景", "info");
+    return;
+  }
+  try {
+    const snap = await AnyPic.decorateItem(id, settings);
+    applySnapshot(snap, false);
+    renderAll();
+    showToast("已按当前设置美化，等待压缩", "success");
+    if (autoProcessEnabled()) startAutoRun([id], false);
+  } catch (error) {
+    showError(error, "美化失败");
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* settings                                                            */
 /* ------------------------------------------------------------------ */
@@ -1508,6 +1566,8 @@ function syncSettingsToUI() {
   if (autoToggle) autoToggle.checked = autoProcessEnabled();
   const clipboardToggle = $<HTMLInputElement>("#clipboardToggle");
   if (clipboardToggle) clipboardToggle.checked = settings.screenshotClipboard !== "off";
+  const borderToggle = $<HTMLInputElement>("#borderToggle");
+  if (borderToggle) borderToggle.checked = settings.screenshotBorder === "on";
   const dockToggle = $<HTMLInputElement>("#dockToggle");
   if (dockToggle) dockToggle.checked = settings.hideDockWhenTray !== "off";
   const openAtLoginToggle = $<HTMLInputElement>("#openAtLoginToggle");

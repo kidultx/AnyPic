@@ -96,6 +96,16 @@ export interface Settings {
    */
   screenshotClipboard: string;
   /**
+   * ScreenshotBorder adds a border to captures — rounded corners, a
+   * hairline ring and a soft shadow: "on" or "off".
+   */
+  screenshotBorder: string;
+  /**
+   * ScreenshotBackground fills an expanded canvas behind captures:
+   * "off", "light", "dark" or "gradient".
+   */
+  screenshotBackground: string;
+  /**
    * HideDockWhenTray removes the Dock icon while the window is hidden to
    * the tray: "on" or "off". macOS only.
    */
@@ -175,6 +185,16 @@ export const AnyPic = {
    */
   copyItemToClipboard(id: number): Promise<void> {
     return call("AnyPic.CopyItemToClipboard", id);
+  },
+  /**
+   * DecorateItem re-renders an image in the queue with the capture-appearance
+   * preferences (border/background) and makes the decorated file the item's new
+   * source. The original file stays on disk untouched; the decorated capture is
+   * written beside it as 原名-美化.png and the item resets to ready so the
+   * automatic flow picks it up.
+   */
+  decorateItem(id: number, s: Settings): Promise<Snapshot> {
+    return call("AnyPic.DecorateItem", id, s);
   },
   /** ExportAll writes every compressed image to the chosen folder. */
   exportAll(): Promise<ExportResult> {

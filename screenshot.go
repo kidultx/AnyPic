@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -13,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/disintegration/imaging"
 	"github.com/egoist/mygo"
 )
 
@@ -64,6 +66,24 @@ func (a *AnyPic) CaptureScreenshot(ctx context.Context) (AddResult, error) {
 		return AddResult{}, err
 	}
 
+	// Appearance preferences are read with the same locked snapshot as the
+	// clipboard and auto-process preferences: one capture, one consistent
+	// set. A decoration that cannot decode or encode falls back to the raw
+	// capture — the shot itself is good, only the frame is missing.
+	a.mu.Lock()
+	copyToClipboard := a.settings.ScreenshotClipboard != "off"
+	autoProcess := a.settings.AutoProcess == "on"
+	border := a.settings.ScreenshotBorder == "on"
+	background := a.settings.ScreenshotBackground
+	a.mu.Unlock()
+	if border || background != "off" {
+		if img, err := imaging.Decode(bytes.NewReader(data)); err == nil {
+			if framed := encodeDecoratedPNG(decorateScreenshot(img, border, background)); framed != nil {
+				data = framed
+			}
+		}
+	}
+
 	// Copying is explicit. When the capture tool itself wrote to the
 	// clipboard (Windows/Linux) and the preference is off, clear it again.
 	// A file-based capture never touches the clipboard in the first place.
@@ -71,10 +91,6 @@ func (a *AnyPic) CaptureScreenshot(ctx context.Context) (AddResult, error) {
 	// With auto-process on, the page copies the compressed result once the
 	// pass finishes, so the capture is not put on the clipboard twice. The
 	// tool-provided copy stays meanwhile as a fallback.
-	a.mu.Lock()
-	copyToClipboard := a.settings.ScreenshotClipboard != "off"
-	autoProcess := a.settings.AutoProcess == "on"
-	a.mu.Unlock()
 	copied := false
 	if copyToClipboard && !autoProcess {
 		copied = mygo.Clipboard.WriteImage(data) == nil

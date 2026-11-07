@@ -41,6 +41,7 @@
       <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 11v5.5M12 7.5h.01" /></symbol>
       <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" /></symbol>
       <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16" /></symbol>
+      <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z" /><path d="M19 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8Z" /></symbol>
     </svg>
 
     <div class="app">
@@ -184,6 +185,23 @@
                     <input class="switch-input" id="clipboardToggle" type="checkbox" checked />
                     <span class="switch" aria-hidden="true"></span>
                   </label>
+                  <label class="toggle-row">
+                    <span>截图加边框</span>
+                    <input class="switch-input" id="borderToggle" type="checkbox" />
+                    <span class="switch" aria-hidden="true"></span>
+                  </label>
+                  <div class="field frame-bg-field">
+                    <div class="field-label">
+                      <label>截图背景</label>
+                    </div>
+                    <div class="segmented" id="bgSeg" role="group" aria-label="截图背景">
+                      <button data-bg="off" class="active" aria-pressed="true">关闭</button>
+                      <button data-bg="light" aria-pressed="false">浅色</button>
+                      <button data-bg="dark" aria-pressed="false">深色</button>
+                      <button data-bg="gradient" aria-pressed="false">渐变</button>
+                    </div>
+                    <p class="field-note" id="frameNote">新截图自动套用；也可在列表里对截图补加。</p>
+                  </div>
                   <button class="text-button screen-permission" id="screenPermissionBtn" type="button" hidden>
                     截图只有壁纸？检查屏幕录制权限
                   </button>

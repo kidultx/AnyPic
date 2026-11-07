@@ -88,6 +88,12 @@ type Settings struct {
 	// "off". The capture tools write to the clipboard themselves, so "off"
 	// clears it again once the image has been read.
 	ScreenshotClipboard string `json:"screenshotClipboard"`
+	// ScreenshotBorder adds a border to captures — rounded corners, a
+	// hairline ring and a soft shadow: "on" or "off".
+	ScreenshotBorder string `json:"screenshotBorder"`
+	// ScreenshotBackground fills an expanded canvas behind captures:
+	// "off", "light", "dark" or "gradient".
+	ScreenshotBackground string `json:"screenshotBackground"`
 	// HideDockWhenTray removes the Dock icon while the window is hidden to
 	// the tray: "on" or "off". macOS only.
 	HideDockWhenTray string `json:"hideDockWhenTray"`
@@ -204,11 +210,13 @@ func defaultSettings() Settings {
 		OutputMode:          "alongside",
 		Suffix:              "-anypic",
 		Theme:               "system",
-		AutoProcess:         "on",
-		ScreenshotShortcut:  DefaultScreenshotShortcut,
-		ScreenshotClipboard: "on",
-		HideDockWhenTray:    "on",
-		OpenAtLogin:         "off",
+		AutoProcess:          "on",
+		ScreenshotShortcut:   DefaultScreenshotShortcut,
+		ScreenshotClipboard:  "on",
+		ScreenshotBorder:     "off",
+		ScreenshotBackground: "off",
+		HideDockWhenTray:     "on",
+		OpenAtLogin:          "off",
 	}
 }
 
@@ -488,6 +496,93 @@ func (a *AnyPic) RegisterScreenshotShortcut() error {
 	acc := a.settings.ScreenshotShortcut
 	a.mu.Unlock()
 	return replaceScreenshotShortcut("", acc)
+}
+
+// DecorateItem re-renders an image in the queue with the capture-appearance
+// preferences (border/background) and makes the decorated file the item's new
+// source. The original file stays on disk untouched; the decorated capture is
+// written beside it as 原名-美化.png and the item resets to ready so the
+// automatic flow picks it up.
+func (a *AnyPic) DecorateItem(id int64, s Settings) (Snapshot, error) {
+	s = normalizeSettings(s)
+	border := s.ScreenshotBorder == "on"
+	background := s.ScreenshotBackground
+	if !border && background == "off" {
+		return Snapshot{}, errors.New("请先在「更多设置 → 截图」里开启边框或选择背景")
+	}
+
+	a.mu.Lock()
+	if a.running {
+		a.mu.Unlock()
+		return Snapshot{}, errors.New("正在压缩，请稍后再试")
+	}
+	item := a.byID[id]
+	if item == nil {
+		a.mu.Unlock()
+		return Snapshot{}, errors.New("图片不存在")
+	}
+	path, dir, name := item.Path, item.Dir, item.Name
+	a.mu.Unlock()
+
+	f, err := os.Open(path)
+	if err != nil {
+		return Snapshot{}, errors.New("无法读取图片")
+	}
+	img, err := decodeImage(f, true)
+	f.Close()
+	if err != nil {
+		return Snapshot{}, errors.New("图片解码失败")
+	}
+
+	out := decorateScreenshot(img, border, background)
+	var buf bytes.Buffer
+	enc := png.Encoder{CompressionLevel: png.DefaultCompression}
+	if err := enc.Encode(&buf, out); err != nil {
+		return Snapshot{}, errors.New("无法写入美化结果")
+	}
+
+	dest := uniquePath(filepath.Join(dir, outputFilename(name, "-美化", "png")))
+	if err := os.WriteFile(dest, buf.Bytes(), 0o644); err != nil {
+		return Snapshot{}, errors.New("无法保存美化结果")
+	}
+
+	a.mu.Lock()
+	if a.running {
+		// A pass may have started while the image was being decorated; the
+		// batch owns the item's status, so step aside and clean up.
+		a.mu.Unlock()
+		_ = os.Remove(dest)
+		return Snapshot{}, errors.New("正在压缩，请稍后再试")
+	}
+	item = a.byID[id]
+	if item == nil {
+		// The item was removed while the image was being decorated.
+		a.mu.Unlock()
+		_ = os.Remove(dest)
+		return Snapshot{}, errors.New("图片不存在")
+	}
+	a.removeTemp(item)
+	item.Path = dest
+	item.Dir = dir
+	item.Name = filepath.Base(dest)
+	item.Format = "PNG"
+	item.OriginalSize = int64(buf.Len())
+	item.Width = out.Bounds().Dx()
+	item.Height = out.Bounds().Dy()
+	item.Status = statusReady
+	item.Error = ""
+	item.OutputFormat = ""
+	item.OutputName = ""
+	item.PassedThrough = false
+	item.SavedPercent = 0
+	item.CompressedSize = 0
+	snapshot := *item
+	snap := a.snapshotLocked()
+	a.mu.Unlock()
+
+	go a.makeThumb(id)
+	_ = ItemChanged.Broadcast(snapshot)
+	return snap, nil
 }
 
 // ChooseOutputFolder picks a folder where exports are written.
@@ -1331,6 +1426,17 @@ func normalizeSettings(s Settings) Settings {
 	// Older settings files have no clipboard preference; copy is the default.
 	if s.ScreenshotClipboard != "off" {
 		s.ScreenshotClipboard = "on"
+	}
+	// The capture-appearance preferences only have the listed values. Older
+	// settings files have neither key, and anything unknown reads as off so
+	// old settings keep the old behavior.
+	if s.ScreenshotBorder != "on" {
+		s.ScreenshotBorder = "off"
+	}
+	switch s.ScreenshotBackground {
+	case "light", "dark", "gradient":
+	default:
+		s.ScreenshotBackground = "off"
 	}
 	// Older settings files have no Dock preference; hiding it is the default.
 	if s.HideDockWhenTray != "off" {

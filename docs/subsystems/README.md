@@ -7,6 +7,7 @@
 | 子系统 | 参考 |
 | --- | --- |
 | 界面外壳：register、约束、预算 | [Interface shell](ui.md) |
+| 截图链路（快捷键、美化工作台、归档） | [screenshot.md](screenshot.md) |
 
 （一个子系统的契约第一次「跨文件」或「不那么显然」时，才为它写一页并在此
 加一行。目前的候选块：压缩管线与队列 `compressor.go`、截图链路
