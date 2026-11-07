@@ -372,7 +372,11 @@ kbd {
   flex: 0 0 46px;
   align-items: center;
   gap: 12px;
-  padding: 0 12px 0 14px;
+  /* Windows/Linux draw minimize, maximize and close at the top-right of a
+     hidden title bar; mygo reports the room they take, macOS reports the
+     traffic lights, via --mygo-titlebar-inset-*. Keep the page's own
+     titlebar actions clear of them. */
+  padding: 0 max(12px, var(--mygo-titlebar-inset-right, 0px)) 0 14px;
   background-color: var(--titlebar);
   --app-region: drag;
 }
