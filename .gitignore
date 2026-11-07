@@ -4,6 +4,7 @@ node_modules/
 /.mygo/
 mygo_windows_*.syso
 anypic
+anypic.exe
 .claude-scratch/
 .agents/
 .DS_Store
