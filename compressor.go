@@ -889,7 +889,7 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 			return compressResult{}, errors.New("JPEG 编码失败")
 		}
 	case "PNG":
-		enc := png.Encoder{CompressionLevel: png.BestCompression}
+		enc := png.Encoder{CompressionLevel: pngCompressionLevel(img.Bounds().Dx() * img.Bounds().Dy())}
 		if err := enc.Encode(&buf, img); err != nil {
 			return compressResult{}, errors.New("PNG 编码失败")
 		}
@@ -1524,6 +1524,17 @@ func extForFormat(format string) string {
 		return "webp"
 	}
 	return "jpg"
+}
+
+// pngCompressionLevel picks the deflate effort by pixel count (#10):
+// BestCompression saves a few percent on small images but costs seconds on
+// multi-megapixel ones, where DefaultCompression keeps the output lossless,
+// nearly as small, and much faster to produce.
+func pngCompressionLevel(pixels int) png.CompressionLevel {
+	if pixels <= 16<<20 {
+		return png.BestCompression
+	}
+	return png.DefaultCompression
 }
 
 func chooseOutputFormat(setting, srcFormat string, hasAlpha bool) string {

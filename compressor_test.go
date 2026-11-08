@@ -680,3 +680,18 @@ func TestIssue4PasteImageStoredOutsideUserFiles(t *testing.T) {
 		t.Fatal("expected an error for empty clipboard data")
 	}
 }
+
+func TestIssue10PNGCompressionLevelByPixels(t *testing.T) {
+	// BestCompression buys a few percent on small images but costs seconds on
+	// multi-megapixel ones; the threshold picks speed without giving up the
+	// lossless guarantee.
+	if got := pngCompressionLevel(16 << 20); got != png.BestCompression {
+		t.Fatalf("level at 16M pixels = %v", got)
+	}
+	if got := pngCompressionLevel(16<<20 + 1); got != png.DefaultCompression {
+		t.Fatalf("level above 16M pixels = %v", got)
+	}
+	if got := pngCompressionLevel(1); got != png.BestCompression {
+		t.Fatalf("level at 1 pixel = %v", got)
+	}
+}
