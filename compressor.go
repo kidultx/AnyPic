@@ -687,6 +687,30 @@ func (a *AnyPic) CompressReady(s Settings) error {
 	return a.startCompression(s, true)
 }
 
+// CompressFailed resets the images that failed the previous pass (#11) and
+// starts the same kind of pass CompressReady runs, so finished images are
+// never re-encoded by a retry.
+func (a *AnyPic) CompressFailed(s Settings) error {
+	a.mu.Lock()
+	if a.running {
+		a.mu.Unlock()
+		return errors.New("已经有一轮压缩正在进行")
+	}
+	found := false
+	for _, item := range a.items {
+		if item.Status == statusError {
+			item.Status = statusReady
+			item.Error = ""
+			found = true
+		}
+	}
+	a.mu.Unlock()
+	if !found {
+		return errors.New("没有失败的图片")
+	}
+	return a.startCompression(s, true)
+}
+
 func (a *AnyPic) startCompression(s Settings, onlyReady bool) error {
 	s = normalizeSettings(s)
 

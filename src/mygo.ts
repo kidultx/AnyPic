@@ -208,6 +208,14 @@ export const AnyPic = {
     return call("AnyPic.Compress", s);
   },
   /**
+   * CompressFailed resets the images that failed the previous pass (#11) and
+   * starts the same kind of pass CompressReady runs, so finished images are
+   * never re-encoded by a retry.
+   */
+  compressFailed(s: Settings): Promise<void> {
+    return call("AnyPic.CompressFailed", s);
+  },
+  /**
    * CompressReady starts a pass over the images that have not been compressed
    * yet. The automatic flow uses it to pick up images added while an earlier
    * pass was running without re-encoding the ones already finished.

@@ -695,3 +695,95 @@ func TestIssue10PNGCompressionLevelByPixels(t *testing.T) {
 		t.Fatalf("level at 1 pixel = %v", got)
 	}
 }
+
+func TestIssue11CompressFailedRetriesOnlyFailures(t *testing.T) {
+	srcDir := t.TempDir()
+	writeJPEG(t, filepath.Join(srcDir, "good.jpg"), gradientImage(800, 600, false), 92)
+	// A PNG whose header parses (so DecodeConfig accepts it at add time) but
+	// whose data is missing, so the full decode fails mid-pass.
+	corrupt := filepath.Join(srcDir, "broken.png")
+	full := filepath.Join(srcDir, "seed.png")
+	writePNG(t, full, gradientImage(64, 48, false))
+	data, err := os.ReadFile(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(corrupt, data[:33], 0o644); err != nil {
+		t.Fatal(err)
+	}
+	os.Remove(full)
+
+	service := newTestService(t)
+	if _, err := service.AddPaths([]string{srcDir}); err != nil {
+		t.Fatal(err)
+	}
+	settings := Settings{Format: "auto", Quality: 82, Suffix: "-anypic", Theme: "system"}
+	if err := service.Compress(settings); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "first pass", func() bool {
+		state := service.State()
+		return !state.Batch.Running && state.Batch.Done == 2
+	})
+	state := service.State()
+	for _, item := range state.Items {
+		if item.Name == "good.jpg" && item.Status != statusDone {
+			t.Fatalf("good.jpg: %s (%s)", item.Status, item.Error)
+		}
+		if item.Name == "broken.png" && item.Status != statusError {
+			t.Fatalf("broken.png: %s", item.Status)
+		}
+	}
+	var goodBefore Item
+	for _, item := range state.Items {
+		if item.Name == "good.jpg" {
+			goodBefore = item
+		}
+	}
+
+	if err := service.CompressFailed(settings); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "retry pass", func() bool {
+		state := service.State()
+		return !state.Batch.Running && state.Batch.Total == 1
+	})
+	for _, item := range service.State().Items {
+		if item.Name == "broken.png" && item.Status != statusError {
+			t.Fatalf("broken.png after retry: %s (%s)", item.Status, item.Error)
+		}
+		if item.Name == "good.jpg" {
+			if item.Status != statusDone || item.CompressedSize != goodBefore.CompressedSize {
+				t.Fatalf("good.jpg was re-encoded: size %d → %d", goodBefore.CompressedSize, item.CompressedSize)
+			}
+		}
+	}
+
+	if err := service.CompressFailed(settings); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "second retry", func() bool {
+		state := service.State()
+		return !state.Batch.Running && state.Batch.Total == 1
+	})
+}
+
+func TestIssue11CompressFailedWithoutFailuresIsAnError(t *testing.T) {
+	srcDir := t.TempDir()
+	writeJPEG(t, filepath.Join(srcDir, "good.jpg"), gradientImage(800, 600, false), 92)
+	service := newTestService(t)
+	if _, err := service.AddPaths([]string{srcDir}); err != nil {
+		t.Fatal(err)
+	}
+	settings := Settings{Format: "auto", Quality: 82, Suffix: "-anypic", Theme: "system"}
+	if err := service.Compress(settings); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "pass", func() bool {
+		state := service.State()
+		return !state.Batch.Running && state.Batch.Done == 1
+	})
+	if err := service.CompressFailed(settings); err == nil {
+		t.Fatal("expected an error when nothing failed")
+	}
+}

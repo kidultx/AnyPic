@@ -683,6 +683,8 @@ function renderFooter() {
 
   $("#batchStatus").textContent = status;
   $("#openSavedBtn").hidden = !showOpen;
+  $("#retryFailedBtn").hidden = batch.running || failed.length === 0;
+  $("#retryFailedBtn").textContent = failed.length > 0 ? `重试失败项（${failed.length}）` : "重试失败项";
   $("#batchPercent").textContent = `${percent}%`;
   $("#progressFill").style.transform = `scaleX(${percent / 100})`;
   renderStageAction();
@@ -785,6 +787,7 @@ function bindEvents() {
   $("#screenshotBtn").addEventListener("click", () => void captureScreenshot());
   $("#compressBtn").addEventListener("click", () => void compressAll());
   $("#cancelBtn").addEventListener("click", () => void cancelCompression());
+  $("#retryFailedBtn").addEventListener("click", () => void retryFailed());
   $("#stageActionBtn").addEventListener("click", () => {
     const action = $<HTMLButtonElement>("#stageActionBtn").dataset.action;
     if (action === "screenshot") void captureScreenshot();
@@ -1244,6 +1247,31 @@ async function cancelCompression() {
     await AnyPic.cancel();
   } catch (error) {
     showError(error, "取消失败");
+  }
+}
+
+async function retryFailed() {
+  if (batch.running || compressStarting) return;
+  const failed = items.filter((item) => item.status === "error");
+  if (failed.length === 0) return;
+  if (demoMode) {
+    showToast("浏览器预览模式无法重试，请在 MyGo 桌面应用中使用", "info");
+    return;
+  }
+  await flushSave();
+  // A retry in the automatic flow saves its results like any other pass.
+  if (autoProcessEnabled()) {
+    autoRun ??= { ids: new Set<number>(), copyIDs: [] };
+    for (const item of failed) autoRun.ids.add(item.id);
+  }
+  compressStarting = true;
+  try {
+    await AnyPic.compressFailed(settings);
+  } catch (error) {
+    autoRun = null;
+    showError(error, "重试失败");
+  } finally {
+    compressStarting = false;
   }
 }
 
