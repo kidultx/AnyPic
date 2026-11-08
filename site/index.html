@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AnyPic — 本机图片压缩</title>
+<meta name="description" content="AnyPic 是一款跨平台图片压缩桌面应用：图片只在你的电脑上处理，不上传、无账户、无遥测。支持 macOS、Windows、Linux。">
+<link rel="canonical" href="https://kidultx.github.io/AnyPic/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://kidultx.github.io/AnyPic/">
+<meta property="og:title" content="AnyPic — 本机图片压缩">
+<meta property="og:description" content="图片只在你的电脑上处理。批量压缩 JPG / PNG / WebP / GIF，动图保留帧，透明不丢。">
+<meta property="og:image" content="https://kidultx.github.io/AnyPic/assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="assets/icon-256.png">
+<link rel="apple-touch-icon" href="assets/icon-256.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="#top"><img src="assets/icon-256.png" alt="" width="28" height="28"><span>AnyPic</span></a>
+    <nav class="links">
+      <a href="#video" data-i18n="nav.video">视频</a>
+      <a href="#features" data-i18n="nav.features">功能</a>
+      <a href="#formats" data-i18n="nav.formats">格式</a>
+      <a href="#faq" data-i18n="nav.faq">问答</a>
+      <a href="https://github.com/kidultx/AnyPic">GitHub</a>
+    </nav>
+    <div class="nav-tools">
+      <button class="pill-btn" id="lang" type="button" aria-label="Switch to English">EN</button>
+      <button class="pill-btn" id="theme" type="button" aria-label="切换亮/暗主题">◐</button>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero wrap">
+    <span class="chip"><span class="dot"></span> <span data-i18n="hero.badge">图片只在本机处理</span></span>
+    <h1 data-i18n="hero.title">把图片压小，<br>不把它交给任何人。</h1>
+    <p class="lede" data-i18n="hero.lede">AnyPic 是一款跨平台图片压缩桌面应用。拖进来、点一下，体积小一大截——全程在你的电脑上完成，不上传、无账户、无遥测。</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/kidultx/AnyPic/releases/latest" data-i18n="hero.download">免费下载</a>
+      <a class="btn ghost" href="https://github.com/kidultx/AnyPic" data-i18n="hero.source">查看源码</a>
+    </div>
+    <p class="platforms">macOS · Windows 10/11 · Linux</p>
+    <figure class="shot">
+      <img src="assets/screenshot.png" alt="AnyPic 主界面：四张图片的压缩队列与结果" width="1220" height="820">
+    </figure>
+  </section>
+
+  <section class="stats wrap">
+    <div><b>500</b><span data-i18n="stat.batch">张 / 批</span></div>
+    <div><b>250 MB</b><span data-i18n="stat.file">单文件上限</span></div>
+    <div><b>0</b><span data-i18n="stat.upload">次图片上传</span></div>
+    <div><b>3</b><span data-i18n="stat.os">个平台</span></div>
+  </section>
+
+  <section id="video" class="wrap">
+    <h2 data-i18n="v.title">40 秒看懂 AnyPic</h2>
+    <figure class="film">
+      <video controls playsinline preload="metadata" poster="video/poster.jpg" width="1920" height="1080">
+        <source src="video/anypic-intro.mp4" type="video/mp4">
+        <source src="video/anypic-intro.webm" type="video/webm">
+      </video>
+    </figure>
+    <p class="caption" data-i18n="v.note">无声 · 画面中的体积数字为示意</p>
+  </section>
+
+  <section id="features" class="wrap">
+    <h2 data-i18n="f.title">做好一件事，并且诚实。</h2>
+    <div class="grid">
+      <article class="card wide">
+        <div class="demo result"><span class="mono">4.8 MB</span><span class="arrow">→</span><b>1.1 MB</b><span class="ok">WEBP −77%</span></div>
+        <h3 data-i18n="f1.t">智能压缩</h3>
+        <p data-i18n="f1.d">JPG / PNG / WebP 保持原格式；GIF、BMP、TIFF 自动转为更通用的 JPG 或 PNG。质量 30–100 可调，可按长边缩放到 3840 / 2560 / 1920 / 1280 / 800 像素。</p>
+      </article>
+      <article class="card">
+        <div class="demo"><span class="tag" data-i18n="f2.tag">已是最优</span></div>
+        <h3 data-i18n="f2.t">诚实的结果</h3>
+        <p data-i18n="f2.d">重新编码反而更大？直接保留原图并标注「已是最优」，不拿更大的文件充数。</p>
+      </article>
+      <article class="card">
+        <div class="demo frames"><i></i><i></i><i></i><i></i><i></i></div>
+        <h3 data-i18n="f3.t">动图不丢帧</h3>
+        <p data-i18n="f3.d">动画 GIF / WebP 转成动画 WebP，帧数、节奏、循环与透明都保留，绝不只留第一帧。</p>
+      </article>
+      <article class="card">
+        <div class="demo checker"><span></span></div>
+        <h3 data-i18n="f4.t">透明不变色</h3>
+        <p data-i18n="f4.d">带透明的图片不会被悄悄压成黑底或白底。</p>
+      </article>
+      <article class="card">
+        <div class="demo"><kbd>⌘</kbd><kbd>⌥</kbd><kbd>S</kbd></div>
+        <h3 data-i18n="f5.t">快捷键截图 + 美化</h3>
+        <p data-i18n="f5.d">随时框选截图，自动入队；预览里加背景、圆角、描边、投影与画布比例，一键生成成品。</p>
+      </article>
+      <article class="card solo">
+        <div class="demo"><span class="mono">photo.jpg</span><span class="arrow">→</span><span class="mono">photo-anypic.jpg</span></div>
+        <h3 data-i18n="f6.t">绝不覆盖原图</h3>
+        <p data-i18n="f6.d">输出写在原图旁边（加后缀）或你指定的文件夹，原文件一个字节都不动。</p>
+      </article>
+      <article class="card wide privacy">
+        <span class="lock" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg></span>
+        <h3 data-i18n="f7.t">隐私不是选项，是架构</h3>
+        <p data-i18n="f7.d">AnyPic 不上传图片、没有账户、没有遥测，图片处理完全在本机完成。应用唯一的联网行为是检查更新与下载安装包——只在启动和你点击时发生，且只访问 GitHub Releases。代码全部开源，可以自己核对。</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="more" class="wrap">
+    <h2 data-i18n="m.title">日常用得顺手</h2>
+    <ul class="list">
+      <li data-i18n="m1"><b>批量处理</b>：拖入文件、整个文件夹，一次最多 500 张。</li>
+      <li data-i18n="m2"><b>打开方式</b>：在 Finder / 资源管理器里用「打开方式」选 AnyPic，或拖到 Dock / 任务栏图标。</li>
+      <li data-i18n="m3"><b>粘贴入队</b>：复制图片后按 ⌘V / Ctrl+V 直接加入。</li>
+      <li data-i18n="m4"><b>前后对比</b>：拖动分割线查看压缩前后细节。</li>
+      <li data-i18n="m5"><b>托盘常驻</b>：关窗后截图快捷键照样可用，可开机启动。</li>
+      <li data-i18n="m6"><b>失败可重试</b>：已完成的不会重新编码。</li>
+    </ul>
+  </section>
+
+  <section id="formats" class="wrap">
+    <h2 data-i18n="fm.title">支持格式与限制</h2>
+    <div class="table">
+      <div><span data-i18n="fm.in">可输入</span><p>JPG/JPEG · PNG · WebP · GIF <span data-i18n="fm.anim">（含动画）</span> · BMP · TIFF/TIF</p></div>
+      <div><span data-i18n="fm.out">可输出</span><p data-i18n="fm.outv">JPG · PNG · WebP；动画 GIF / WebP 输出为动画 WebP</p></div>
+      <div><span data-i18n="fm.limit">上限</span><p data-i18n="fm.limitv">单文件 250 MB，单批 500 张</p></div>
+      <div><span data-i18n="fm.no">暂不支持</span><p>HEIC · AVIF</p></div>
+      <div><span>PNG</span><p data-i18n="fm.png">输出为无损重编码，质量滑杆对 PNG 不生效——这是格式本身的限制，我们如实展示。</p></div>
+      <div><span data-i18n="fm.meta">元数据</span><p data-i18n="fm.metav">重新编码会移除 EXIF / XMP（含拍摄信息），方向会在处理前自动校正。</p></div>
+    </div>
+  </section>
+
+  <section id="faq" class="wrap">
+    <h2 data-i18n="q.title">常见问题</h2>
+    <details><summary data-i18n="q1">macOS 提示「无法打开」怎么办？</summary><p data-i18n="a1">安装包未经过 Apple 公证。首次打开被 Gatekeeper 拦截时，到「系统设置 → 隐私与安全性」点「仍要打开」即可。</p></details>
+    <details><summary data-i18n="q2">截图只截到桌面壁纸？</summary><p data-i18n="a2">macOS 需要在「系统设置 → 隐私与安全性 → 屏幕录制」里允许 AnyPic。应用侧栏有直达入口。</p></details>
+    <details><summary data-i18n="q3">AnyPic 会联网吗？</summary><p data-i18n="a3">只为检查更新和下载安装包，且只访问 GitHub Releases。你的图片永远不会离开电脑。</p></details>
+    <details><summary data-i18n="q4">Linux 需要什么依赖？</summary><p data-i18n="a4">运行需要 WebKitGTK（libwebkit2gtk-4.1）；截图需要 gnome-screenshot、spectacle 或 grim + slurp + wl-copy 之一。</p></details>
+    <details><summary data-i18n="q5">收费吗？</summary><p data-i18n="a5">免费且开源。</p></details>
+  </section>
+
+  <section class="final wrap">
+    <img src="assets/icon-256.png" alt="" width="72" height="72">
+    <h2 data-i18n="end.t">现在就让图片轻一点</h2>
+    <a class="btn primary" href="https://github.com/kidultx/AnyPic/releases/latest" data-i18n="hero.download">免费下载</a>
+  </section>
+</main>
+
+<footer class="wrap foot">
+  <span>© 2026 AnyPic</span>
+  <a href="https://github.com/kidultx/AnyPic">GitHub</a>
+  <a href="https://github.com/kidultx/AnyPic/blob/main/LICENSE">License</a>
+  <a href="https://github.com/kidultx/AnyPic/issues" data-i18n="foot.issue">反馈问题</a>
+</footer>
+
+<script src="main.js"></script>
+</body>
+</html>

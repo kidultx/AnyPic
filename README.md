@@ -2,6 +2,8 @@
 
 AnyPic 是一款使用 [MyGo](https://github.com/egoist/mygo) 构建的跨平台图片压缩桌面应用。界面取法简洁的桌面工具：中性画布上排布白色细边卡片，灰色药丸式控件、白色滑块的分段开关、发丝级分隔线与克制的靛蓝主色，设置收在侧栏，操作贴近内容。所有图片都只在本机处理。
 
+官网与 40 秒介绍视频：<https://kidultx.github.io/AnyPic/>
+
 ![AnyPic 界面](docs/screenshot.png)
 
 ## 下载
@@ -133,6 +135,8 @@ src/mygo.ts        MyGo 自动生成的类型安全 IPC 客户端
 mygo.config.ts     应用名称、标识符、版本与构建配置
 .github/workflows  CI 与发布工作流
 docs/              界面截图
+site/              官网静态页（GitHub Pages），无构建步骤
+site/video/        介绍视频成品，及生成它的分镜（src/）与脚本（render.mjs）
 ```
 
 ## 开源致谢
