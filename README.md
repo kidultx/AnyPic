@@ -88,10 +88,11 @@ bunx mygo build -platform linux/amd64,windows/amd64
 
 ## 发布与 CI
 
-仓库带两个 GitHub Actions 工作流：
+仓库带三个 GitHub Actions 工作流：
 
 - **`.github/workflows/ci.yml`**：push 到 `main` 或每个 pull request 时，跑 `tsc`、`go vet`、`go test -race` 并做一次 darwin/amd64 构建冒烟。
 - **`.github/workflows/release.yml`**：推送 `v*` tag（或在 Actions 页手动触发）时，在三个矩阵系统上分别构建 `darwin/universal`、`linux/amd64`、`windows/amd64`，上传构建产物为 artifact；tag 构建还会汇总所有产物创建一个 GitHub Release（草稿，自动生成发布说明），确认后发布即可。
+- **`.github/workflows/pages.yml`**：`site/` 有改动并 push 到 `main` 时（或在 Actions 页手动触发），把 `site/` 原样发布到 GitHub Pages（<https://kidultx.github.io/AnyPic/>）。官网没有构建步骤；改介绍视频时改 `site/video/src/index.html` 的分镜，再按 `site/video/render.mjs` 开头的说明重新生成。
 
 发一个新版本的流程：
 
