@@ -3044,3 +3044,18 @@ body.side-drag * {
 .queue-filter:disabled {
   opacity: 0.6;
 }
+
+/* Animated badge (#8): the format chip's shape in an accent tint, so a
+   multi-frame entry reads as different in kind, not just in format. */
+.animated-badge {
+  display: inline-flex;
+  height: 18px;
+  align-items: center;
+  padding: 0 7px;
+  border-radius: 9px;
+  background-color: var(--primary-soft);
+  color: var(--primary);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}

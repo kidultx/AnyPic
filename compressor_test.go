@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"image"
 	"image/color"
-	"image/gif"
 	"image/jpeg"
 	"image/png"
 	"os"
@@ -82,7 +81,7 @@ func TestCompressJPEGProducesSmallerFile(t *testing.T) {
 	original := writeJPEG(t, src, gradientImage(1200, 800, false), 96)
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 1, src, "JPEG", "photo.jpg", Settings{
+	result, err := service.compressOne(context.Background(), 1, src, "JPEG", "photo.jpg", false, Settings{
 		Format: "jpeg", Quality: 55, Suffix: "-anypic",
 	})
 	if err != nil {
@@ -117,7 +116,7 @@ func TestCompressResizesLongEdge(t *testing.T) {
 	writePNG(t, src, gradientImage(1600, 900, false))
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 2, src, "PNG", "wide.png", Settings{
+	result, err := service.compressOne(context.Background(), 2, src, "PNG", "wide.png", false, Settings{
 		Format: "jpeg", Quality: 80, MaxDimension: 800, Suffix: "-min",
 	})
 	if err != nil {
@@ -137,7 +136,7 @@ func TestPNGKeepsTransparency(t *testing.T) {
 	writePNG(t, src, gradientImage(320, 240, true))
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 3, src, "PNG", "alpha.png", Settings{
+	result, err := service.compressOne(context.Background(), 3, src, "PNG", "alpha.png", false, Settings{
 		Format: "auto", Quality: 82, Suffix: "-anypic",
 	})
 	if err != nil {
@@ -169,7 +168,7 @@ func TestJPEGPassthroughWhenOriginalIsBetter(t *testing.T) {
 	original := writeJPEG(t, src, gradientImage(800, 600, false), 30)
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 4, src, "JPEG", "tiny.jpg", Settings{
+	result, err := service.compressOne(context.Background(), 4, src, "JPEG", "tiny.jpg", false, Settings{
 		Format: "jpeg", Quality: 100, Suffix: "-anypic",
 	})
 	if err != nil {
@@ -189,7 +188,7 @@ func TestWebPOutput(t *testing.T) {
 	writePNG(t, src, gradientImage(900, 600, false))
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 5, src, "PNG", "photo.png", Settings{
+	result, err := service.compressOne(context.Background(), 5, src, "PNG", "photo.png", false, Settings{
 		Format: "webp", Quality: 72, Suffix: "-anypic",
 	})
 	if err != nil {
@@ -218,7 +217,7 @@ func TestAlphaFlattenedForJPEG(t *testing.T) {
 	writePNG(t, src, gradientImage(400, 300, true))
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 6, src, "PNG", "alpha.png", Settings{
+	result, err := service.compressOne(context.Background(), 6, src, "PNG", "alpha.png", false, Settings{
 		Format: "jpeg", Quality: 82, Suffix: "-anypic",
 	})
 	if err != nil {
@@ -298,7 +297,7 @@ func TestWebPInputDecodes(t *testing.T) {
 	f.Close()
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 7, src, "WEBP", "input.webp", Settings{
+	result, err := service.compressOne(context.Background(), 7, src, "WEBP", "input.webp", false, Settings{
 		Format: "auto", Quality: 70, Suffix: "-anypic",
 	})
 	if err != nil {
@@ -596,36 +595,6 @@ func decodeDataURLConfig(t *testing.T, s string) image.Config {
 	return cfg
 }
 
-func TestAnimatedGIFIsSkipped(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "loop.gif")
-	first := image.NewPaletted(image.Rect(0, 0, 20, 20), color.Palette{color.Black, color.White})
-	second := image.NewPaletted(image.Rect(0, 0, 20, 20), color.Palette{color.Black, color.White})
-	for i := 0; i < 20; i++ {
-		first.SetColorIndex(i, i, 0)
-		second.SetColorIndex(i, 19-i, 1)
-	}
-	f, err := os.Create(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := gif.EncodeAll(f, &gif.GIF{Image: []*image.Paletted{first, second}, Delay: []int{10, 10}}); err != nil {
-		t.Fatal(err)
-	}
-	f.Close()
-
-	service := newTestService(t)
-	result, err := service.AddPaths([]string{path})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Added != 0 || len(result.Skipped) != 1 {
-		t.Fatalf("added=%d skipped=%v", result.Added, result.Skipped)
-	}
-	if !strings.Contains(result.Skipped[0].Reason, "动态") {
-		t.Fatalf("reason = %q", result.Skipped[0].Reason)
-	}
-}
 
 func TestIssue2InfoVersionFollowsTheApp(t *testing.T) {
 	// The About dialog must show the packaged app's version, not a constant

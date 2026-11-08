@@ -280,6 +280,7 @@ function applyDemoState() {
       hasAlpha: name.endsWith(".png"),
       passedThrough: false,
       savedPercent: ready ? 0 : saved,
+      animated: false,
     };
   });
   batch = { running: false, total: items.length, done: 3, failed: 0, canceled: false };
@@ -647,13 +648,14 @@ function updateRow(row: HTMLElement, item: Item) {
 
   const meta = row.querySelector<HTMLElement>(".item-meta")!;
   const formatClass = item.format.toLowerCase();
+  const animated = item.animated ? `<span class="animated-badge">动图</span>` : "";
   const output = item.status === "done" && item.outputFormat
     ? `<span class="output-format">→ ${esc(item.outputFormat)}</span>`
     : "";
   meta.innerHTML = `<span class="format-chip ${esc(formatClass)}">${esc(item.format || "IMG")}</span><span>${formatDimensions(
     item.width,
     item.height,
-  )}</span>${output}`;
+  )}</span>${animated}${output}`;
 
   const error = row.querySelector<HTMLElement>(".item-error")!;
   if (item.status === "error" && item.error) {
@@ -706,7 +708,8 @@ function updateRow(row: HTMLElement, item: Item) {
   const exportButton = row.querySelector<HTMLButtonElement>('[data-action="export"]')!;
   const removeButton = row.querySelector<HTMLButtonElement>('[data-action="remove"]')!;
   previewButton.disabled = item.status !== "done";
-  decorateButton.disabled = batch.running || (item.status !== "done" && item.status !== "ready");
+  decorateButton.disabled = batch.running || item.animated || (item.status !== "done" && item.status !== "ready");
+  decorateButton.title = item.animated ? "动图暂不支持美化" : "按当前设置美化";
   exportButton.disabled = item.status !== "done" || batch.running;
   removeButton.disabled = batch.running;
 }

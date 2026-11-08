@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"image"
 	"image/color"
 	"image/gif"
@@ -211,5 +212,269 @@ func TestIssue7OtherFormatsReportSingleFrame(t *testing.T) {
 	missing := filepath.Join(dir, "gone.png")
 	if _, err := animationFrameCount(missing); err == nil {
 		t.Fatal("expected an error for a missing file")
+	}
+}
+
+/* ------------------------------------------------------------------ */
+/* issue #8: animated GIF/WebP become animated WebP                    */
+/* ------------------------------------------------------------------ */
+
+// threeFrameGIFFixture builds a GIF whose middle frame is fully transparent
+// after a background disposal, so transparency survival is observable.
+func threeFrameGIFFixture(t *testing.T, path string, width, height int) int64 {
+	t.Helper()
+	pal := color.Palette{
+		color.RGBA{A: 0},
+		color.RGBA{R: 220, G: 60, B: 40, A: 255},
+		color.RGBA{R: 40, G: 90, B: 220, A: 255},
+	}
+	full := func(index uint8) *image.Paletted {
+		f := image.NewPaletted(image.Rect(0, 0, width, height), pal)
+		for y := 0; y < height; y++ {
+			for x := 0; x < width; x++ {
+				f.SetColorIndex(x, y, index)
+			}
+		}
+		return f
+	}
+	anim := &gif.GIF{
+		Image:    []*image.Paletted{full(1), full(0), full(2)},
+		Delay:    []int{10, 10, 10},
+		Disposal: []byte{gif.DisposalBackground, gif.DisposalNone, gif.DisposalNone},
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := gif.EncodeAll(f, anim); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return info.Size()
+}
+
+func TestIssue8AnimatedGIFIsAddedNotSkipped(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "loop.gif")
+	threeFrameGIFFixture(t, path, 32, 24)
+
+	service := newTestService(t)
+	result, err := service.AddPaths([]string{path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Added != 1 || len(result.Skipped) != 0 {
+		t.Fatalf("added=%d skipped=%v", result.Added, result.Skipped)
+	}
+	if !result.Snapshot.Items[0].Animated {
+		t.Fatal("animated GIF lost its animated flag")
+	}
+}
+
+func TestIssue8AnimatedGIFBecomesAnimatedWebP(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "loop.gif")
+	original := threeFrameGIFFixture(t, src, 64, 48)
+
+	service := &AnyPic{tempDir: t.TempDir()}
+	result, err := service.compressOne(context.Background(), 1, src, "GIF", "loop.gif", true, Settings{
+		Format: "auto", Quality: 82, Suffix: "-anypic",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.passedThrough {
+		t.Fatal("expected a converted animation, got passthrough")
+	}
+	if result.format != "WEBP" || result.outputName != "loop-anypic.webp" {
+		t.Fatalf("format %q name %q", result.format, result.outputName)
+	}
+	if result.width != 64 || result.height != 48 {
+		t.Fatalf("canvas %dx%d", result.width, result.height)
+	}
+
+	f, err := os.Open(result.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	anim, err := webp.DecodeAll(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(anim.Image) != 3 {
+		t.Fatalf("frames = %d, want 3", len(anim.Image))
+	}
+	if len(anim.Delay) != 3 || anim.Delay[0] != 100 || anim.Delay[2] != 100 {
+		t.Fatalf("delays = %v, want 100ms each", anim.Delay)
+	}
+	if anim.LoopCount != 0 {
+		t.Fatalf("loop count = %d, want infinite", anim.LoopCount)
+	}
+	// The middle frame must still be transparent after conversion, and the
+	// last one fully opaque: disposal and transparency both survived.
+	_, _, _, a1 := anim.Image[1].At(0, 0).RGBA()
+	_, _, _, a2 := anim.Image[2].At(0, 0).RGBA()
+	if a1 != 0 {
+		t.Fatalf("frame 2 alpha = %d, want fully transparent", a1)
+	}
+	if a2>>8 != 255 {
+		t.Fatalf("frame 3 alpha = %d, want opaque", a2>>8)
+	}
+	if result.size >= original {
+		t.Fatalf("converted %d bytes is not smaller than the GIF's %d", result.size, original)
+	}
+}
+
+func writeAnimatedWebP(t *testing.T, path string, quality int, width, height int) int64 {
+	t.Helper()
+	anim := &webp.WEBP{LoopCount: 0}
+	for i := range 2 {
+		anim.Image = append(anim.Image, movingFrameAt(width, height, i))
+		anim.Delay = append(anim.Delay, 120)
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := webp.EncodeAll(f, anim, webp.Options{Quality: quality, Method: 4}); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return info.Size()
+}
+
+// movingFrameAt is movingFrame with a configurable canvas, so WebP fixtures
+// can pick their own dimensions.
+func movingFrameAt(width, height, i int) *image.NRGBA {
+	img := image.NewNRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			img.SetNRGBA(x, y, color.NRGBA{
+				R: uint8(30 + 180*x/max(1, width-1)),
+				G: uint8(20 + 150*y/max(1, height-1)),
+				B: 120, A: 255,
+			})
+		}
+	}
+	for y := height / 4; y < height*3/4; y++ {
+		for x := width/8 + i*width/4; x < width/8+width/8+i*width/4; x++ {
+			img.SetNRGBA(x, y, color.NRGBA{R: 255, G: 255, B: 255, A: 255})
+		}
+	}
+	return img
+}
+
+func TestIssue8AnimatedWebPReencodesWithQuality(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "loop.webp")
+	original := writeAnimatedWebP(t, src, 95, 320, 240)
+
+	service := &AnyPic{tempDir: t.TempDir()}
+	result, err := service.compressOne(context.Background(), 2, src, "WEBP", "loop.webp", true, Settings{
+		Format: "auto", Quality: 40, Suffix: "-anypic",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.passedThrough {
+		t.Fatal("expected a re-encoded animation, got passthrough")
+	}
+	if result.format != "WEBP" || result.outputName != "loop-anypic.webp" {
+		t.Fatalf("format %q name %q", result.format, result.outputName)
+	}
+	if result.size >= original {
+		t.Fatalf("re-encoded %d bytes is not smaller than the quality-95 source's %d", result.size, original)
+	}
+	f, err := os.Open(result.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	anim, err := webp.DecodeAll(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(anim.Image) != 2 || len(anim.Delay) != 2 || anim.Delay[0] != 120 {
+		t.Fatalf("frames=%d delays=%v", len(anim.Image), anim.Delay)
+	}
+}
+
+func TestIssue8AnimatedPassthroughWhenLarger(t *testing.T) {
+	dir := t.TempDir()
+	// A quality-30 source re-encoded at 95 would come out larger: the honest
+	// answer is to keep the original and mark it as already optimal.
+	src := filepath.Join(dir, "loop.webp")
+	writeAnimatedWebP(t, src, 30, 320, 240)
+
+	service := &AnyPic{tempDir: t.TempDir()}
+	result, err := service.compressOne(context.Background(), 3, src, "WEBP", "loop.webp", true, Settings{
+		Format: "auto", Quality: 95, Suffix: "-anypic",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.passedThrough {
+		t.Fatalf("expected passthrough, got a %d-byte re-encode", result.size)
+	}
+	if result.path != src || result.outputName != "loop-anypic.webp" {
+		t.Fatalf("path %q name %q", result.path, result.outputName)
+	}
+}
+
+func TestIssue8AnimatedResizeAppliesToEveryFrame(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "big.gif")
+	threeFrameGIFFixture(t, src, 800, 600)
+
+	service := &AnyPic{tempDir: t.TempDir()}
+	result, err := service.compressOne(context.Background(), 4, src, "GIF", "big.gif", true, Settings{
+		Format: "auto", Quality: 82, MaxDimension: 400, Suffix: "-anypic",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.width != 400 || result.height != 300 {
+		t.Fatalf("canvas %dx%d, want 400x300", result.width, result.height)
+	}
+	f, err := os.Open(result.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	anim, err := webp.DecodeAll(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(anim.Image) != 3 {
+		t.Fatalf("frames = %d, want 3", len(anim.Image))
+	}
+	for i, frame := range anim.Image {
+		if frame.Bounds().Dx() != 400 || frame.Bounds().Dy() != 300 {
+			t.Fatalf("frame %d is %dx%d", i, frame.Bounds().Dx(), frame.Bounds().Dy())
+		}
+	}
+}
+
+func TestIssue8AnimatedCannotBeDecorated(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "loop.gif")
+	threeFrameGIFFixture(t, src, 32, 24)
+	service := newTestService(t)
+	result, err := service.AddPaths([]string{src})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := result.Snapshot.Items[0].ID
+	if _, err := service.DecorateItem(id, FrameStyle{}); err == nil {
+		t.Fatal("expected an error beautifying an animation")
 	}
 }

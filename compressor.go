@@ -66,6 +66,9 @@ type Item struct {
 	HasAlpha       bool    `json:"hasAlpha"`
 	PassedThrough  bool    `json:"passedThrough"`
 	SavedPercent   float64 `json:"savedPercent"`
+	// Animated marks a multi-frame GIF/WebP that converts to animated WebP
+	// instead of a still re-encode (#8).
+	Animated bool `json:"animated"`
 
 	compressedPath string
 	stale          bool
@@ -385,13 +388,9 @@ func (a *AnyPic) addPaths(paths []string) (AddResult, error) {
 			continue
 		}
 
-		animated, err := isAnimatedFile(path)
+		frames, err := animationFrameCount(path)
 		if err != nil {
 			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: "无法读取文件"})
-			continue
-		}
-		if animated {
-			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: "暂不支持动态图片"})
 			continue
 		}
 
@@ -415,6 +414,7 @@ func (a *AnyPic) addPaths(paths []string) (AddResult, error) {
 			Height:       cfg.Height,
 			OriginalSize: info.Size(),
 			Status:       statusReady,
+			Animated:     frames > 1,
 		}
 		newItems = append(newItems, item)
 		existing[path] = true
@@ -592,6 +592,12 @@ func (a *AnyPic) DecorateItem(id int64, style FrameStyle) (Snapshot, error) {
 		a.mu.Unlock()
 		return Snapshot{}, errors.New("图片不存在")
 	}
+	if item.Animated {
+		// Beautify re-renders the source as a still PNG; an animation would
+		// silently lose its frames.
+		a.mu.Unlock()
+		return Snapshot{}, errors.New("动图暂不支持美化")
+	}
 	path, dir, name := item.Path, item.Dir, item.Name
 	a.mu.Unlock()
 
@@ -664,6 +670,10 @@ func (a *AnyPic) PreviewDecorated(id int64, style FrameStyle) (string, error) {
 	if item == nil {
 		a.mu.Unlock()
 		return "", errors.New("图片不存在")
+	}
+	if item.Animated {
+		a.mu.Unlock()
+		return "", errors.New("动图暂不支持美化")
 	}
 	path := item.Path
 	a.mu.Unlock()
@@ -855,7 +865,7 @@ func (a *AnyPic) compressItem(ctx context.Context, id int64, s Settings) {
 	a.mu.Unlock()
 	_ = ItemChanged.Broadcast(snapshot)
 
-	result, err := a.compressOne(ctx, id, item.Path, item.Format, item.Name, s)
+	result, err := a.compressOne(ctx, id, item.Path, item.Format, item.Name, item.Animated, s)
 
 	a.mu.Lock()
 	item = a.byID[id]
@@ -907,7 +917,12 @@ type compressResult struct {
 	passedThrough bool
 }
 
-func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, name string, s Settings) (compressResult, error) {
+func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, name string, animated bool, s Settings) (compressResult, error) {
+	if animated {
+		// Animations never take the still path: the pipeline must keep every
+		// frame, never flatten to the first one (#8).
+		return a.compressAnimated(ctx, id, path, srcFormat, name, s)
+	}
 	if err := ctx.Err(); err != nil {
 		return compressResult{}, err
 	}
@@ -1580,6 +1595,12 @@ func extForFormat(format string) string {
 		return "png"
 	case "webp":
 		return "webp"
+	case "gif":
+		return "gif"
+	case "bmp":
+		return "bmp"
+	case "tiff", "tif":
+		return "tif"
 	}
 	return "jpg"
 }

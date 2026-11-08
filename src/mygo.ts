@@ -88,6 +88,11 @@ export interface Item {
   hasAlpha: boolean;
   passedThrough: boolean;
   savedPercent: number;
+  /**
+   * Animated marks a multi-frame GIF/WebP that converts to animated WebP
+   * instead of a still re-encode (#8).
+   */
+  animated: boolean;
 }
 
 /** Preview holds before and after previews for the comparison view. */
