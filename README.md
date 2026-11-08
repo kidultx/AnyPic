@@ -116,6 +116,7 @@ CI 产物为 ad-hoc 签名（无 Apple 证书），与本地自签名构建相�
 ```text
 main.go            应用入口、窗口、原生菜单、托盘与命令事件
 compressor.go      图片队列、压缩管线、预览、导出、设置持久化
+animation.go       动图帧数检测：走文件结构计数，不解码像素
 screenshot.go      快捷键截图、剪贴板取图与截图归档
 decorate.go        截图外观美化：圆角、描边、投影与背景
 updater.go         应用内更新：检查新版本、下载并代开安装包

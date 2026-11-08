@@ -10,7 +10,6 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	"image/gif"
 	"image/jpeg"
 	"image/png"
 	"io"
@@ -1364,31 +1363,16 @@ func (a *AnyPic) removeTemp(item *Item) {
 
 // isAnimatedFile reports whether a GIF or WebP holds more than one frame.
 // Static images of both formats are supported; animations are skipped rather
-// than silently flattened to their first frame.
+// than silently flattened to their first frame. Frame counting walks the file
+// structure without decoding pixels (see animation.go).
 func isAnimatedFile(path string) (bool, error) {
 	switch strings.ToLower(filepath.Ext(path)) {
-	case ".gif":
-		f, err := os.Open(path)
+	case ".gif", ".webp":
+		n, err := animationFrameCount(path)
 		if err != nil {
 			return false, err
 		}
-		defer f.Close()
-		anim, err := gif.DecodeAll(f)
-		if err != nil {
-			return false, err
-		}
-		return len(anim.Image) > 1, nil
-	case ".webp":
-		f, err := os.Open(path)
-		if err != nil {
-			return false, err
-		}
-		defer f.Close()
-		anim, err := webp.DecodeAll(f)
-		if err != nil {
-			return false, err
-		}
-		return len(anim.Image) > 1, nil
+		return n > 1, nil
 	}
 	return false, nil
 }
