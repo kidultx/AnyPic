@@ -5,6 +5,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"regexp"
 	"strings"
@@ -109,15 +110,19 @@ var uiBudgets = []struct {
 	{"index.html", 29_400},
 }
 
-// TestScriptAndStyleBudgets guards them.
+// TestScriptAndStyleBudgets guards them. Sizes are counted with LF line
+// endings: a Windows checkout expands \n to \r\n, which is checkout noise,
+// not core growth, and must not fail the ledger (release v0.1.4's first run
+// tripped on exactly that).
 func TestScriptAndStyleBudgets(t *testing.T) {
 	for _, b := range uiBudgets {
-		st, err := os.Stat(b.file)
+		raw, err := os.ReadFile(b.file)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if st.Size() > int64(b.budget) {
-			t.Errorf("%s is %d bytes, over its budget of %d: move the code to its own module, or raise the budget and say why in this test's comment", b.file, st.Size(), b.budget)
+		size := len(bytes.ReplaceAll(raw, []byte("\r\n"), []byte("\n")))
+		if size > b.budget {
+			t.Errorf("%s is %d bytes (LF), over its budget of %d: move the code to its own module, or raise the budget and say why in this test's comment", b.file, size, b.budget)
 		}
 	}
 }
