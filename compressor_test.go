@@ -787,3 +787,29 @@ func TestIssue11CompressFailedWithoutFailuresIsAnError(t *testing.T) {
 		t.Fatal("expected an error when nothing failed")
 	}
 }
+
+func TestIssue5RemoveAcceptsMultipleIDs(t *testing.T) {
+	// The batch-selection UI removes many rows in one call; the backend
+	// contract it leans on is that Remove accepts an arbitrary id list.
+	dir := t.TempDir()
+	writeJPEG(t, filepath.Join(dir, "one.jpg"), gradientImage(64, 48, false), 90)
+	writeJPEG(t, filepath.Join(dir, "two.jpg"), gradientImage(64, 48, false), 90)
+	writeJPEG(t, filepath.Join(dir, "three.jpg"), gradientImage(64, 48, false), 90)
+	service := newTestService(t)
+	if _, err := service.AddPaths([]string{dir}); err != nil {
+		t.Fatal(err)
+	}
+	state := service.State()
+	if len(state.Items) != 3 {
+		t.Fatalf("items = %d", len(state.Items))
+	}
+	snap, err := service.Remove([]int64{state.Items[0].ID, state.Items[2].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// WalkDir is lexical: one.jpg, three.jpg, two.jpg — so removing the
+	// first and third entries leaves three.jpg.
+	if len(snap.Items) != 1 || snap.Items[0].Name != "three.jpg" {
+		t.Fatalf("left = %+v, want only three.jpg", snap.Items)
+	}
+}

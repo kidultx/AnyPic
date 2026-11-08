@@ -25,6 +25,10 @@ let items: Item[] = [];
 let batch: Batch = { running: false, total: 0, done: 0, failed: 0, canceled: false };
 let filter: "all" | "done" | "error" = "all";
 let view: "list" | "grid" = "list";
+/* Selected queue rows, by id; surviving across filter changes but pruned
+   when their images leave the queue. */
+const selected = new Set<number>();
+let nameFilter = "";
 let dirty = false;
 let compressedSignature = "";
 let demoMode = false;
@@ -215,6 +219,11 @@ function applySnapshot(snapshot: Snapshot, includeSettings = true) {
     const thumb = previousThumbs.get(item.id);
     return thumb ? { ...item, thumb } : item;
   });
+  // Selection never outlives its images.
+  const alive = new Set(items.map((item) => item.id));
+  for (const id of [...selected]) {
+    if (!alive.has(id)) selected.delete(id);
+  }
   if (includeSettings) {
     settings = { ...defaultSettings(), ...snapshot.settings };
     applyTheme(settings.theme);
@@ -439,7 +448,9 @@ function renderStats() {
 
 function renderQueue() {
   const list = $("#queueList");
+  const query = nameFilter.trim().toLowerCase();
   const filtered = items.filter((item) => {
+    if (query && !item.name.toLowerCase().includes(query)) return false;
     if (filter === "done") return item.status === "done";
     if (filter === "error") return item.status === "error";
     return true;
@@ -480,6 +491,36 @@ function renderQueue() {
     button.setAttribute("aria-selected", String(active));
   });
   $("#queueEmptyFilter").hidden = filtered.length > 0;
+  syncSelectionBar();
+  syncSelectAll();
+}
+
+/* The images the current status tab and name filter both let through (#5). */
+function visibleItems(): Item[] {
+  const query = nameFilter.trim().toLowerCase();
+  return items.filter((item) => {
+    if (query && !item.name.toLowerCase().includes(query)) return false;
+    return queueShows(item);
+  });
+}
+
+function allVisibleSelected(): boolean {
+  const visible = visibleItems();
+  return visible.length > 0 && visible.every((item) => selected.has(item.id));
+}
+
+function syncSelectionBar() {
+  $("#selectionBar").hidden = selected.size === 0 || batch.running;
+  $("#selectionCount").textContent = String(selected.size);
+  $<HTMLButtonElement>("#removeSelectedBtn").disabled = batch.running;
+}
+
+function syncSelectAll() {
+  const button = $<HTMLButtonElement>("#selectAllBtn");
+  const all = allVisibleSelected();
+  button.textContent = all ? "取消全选" : "全选";
+  button.setAttribute("aria-pressed", String(all));
+  button.disabled = visibleItems().length === 0 || batch.running;
 }
 
 function createRow(id: number): HTMLElement {
@@ -487,6 +528,9 @@ function createRow(id: number): HTMLElement {
   row.className = "queue-item";
   row.dataset.id = String(id);
   row.innerHTML = `
+    <label class="item-select">
+      <input type="checkbox" data-select aria-label="选择这张图片" />
+    </label>
     <div class="thumb">
       <div class="thumb-placeholder">${icon("image")}</div>
       <span class="thumb-state" hidden></span>
@@ -506,6 +550,17 @@ function createRow(id: number): HTMLElement {
       <button class="icon-btn" data-action="export" title="导出这张" aria-label="导出这张">${icon("download")}</button>
       <button class="icon-btn" data-action="remove" title="移除" aria-label="移除">${icon("x")}</button>
     </div>`;
+
+  const checkbox = row.querySelector<HTMLInputElement>("input[data-select]")!;
+  checkbox.addEventListener("change", () => {
+    if (checkbox.checked) selected.add(id);
+    else selected.delete(id);
+    row.classList.toggle("is-selected", checkbox.checked);
+    syncSelectionBar();
+    syncSelectAll();
+  });
+  // The label must not turn the click into "open preview".
+  checkbox.addEventListener("click", (event) => event.stopPropagation());
 
   row.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
@@ -539,6 +594,10 @@ function updateRow(row: HTMLElement, item: Item) {
   row.dataset.id = String(item.id);
   row.title = item.path ? `${item.name}\n${item.path}` : item.name;
   row.classList.toggle("is-clickable", item.status === "done" || item.status === "error");
+  row.classList.toggle("is-selected", selected.has(item.id));
+  const checkbox = row.querySelector<HTMLInputElement>("input[data-select]")!;
+  checkbox.checked = selected.has(item.id);
+  checkbox.disabled = batch.running;
 
   const thumb = row.querySelector<HTMLElement>(".thumb")!;
   let image = thumb.querySelector<HTMLImageElement>("img");
@@ -767,6 +826,12 @@ function renderActions() {
   $$<HTMLButtonElement>("#qualityPresets button").forEach((button) => {
     button.disabled = running || settings.format === "png";
   });
+  // Selection follows the removal rules: nothing selectable or removable
+  // while a pass owns the queue.
+  $<HTMLButtonElement>("#selectAllBtn").disabled = running || visibleItems().length === 0;
+  $<HTMLInputElement>("#queueFilter").disabled = running;
+  syncSelectionBar();
+  syncSelectAll();
 }
 
 /* ------------------------------------------------------------------ */
@@ -959,6 +1024,34 @@ function bindEvents() {
     event.preventDefault();
     next.click();
     next.focus();
+  });
+
+  const queueFilter = $<HTMLInputElement>("#queueFilter");
+  queueFilter.addEventListener("input", () => {
+    nameFilter = queueFilter.value;
+    renderQueue();
+  });
+  queueFilter.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    queueFilter.value = "";
+    nameFilter = "";
+    renderQueue();
+  });
+  $("#selectAllBtn").addEventListener("click", () => {
+    const visible = visibleItems();
+    if (allVisibleSelected()) {
+      for (const item of visible) selected.delete(item.id);
+    } else {
+      for (const item of visible) selected.add(item.id);
+    }
+    renderQueue();
+  });
+  $("#removeSelectedBtn").addEventListener("click", () => void removeSelected());
+  $("#clearSelectionBtn").addEventListener("click", () => {
+    selected.clear();
+    renderQueue();
   });
 
   $("#previewClose").addEventListener("click", closePreview);
@@ -1275,6 +1368,35 @@ async function retryFailed() {
   }
 }
 
+async function removeSelected() {
+  if (batch.running || selected.size === 0) return;
+  const ids = [...selected];
+  const removed = items.filter((item) => ids.includes(item.id));
+  const ok = await askConfirm(`移除所选 ${ids.length} 张图片？`, "原始图片不会被删除。", "移除");
+  if (!ok) return;
+  if (demoMode) {
+    for (const item of removed) invalidatePreview(item.id);
+    items = items.filter((item) => !selected.has(item.id));
+    selected.clear();
+    renderAll();
+    return;
+  }
+  try {
+    const snapshot = await AnyPic.remove(ids);
+    selected.clear();
+    applySnapshot(snapshot, false);
+    renderAll();
+    // Selection can be undone the same way a single removal is: the files
+    // were never touched, so re-adding their paths restores the entries.
+    showToast(`已移除 ${ids.length} 张图片`, "info", {
+      label: "撤销",
+      onClick: () => void addPaths(removed.map((item) => item.path)),
+    });
+  } catch (error) {
+    showError(error, "移除失败");
+  }
+}
+
 async function removeItem(id: number) {
   if (batch.running) return;
   const item = items.find((entry) => entry.id === id);
@@ -1318,6 +1440,7 @@ async function clearQueue() {
     items = [];
     compressedSignature = "";
     lastSaved = null;
+    selected.clear();
     batch = { running: false, total: 0, done: 0, failed: 0, canceled: false };
     renderAll();
     return;
@@ -1328,6 +1451,7 @@ async function clearQueue() {
     compressedSignature = "";
     dirty = false;
     lastSaved = null;
+    selected.clear();
     renderAll();
     showToast("队列已清空", "success");
   } catch (error) {

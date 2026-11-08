@@ -94,20 +94,20 @@ func TestNoNewNativeSelects(t *testing.T) {
 
 // Size budgets, as the ledger in magpie's core_budget_test.go: a change
 // grows the core on purpose or not at all. Sizes as of 2026-11-08:
-// main.ts 65,8xx (preview modal + beautify workbench moved to preview.ts,
-// helpers to ui.ts) · style.css 55,356 · index.html 29,472. style.css and
-// index.html grew for the beautify workbench (#1) and the in-app updater
-// UI (#3) — new modal panels and their styles; both are single-file
-// artifacts, so the growth is budgeted here instead of split. Each budget
-// is current + ~2% headroom. Over budget: move the code to its own module,
-// or raise the budget here and say what the growth was for.
+// main.ts 75,251 · style.css 57,246 · index.html 30,370. The 2026-11-08
+// queue/entry features grew all three: paste-to-queue (#4), batch selection
+// with name filter (#5), retry-failed (#11) and undo-remove (#12) in
+// main.ts; the selection checkbox column, filter field and selection bar in
+// style.css and index.html. Each budget is current + ~2% headroom. Over
+// budget: move the code to its own module, or raise the budget here and say
+// what the growth was for.
 var uiBudgets = []struct {
 	file   string
 	budget int
 }{
-	{"src/main.ts", 73_200},
-	{"src/style.css", 56_500},
-	{"index.html", 30_000},
+	{"src/main.ts", 76_800},
+	{"src/style.css", 58_400},
+	{"index.html", 31_000},
 }
 
 // TestScriptAndStyleBudgets guards them. Sizes are counted with LF line

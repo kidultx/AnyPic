@@ -1671,10 +1671,10 @@ body.side-drag * {
   display: grid;
   height: 32px;
   flex: 0 0 32px;
-  grid-template-columns: minmax(0, 1fr) 208px 88px;
+  grid-template-columns: 20px 36px minmax(0, 1fr) 208px 88px;
   align-items: center;
   gap: 12px;
-  padding: 0 14px 0 62px;
+  padding: 0 14px;
   border-bottom: 1px solid var(--line-2);
   background-color: var(--card-2);
   color: var(--muted);
@@ -1699,7 +1699,7 @@ body.side-drag * {
 
 .queue-item {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) 208px 88px;
+  grid-template-columns: 20px 36px minmax(0, 1fr) 208px 88px;
   min-height: 52px;
   align-items: center;
   gap: 12px;
@@ -2929,11 +2929,11 @@ body.side-drag * {
   }
 
   .queue-item {
-    grid-template-columns: 36px minmax(0, 1fr) 208px 84px;
+    grid-template-columns: 20px 36px minmax(0, 1fr) 208px 84px;
   }
 
   .queue-columns {
-    grid-template-columns: minmax(0, 1fr) 208px 84px;
+    grid-template-columns: 20px 36px minmax(0, 1fr) 208px 84px;
   }
 
   .summary-foot {
@@ -2965,4 +2965,82 @@ body.side-drag * {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ---------- selection (#5) ---------- */
+
+/* A checkbox column before the thumbnail; the row itself is tinted with the
+   existing --row-selected accent wash, not a fill, per the token's note. */
+.item-select {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.item-select input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.item-select input:disabled {
+  cursor: default;
+}
+
+.queue-item.is-selected {
+  background-color: var(--row-selected);
+}
+
+.queue-list.grid .queue-item {
+  position: relative;
+}
+
+.queue-list.grid .item-select {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  padding: 3px;
+  border-radius: 6px;
+  background-color: var(--card);
+}
+
+.selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--line-2);
+  font-size: 13px;
+  color: var(--text-soft);
+}
+
+.selection-bar b {
+  color: var(--text);
+}
+
+.queue-filter {
+  width: 160px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background-color: var(--field);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.queue-filter::placeholder {
+  color: var(--text-faint);
+}
+
+.queue-filter:focus {
+  outline: none;
+  border-color: var(--focus-ring);
+}
+
+.queue-filter:disabled {
+  opacity: 0.6;
 }
