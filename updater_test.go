@@ -81,6 +81,10 @@ func TestIssue3SelectReleaseAsset(t *testing.T) {
 func pointReleaseAPI(t *testing.T, body func(base string) string, asset []byte) string {
 	var srvURL string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/asset") {
+			_, _ = w.Write(asset)
+			return
+		}
 		switch r.URL.Path {
 		case "/repos/kidultx/AnyPic/releases/latest":
 			if body == nil {
@@ -89,8 +93,6 @@ func pointReleaseAPI(t *testing.T, body func(base string) string, asset []byte) 
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(body(srvURL)))
-		case "/asset":
-			_, _ = w.Write(asset)
 		default:
 			http.NotFound(w, r)
 		}
@@ -154,11 +156,13 @@ func TestIssue3DownloadUpdate(t *testing.T) {
 	for i := range asset {
 		asset[i] = byte(i)
 	}
-	// 资产 URL 指到回环服务器:按 base 重写 dmg 的下载地址,请求时展开。
+	// 资产 URL 全部指到回环服务器:selectReleaseAsset 按 GOOS 挑的可能是
+	// 任何一个资产,漏改哪个,哪个平台就会打到真实的 github.com(v0.2.0
+	// 不存在 → 404,还违反测试不碰外网)。
 	pointReleaseAPI(t, func(base string) string {
-		return strings.Replace(testReleaseJSON,
-			`"https://github.com/kidultx/AnyPic/releases/download/v0.2.0/AnyPic.0.2.0.dmg"`,
-			`"`+base+`/asset"`, 1)
+		return strings.ReplaceAll(testReleaseJSON,
+			"https://github.com/kidultx/AnyPic/releases/download/v0.2.0/",
+			base+"/asset/")
 	}, asset)
 
 	downloads := t.TempDir()
