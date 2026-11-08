@@ -62,10 +62,20 @@ export async function openPreview(id: number, mode: "compare" | "beautify" = "co
   const item = ctx.items().find((entry) => entry.id === id);
   // The compare tab needs a compressed result; the beautify workbench only
   // needs a source image, so it also opens for freshly captured (ready)
-  // items.
-  if (!item) return;
-  if (mode === "compare" && item.status !== "done") return;
-  if (mode === "beautify" && item.status !== "done" && item.status !== "ready") return;
+  // items. A blocked open says why — silent returns made failures look like
+  // the modal being broken.
+  if (!item) {
+    showToast("这张图片已不在队列里", "info");
+    return;
+  }
+  if (mode === "compare" && item.status !== "done") {
+    showToast(item.status === "working" ? "正在压缩，完成后可以对比" : "压缩完成后才能对比，请先压缩这张图片", "info");
+    return;
+  }
+  if (mode === "beautify" && item.status !== "done" && item.status !== "ready") {
+    showToast(item.status === "working" ? "正在处理，完成后可以美化" : "这张图片处理失败，无法美化", "info");
+    return;
+  }
   selectedId = id;
   if (beautifyId !== id) {
     // A fresh item opens the workbench neutral: neither the style nor the

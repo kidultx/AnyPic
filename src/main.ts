@@ -511,7 +511,7 @@ function createRow(id: number): HTMLElement {
     if (target.closest("button")) return;
     const item = items.find((entry) => entry.id === id);
     if (!item) return;
-    if (item.status === "done") void openPreview(item.id);
+    if (item.status === "done" || item.status === "ready") void openPreview(item.id);
     else if (item.status === "error" && item.error) showToast(item.error, "error");
   });
 
