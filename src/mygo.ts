@@ -291,6 +291,14 @@ export const AnyPic = {
   openScreenRecordingSettings(): Promise<void> {
     return call("AnyPic.OpenScreenRecordingSettings");
   },
+  /**
+   * PasteImage stores the image currently on the clipboard in Pictures/AnyPic,
+   * the same place screenshots live, and adds it to the queue. An explicit paste
+   * is the only moment AnyPic reads the clipboard for images.
+   */
+  pasteImage(): Promise<AddResult> {
+    return call("AnyPic.PasteImage");
+  },
   /** PickFiles shows the native open dialog and adds the chosen files. */
   pickFiles(): Promise<AddResult> {
     return call("AnyPic.PickFiles");

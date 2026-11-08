@@ -638,3 +638,45 @@ func TestIssue2InfoVersionFollowsTheApp(t *testing.T) {
 		t.Errorf("Info().Version = %q, want the runtime's app version %q", got, test)
 	}
 }
+
+func TestIssue4PasteImageStoredOutsideUserFiles(t *testing.T) {
+	// A pasted image has no source file, so it is stored in Pictures/AnyPic
+	// next to screenshots; saving twice must never overwrite the first copy.
+	base := t.TempDir()
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, gradientImage(320, 200, true)); err != nil {
+		t.Fatal(err)
+	}
+	first, err := savePastedImage(buf.Bytes(), base, "2026-11-08 15.30.00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Dir(first) != filepath.Join(base, "AnyPic") {
+		t.Fatalf("saved to %q, want Pictures/AnyPic", first)
+	}
+	if !strings.HasPrefix(filepath.Base(first), "粘贴 2026-11-08 15.30.00") || filepath.Ext(first) != ".png" {
+		t.Fatalf("name = %q", filepath.Base(first))
+	}
+	saved, err := os.ReadFile(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(saved, buf.Bytes()) {
+		t.Fatal("saved bytes differ from the clipboard image")
+	}
+
+	second, err := savePastedImage(buf.Bytes(), base, "2026-11-08 15.30.00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second == first {
+		t.Fatalf("second paste overwrote the first: %q", first)
+	}
+	if _, err := os.Stat(first); err != nil {
+		t.Fatalf("first paste disappeared: %v", err)
+	}
+
+	if _, err := savePastedImage(nil, base, "2026-11-08 15.30.00"); err == nil {
+		t.Fatal("expected an error for empty clipboard data")
+	}
+}

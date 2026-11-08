@@ -137,6 +137,7 @@ function detectPlatform() {
     const shortcut = el.dataset.shortcut;
     if (shortcut === "open") el.textContent = isMac ? "⌘ O" : "Ctrl O";
     else if (shortcut === "compress") el.textContent = isMac ? "⌘ ↵" : "Ctrl ↵";
+    else if (shortcut === "paste") el.textContent = isMac ? "⌘ V" : "Ctrl V";
   });
 }
 
@@ -998,7 +999,14 @@ function bindEvents() {
       return;
     }
     if (!meta) return;
-    if (event.key.toLowerCase() === "o") {
+    if (event.key.toLowerCase() === "v") {
+      // Paste is the quickest way in: an image copied anywhere on the machine
+      // lands in the queue. Text fields keep the native paste.
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select") || target?.isContentEditable) return;
+      event.preventDefault();
+      void pasteImage();
+    } else if (event.key.toLowerCase() === "o") {
       event.preventDefault();
       void pickFiles();
     } else if (event.key === "Enter") {
@@ -1080,7 +1088,7 @@ async function captureScreenshot() {
     const result = await AnyPic.captureScreenshot();
     // A fresh capture is "ready", so a done/error filter would hide it.
     if (result.added > 0) filter = "all";
-    applyAddResult(result, "screenshot");
+    applyAddResult(result, "clipboard");
     if (result.copied) showToast("截图已复制到剪贴板", "info");
   } catch (error) {
     // Canceling the region selection, or a second press while the first
@@ -1095,7 +1103,28 @@ function isCaptureNotice(error: unknown) {
   return message.includes("已取消截图") || message.includes("正在截图中");
 }
 
-type AddSource = "files" | "screenshot";
+async function pasteImage() {
+  if (demoMode) {
+    showToast("浏览器预览模式无法读取剪贴板，请在 MyGo 桌面应用中使用", "info");
+    return;
+  }
+  try {
+    const result = await AnyPic.pasteImage();
+    if (result.added > 0) filter = "all";
+    applyAddResult(result, "clipboard");
+  } catch (error) {
+    // Pasting while the clipboard holds text is not an error worth a red
+    // toast; the app simply has nothing to add.
+    const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+    if (message.includes("剪贴板里没有图片")) {
+      showToast("剪贴板里没有图片", "info");
+      return;
+    }
+    showError(error, "粘贴失败");
+  }
+}
+
+type AddSource = "files" | "clipboard";
 
 async function addPaths(paths: string[]) {
   if (demoMode || paths.length === 0) return;
@@ -1135,14 +1164,14 @@ function applyAddResult(
   }
 
   renderAll();
-  if (auto) startAutoRun(newIDs, source === "screenshot");
+  if (auto) startAutoRun(newIDs, source === "clipboard");
 }
 
-function startAutoRun(ids: number[], fromScreenshot: boolean) {
+function startAutoRun(ids: number[], fromClipboard: boolean) {
   if (ids.length === 0) return;
   autoRun ??= { ids: new Set<number>(), copyIDs: [] };
   for (const id of ids) autoRun.ids.add(id);
-  if (fromScreenshot) autoRun.copyIDs.push(ids[ids.length - 1]!);
+  if (fromClipboard) autoRun.copyIDs.push(ids[ids.length - 1]!);
   // A pass in progress picks the new images up when it ends; the start
   // guard covers the async gap before the backend call.
   if (batch.running || compressStarting) return;

@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/disintegration/imaging"
 	"github.com/egoist/mygo"
@@ -250,6 +251,50 @@ func (a *AnyPic) HideDockWhenTray() bool {
 // automatic flow starts as soon as the current one finishes.
 func (a *AnyPic) AddPaths(paths []string) (AddResult, error) {
 	return a.addPaths(paths)
+}
+
+// PasteImage stores the image currently on the clipboard in Pictures/AnyPic,
+// the same place screenshots live, and adds it to the queue. An explicit paste
+// is the only moment AnyPic reads the clipboard for images.
+func (a *AnyPic) PasteImage() (AddResult, error) {
+	data := mygo.Clipboard.ReadImage()
+	if len(data) == 0 {
+		return AddResult{}, errors.New("剪贴板里没有图片")
+	}
+	base, err := mygo.App.Path(mygo.PathPictures)
+	if err != nil || base == "" {
+		base, err = mygo.App.Path(mygo.PathUserData)
+		if err != nil {
+			return AddResult{}, errors.New("无法确定保存位置")
+		}
+	}
+	path, err := savePastedImage(data, base, time.Now().Format("2006-01-02 15.04.05"))
+	if err != nil {
+		return AddResult{}, fmt.Errorf("无法保存粘贴的图片：%w", err)
+	}
+	result, err := a.AddPaths([]string{path})
+	if err != nil {
+		return AddResult{}, fmt.Errorf("粘贴的图片已保存到 %s，但无法加入队列：%w", path, err)
+	}
+	return result, nil
+}
+
+// savePastedImage writes a clipboard image into base/AnyPic and never
+// overwrites an earlier paste. base is injected so tests do not touch the
+// user's pictures folder.
+func savePastedImage(data []byte, base, stamp string) (string, error) {
+	if len(data) == 0 {
+		return "", errors.New("剪贴板里没有图片")
+	}
+	dir := filepath.Join(base, "AnyPic")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	path := uniquePath(filepath.Join(dir, "粘贴 "+stamp+".png"))
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 // PickFiles shows the native open dialog and adds the chosen files.
