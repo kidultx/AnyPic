@@ -813,3 +813,24 @@ func TestIssue5RemoveAcceptsMultipleIDs(t *testing.T) {
 		t.Fatalf("left = %+v, want only three.jpg", snap.Items)
 	}
 }
+
+func TestIssue6OpenFileBuffersUntilPageAttaches(t *testing.T) {
+	// Files opened from the file manager can arrive before the page has
+	// loaded its event listeners (cold start, or the app waking in the tray).
+	// Until the page drains them, paths wait in the service; afterwards they
+	// go out as events and are not buffered again.
+	service := newTestService(t)
+	service.OpenFile("/tmp/one.jpg")
+	service.OpenFile("/tmp/two.png")
+	paths := service.TakePendingOpen()
+	if len(paths) != 2 || paths[0] != "/tmp/one.jpg" || paths[1] != "/tmp/two.png" {
+		t.Fatalf("pending = %v", paths)
+	}
+	if again := service.TakePendingOpen(); len(again) != 0 {
+		t.Fatalf("draining twice returned %v", again)
+	}
+	service.OpenFile("/tmp/three.webp")
+	if buffered := service.TakePendingOpen(); len(buffered) != 0 {
+		t.Fatalf("open after the page attached was buffered: %v", buffered)
+	}
+}

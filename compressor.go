@@ -178,10 +178,18 @@ type AnyPic struct {
 	// installer download at a time.
 	updateInfo  *UpdateInfo
 	downloading atomic.Bool
+
+	// Files the OS handed over before the page was ready to listen (#6).
+	pendingOpen  []string
+	pageAttached bool
 }
 
 // ItemChanged is sent whenever an image changes while a batch runs.
 var ItemChanged = mygo.NewEvent[Item]("anypic:item")
+
+// OpenRequested tells the page that the OS handed the app a file: a file
+// association, a Dock drop, or a command line path.
+var OpenRequested = mygo.NewEvent[string]("anypic:open")
 
 // BatchChanged is sent while a compression batch progresses.
 var BatchChanged = mygo.NewEvent[Batch]("anypic:batch")
@@ -294,6 +302,32 @@ func savePastedImage(data []byte, base, stamp string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// OpenFile receives a path the OS opened with the app: a file association,
+// a drop on the Dock or taskbar icon, or a command line argument (#6).
+// Until the page drains the buffer it queues there; afterwards it goes out
+// as an event.
+func (a *AnyPic) OpenFile(path string) {
+	a.mu.Lock()
+	if !a.pageAttached {
+		a.pendingOpen = append(a.pendingOpen, path)
+		a.mu.Unlock()
+		return
+	}
+	a.mu.Unlock()
+	_ = OpenRequested.Broadcast(path)
+}
+
+// TakePendingOpen returns the paths opened before the page was ready and
+// marks the page attached, so later opens arrive as events instead.
+func (a *AnyPic) TakePendingOpen() []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.pageAttached = true
+	paths := a.pendingOpen
+	a.pendingOpen = nil
+	return paths
 }
 
 // PickFiles shows the native open dialog and adds the chosen files.

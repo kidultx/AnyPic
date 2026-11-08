@@ -17,6 +17,13 @@ func main() {
 	app := mygo.App
 	app.SetName("AnyPic")
 
+	// A second launch — an image opened from the file manager while AnyPic
+	// sits in the tray — hands its paths to the running instance instead of
+	// starting a second app.
+	if !app.RequestSingleInstanceLock() {
+		return
+	}
+
 	service := NewAnyPic()
 	mygo.Bind(service)
 
@@ -26,6 +33,17 @@ func main() {
 	app.OnBeforeQuit(func(*mygo.QuitEvent) {
 		quitting = true
 		service.Cleanup()
+	})
+
+	// Registered before Run so launch-time opens (double-clicked files, Dock
+	// drops, command lines) reach the app; showWindow is nil until the
+	// window exists, and a cold start opens it anyway.
+	var showWindow func()
+	app.OnOpenFile(func(path string) {
+		service.OpenFile(path)
+		if showWindow != nil {
+			showWindow()
+		}
 	})
 
 	app.WhenReady(func() {
@@ -44,7 +62,7 @@ func main() {
 		})
 		_ = win
 
-		showWindow := func() {
+		showWindow = func() {
 			if win.IsMinimized() {
 				win.Restore()
 			}

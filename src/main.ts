@@ -102,6 +102,12 @@ async function init() {
       events.anypicItem.on((item) => renderItemUpdate(item));
       events.anypicBatch.on((next) => handleBatch(next));
       events.anypicCommand.on((command) => void handleCommand(command));
+      // Files opened from the file manager, a Dock drop or the command line
+      // (#6): several can arrive at once, so they are merged into one add.
+      events.anypicOpen.on((path) => queueOpenedPaths([path]));
+      void AnyPic.takePendingOpen()
+        .then((paths) => queueOpenedPaths(paths))
+        .catch(() => {});
       onFileDrop(({ paths }) => void addPaths(paths));
       void AnyPic.info()
         .then((info) => {
@@ -1227,6 +1233,23 @@ async function addPaths(paths: string[]) {
   } catch (error) {
     showError(error, "添加图片失败");
   }
+}
+
+/* Opened-file paths are merged on a short timer so a multi-file open adds
+   once instead of once per file. */
+let openedPaths: string[] = [];
+let openedTimer: number | undefined;
+
+function queueOpenedPaths(paths: string[]) {
+  if (paths.length === 0) return;
+  openedPaths.push(...paths);
+  if (openedTimer) window.clearTimeout(openedTimer);
+  openedTimer = window.setTimeout(() => {
+    const batch = openedPaths;
+    openedPaths = [];
+    openedTimer = undefined;
+    void addPaths(batch);
+  }, 60);
 }
 
 function applyAddResult(

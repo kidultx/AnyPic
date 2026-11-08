@@ -285,6 +285,15 @@ export const AnyPic = {
     return call("AnyPic.OpenAtLoginSetting");
   },
   /**
+   * OpenFile receives a path the OS opened with the app: a file association,
+   * a drop on the Dock or taskbar icon, or a command line argument (#6).
+   * Until the page drains the buffer it queues there; afterwards it goes out
+   * as an event.
+   */
+  openFile(path: string): Promise<void> {
+    return call("AnyPic.OpenFile", path);
+  },
+  /**
    * OpenReleasePage opens the latest release's page in the browser, the path
    * when no installer asset matches this platform.
    */
@@ -356,6 +365,13 @@ export const AnyPic = {
   state(): Promise<Snapshot> {
     return call("AnyPic.State");
   },
+  /**
+   * TakePendingOpen returns the paths opened before the page was ready and
+   * marks the page attached, so later opens arrive as events instead.
+   */
+  takePendingOpen(): Promise<string[]> {
+    return call("AnyPic.TakePendingOpen");
+  },
 } as const;
 
 // ---- Events ----
@@ -364,6 +380,11 @@ export const AnyPic = {
 export const events = {
   /** ItemChanged is sent whenever an image changes while a batch runs. */
   anypicItem: event<Item>("anypic:item"),
+  /**
+   * OpenRequested tells the page that the OS handed the app a file: a file
+   * association, a Dock drop, or a command line path.
+   */
+  anypicOpen: event<string>("anypic:open"),
   /** BatchChanged is sent while a compression batch progresses. */
   anypicBatch: event<Batch>("anypic:batch"),
   /** CommandRequested lets the native menu ask the page to do something. */
