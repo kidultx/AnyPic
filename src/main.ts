@@ -1277,16 +1277,34 @@ async function retryFailed() {
 
 async function removeItem(id: number) {
   if (batch.running) return;
+  const item = items.find((entry) => entry.id === id);
   if (demoMode) {
-    items = items.filter((item) => item.id !== id);
+    items = items.filter((entry) => entry.id !== id);
     invalidatePreview(id);
     scheduleRender();
+    if (item) {
+      showToast(`已移除 ${item.name}`, "info", {
+        label: "撤销",
+        onClick: () => {
+          items.push(item);
+          scheduleRender();
+        },
+      });
+    }
     return;
   }
   try {
     const snapshot = await AnyPic.remove([id]);
     applySnapshot(snapshot, false);
     renderAll();
+    if (item) {
+      // The original file was never touched, so re-adding it restores the
+      // entry; the automatic flow picks it up like a fresh addition.
+      showToast(`已移除 ${item.name}`, "info", {
+        label: "撤销",
+        onClick: () => void addPaths([item.path]),
+      });
+    }
   } catch (error) {
     showError(error, "移除失败");
   }
