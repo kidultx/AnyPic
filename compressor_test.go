@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/gen2brain/webp"
 )
 
@@ -623,5 +624,17 @@ func TestAnimatedGIFIsSkipped(t *testing.T) {
 	}
 	if !strings.Contains(result.Skipped[0].Reason, "动态") {
 		t.Fatalf("reason = %q", result.Skipped[0].Reason)
+	}
+}
+
+func TestIssue2InfoVersionFollowsTheApp(t *testing.T) {
+	// The About dialog must show the packaged app's version, not a constant
+	// that every release has to remember to bump.
+	const test = "9.9.9-test"
+	mygo.App.SetVersion(test)
+	t.Cleanup(func() { mygo.App.SetVersion("") })
+	a := &AnyPic{settings: defaultSettings(), thumbSem: make(chan struct{}, 1)}
+	if got := a.Info().Version; got != test {
+		t.Errorf("Info().Version = %q, want the runtime's app version %q", got, test)
 	}
 }

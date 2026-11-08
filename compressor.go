@@ -1155,8 +1155,15 @@ func (a *AnyPic) Info() AppInfo {
 	a.mu.Lock()
 	shortcut := a.settings.ScreenshotShortcut
 	a.mu.Unlock()
+	// The packaged app's version comes from the bundle (mygo.config.ts at
+	// build time), so releases stop depending on remembering to bump a
+	// constant; the constant only covers unpackaged dev builds.
+	version := mygo.App.Version()
+	if version == "" {
+		version = appVersion
+	}
 	return AppInfo{
-		Version:            appVersion,
+		Version:            version,
 		Platform:           runtime.GOOS,
 		Arch:               runtime.GOARCH,
 		GoVersion:          runtime.Version(),
