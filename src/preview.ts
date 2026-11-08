@@ -109,23 +109,33 @@ export async function openPreview(id: number, mode: "compare" | "beautify" = "co
   switchPreviewMode(mode);
   openModal($("#previewModal"));
   $("#previewClose").focus({ preventScroll: true });
+}
 
-  if (mode === "compare") {
-    if (previewData) {
-      paintPreview(previewData);
-      return;
-    }
-    try {
-      const data = ctx.demoMode() ? demoPreview(item) : await AnyPic.preview(id);
-      previewData = data;
-      previewCache.set(id, data);
-      if (selectedId === id) paintPreview(data);
-    } catch (error) {
-      if (selectedId === id) {
-        closePreview();
-        showError(error, "无法生成预览");
-      }
-    }
+/* Loads the before/after data for the item on show and paints the compare.
+   It runs both when the modal opens on the compare tab and whenever the tabs
+   switch to it — entering through the beautify workbench must not leave the
+   compare panel waiting forever (issue #1). */
+async function loadCompare() {
+  if (selectedId === null) return;
+  if (previewData) {
+    paintPreview(previewData);
+    return;
+  }
+  const item = ctx.items().find((entry) => entry.id === selectedId);
+  if (!item) return;
+  if (item.status !== "done") {
+    $("#compareLoading").hidden = true;
+    showToast(item.status === "working" ? "正在压缩，完成后可以对比" : "压缩完成后才能对比，请先压缩这张图片", "info");
+    return;
+  }
+  try {
+    const data = ctx.demoMode() ? demoPreview(item) : await AnyPic.preview(selectedId);
+    previewData = data;
+    previewCache.set(selectedId, data);
+    paintPreview(data);
+  } catch (error) {
+    $("#compareLoading").hidden = true;
+    showError(error, "无法生成预览");
   }
 }
 
@@ -375,7 +385,10 @@ function switchPreviewMode(mode: "compare" | "beautify") {
   // Export works on the compressed result; the beautify tab has its own
   // apply button instead.
   $<HTMLButtonElement>("#previewExportBtn").hidden = !compare;
-  if (!compare) void renderBeautify();
+  // Each tab loads its own content on entry: 对比 needs the before/after
+  // data (cached after the first load), 美化 renders the tuned style.
+  if (compare) void loadCompare();
+  else void renderBeautify();
 }
 
 /* Applies the tuned style: the backend writes 原名-美化.png beside the
