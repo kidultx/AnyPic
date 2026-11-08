@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"image"
 	"image/color"
-	"image/gif"
 	"image/jpeg"
 	"image/png"
 	"os"
@@ -82,7 +81,7 @@ func TestCompressJPEGProducesSmallerFile(t *testing.T) {
 	original := writeJPEG(t, src, gradientImage(1200, 800, false), 96)
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 1, src, "JPEG", "photo.jpg", Settings{
+	result, err := service.compressOne(context.Background(), 1, src, "JPEG", "photo.jpg", false, Settings{
 		Format: "jpeg", Quality: 55, Suffix: "-anypic",
 	})
 	if err != nil {
@@ -117,7 +116,7 @@ func TestCompressResizesLongEdge(t *testing.T) {
 	writePNG(t, src, gradientImage(1600, 900, false))
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 2, src, "PNG", "wide.png", Settings{
+	result, err := service.compressOne(context.Background(), 2, src, "PNG", "wide.png", false, Settings{
 		Format: "jpeg", Quality: 80, MaxDimension: 800, Suffix: "-min",
 	})
 	if err != nil {
@@ -137,7 +136,7 @@ func TestPNGKeepsTransparency(t *testing.T) {
 	writePNG(t, src, gradientImage(320, 240, true))
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 3, src, "PNG", "alpha.png", Settings{
+	result, err := service.compressOne(context.Background(), 3, src, "PNG", "alpha.png", false, Settings{
 		Format: "auto", Quality: 82, Suffix: "-anypic",
 	})
 	if err != nil {
@@ -169,7 +168,7 @@ func TestJPEGPassthroughWhenOriginalIsBetter(t *testing.T) {
 	original := writeJPEG(t, src, gradientImage(800, 600, false), 30)
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 4, src, "JPEG", "tiny.jpg", Settings{
+	result, err := service.compressOne(context.Background(), 4, src, "JPEG", "tiny.jpg", false, Settings{
 		Format: "jpeg", Quality: 100, Suffix: "-anypic",
 	})
 	if err != nil {
@@ -189,7 +188,7 @@ func TestWebPOutput(t *testing.T) {
 	writePNG(t, src, gradientImage(900, 600, false))
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 5, src, "PNG", "photo.png", Settings{
+	result, err := service.compressOne(context.Background(), 5, src, "PNG", "photo.png", false, Settings{
 		Format: "webp", Quality: 72, Suffix: "-anypic",
 	})
 	if err != nil {
@@ -218,7 +217,7 @@ func TestAlphaFlattenedForJPEG(t *testing.T) {
 	writePNG(t, src, gradientImage(400, 300, true))
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 6, src, "PNG", "alpha.png", Settings{
+	result, err := service.compressOne(context.Background(), 6, src, "PNG", "alpha.png", false, Settings{
 		Format: "jpeg", Quality: 82, Suffix: "-anypic",
 	})
 	if err != nil {
@@ -298,7 +297,7 @@ func TestWebPInputDecodes(t *testing.T) {
 	f.Close()
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 7, src, "WEBP", "input.webp", Settings{
+	result, err := service.compressOne(context.Background(), 7, src, "WEBP", "input.webp", false, Settings{
 		Format: "auto", Quality: 70, Suffix: "-anypic",
 	})
 	if err != nil {
@@ -596,36 +595,6 @@ func decodeDataURLConfig(t *testing.T, s string) image.Config {
 	return cfg
 }
 
-func TestAnimatedGIFIsSkipped(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "loop.gif")
-	first := image.NewPaletted(image.Rect(0, 0, 20, 20), color.Palette{color.Black, color.White})
-	second := image.NewPaletted(image.Rect(0, 0, 20, 20), color.Palette{color.Black, color.White})
-	for i := 0; i < 20; i++ {
-		first.SetColorIndex(i, i, 0)
-		second.SetColorIndex(i, 19-i, 1)
-	}
-	f, err := os.Create(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := gif.EncodeAll(f, &gif.GIF{Image: []*image.Paletted{first, second}, Delay: []int{10, 10}}); err != nil {
-		t.Fatal(err)
-	}
-	f.Close()
-
-	service := newTestService(t)
-	result, err := service.AddPaths([]string{path})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Added != 0 || len(result.Skipped) != 1 {
-		t.Fatalf("added=%d skipped=%v", result.Added, result.Skipped)
-	}
-	if !strings.Contains(result.Skipped[0].Reason, "动态") {
-		t.Fatalf("reason = %q", result.Skipped[0].Reason)
-	}
-}
 
 func TestIssue2InfoVersionFollowsTheApp(t *testing.T) {
 	// The About dialog must show the packaged app's version, not a constant
@@ -636,5 +605,201 @@ func TestIssue2InfoVersionFollowsTheApp(t *testing.T) {
 	a := &AnyPic{settings: defaultSettings(), thumbSem: make(chan struct{}, 1)}
 	if got := a.Info().Version; got != test {
 		t.Errorf("Info().Version = %q, want the runtime's app version %q", got, test)
+	}
+}
+
+func TestIssue4PasteImageStoredOutsideUserFiles(t *testing.T) {
+	// A pasted image has no source file, so it is stored in Pictures/AnyPic
+	// next to screenshots; saving twice must never overwrite the first copy.
+	base := t.TempDir()
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, gradientImage(320, 200, true)); err != nil {
+		t.Fatal(err)
+	}
+	first, err := savePastedImage(buf.Bytes(), base, "2026-11-08 15.30.00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Dir(first) != filepath.Join(base, "AnyPic") {
+		t.Fatalf("saved to %q, want Pictures/AnyPic", first)
+	}
+	if !strings.HasPrefix(filepath.Base(first), "粘贴 2026-11-08 15.30.00") || filepath.Ext(first) != ".png" {
+		t.Fatalf("name = %q", filepath.Base(first))
+	}
+	saved, err := os.ReadFile(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(saved, buf.Bytes()) {
+		t.Fatal("saved bytes differ from the clipboard image")
+	}
+
+	second, err := savePastedImage(buf.Bytes(), base, "2026-11-08 15.30.00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second == first {
+		t.Fatalf("second paste overwrote the first: %q", first)
+	}
+	if _, err := os.Stat(first); err != nil {
+		t.Fatalf("first paste disappeared: %v", err)
+	}
+
+	if _, err := savePastedImage(nil, base, "2026-11-08 15.30.00"); err == nil {
+		t.Fatal("expected an error for empty clipboard data")
+	}
+}
+
+func TestIssue10PNGCompressionLevelByPixels(t *testing.T) {
+	// BestCompression buys a few percent on small images but costs seconds on
+	// multi-megapixel ones; the threshold picks speed without giving up the
+	// lossless guarantee.
+	if got := pngCompressionLevel(16 << 20); got != png.BestCompression {
+		t.Fatalf("level at 16M pixels = %v", got)
+	}
+	if got := pngCompressionLevel(16<<20 + 1); got != png.DefaultCompression {
+		t.Fatalf("level above 16M pixels = %v", got)
+	}
+	if got := pngCompressionLevel(1); got != png.BestCompression {
+		t.Fatalf("level at 1 pixel = %v", got)
+	}
+}
+
+func TestIssue11CompressFailedRetriesOnlyFailures(t *testing.T) {
+	srcDir := t.TempDir()
+	writeJPEG(t, filepath.Join(srcDir, "good.jpg"), gradientImage(800, 600, false), 92)
+	// A PNG whose header parses (so DecodeConfig accepts it at add time) but
+	// whose data is missing, so the full decode fails mid-pass.
+	corrupt := filepath.Join(srcDir, "broken.png")
+	full := filepath.Join(srcDir, "seed.png")
+	writePNG(t, full, gradientImage(64, 48, false))
+	data, err := os.ReadFile(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(corrupt, data[:33], 0o644); err != nil {
+		t.Fatal(err)
+	}
+	os.Remove(full)
+
+	service := newTestService(t)
+	if _, err := service.AddPaths([]string{srcDir}); err != nil {
+		t.Fatal(err)
+	}
+	settings := Settings{Format: "auto", Quality: 82, Suffix: "-anypic", Theme: "system"}
+	if err := service.Compress(settings); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "first pass", func() bool {
+		state := service.State()
+		return !state.Batch.Running && state.Batch.Done == 2
+	})
+	state := service.State()
+	for _, item := range state.Items {
+		if item.Name == "good.jpg" && item.Status != statusDone {
+			t.Fatalf("good.jpg: %s (%s)", item.Status, item.Error)
+		}
+		if item.Name == "broken.png" && item.Status != statusError {
+			t.Fatalf("broken.png: %s", item.Status)
+		}
+	}
+	var goodBefore Item
+	for _, item := range state.Items {
+		if item.Name == "good.jpg" {
+			goodBefore = item
+		}
+	}
+
+	if err := service.CompressFailed(settings); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "retry pass", func() bool {
+		state := service.State()
+		return !state.Batch.Running && state.Batch.Total == 1
+	})
+	for _, item := range service.State().Items {
+		if item.Name == "broken.png" && item.Status != statusError {
+			t.Fatalf("broken.png after retry: %s (%s)", item.Status, item.Error)
+		}
+		if item.Name == "good.jpg" {
+			if item.Status != statusDone || item.CompressedSize != goodBefore.CompressedSize {
+				t.Fatalf("good.jpg was re-encoded: size %d → %d", goodBefore.CompressedSize, item.CompressedSize)
+			}
+		}
+	}
+
+	if err := service.CompressFailed(settings); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "second retry", func() bool {
+		state := service.State()
+		return !state.Batch.Running && state.Batch.Total == 1
+	})
+}
+
+func TestIssue11CompressFailedWithoutFailuresIsAnError(t *testing.T) {
+	srcDir := t.TempDir()
+	writeJPEG(t, filepath.Join(srcDir, "good.jpg"), gradientImage(800, 600, false), 92)
+	service := newTestService(t)
+	if _, err := service.AddPaths([]string{srcDir}); err != nil {
+		t.Fatal(err)
+	}
+	settings := Settings{Format: "auto", Quality: 82, Suffix: "-anypic", Theme: "system"}
+	if err := service.Compress(settings); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "pass", func() bool {
+		state := service.State()
+		return !state.Batch.Running && state.Batch.Done == 1
+	})
+	if err := service.CompressFailed(settings); err == nil {
+		t.Fatal("expected an error when nothing failed")
+	}
+}
+
+func TestIssue5RemoveAcceptsMultipleIDs(t *testing.T) {
+	// The batch-selection UI removes many rows in one call; the backend
+	// contract it leans on is that Remove accepts an arbitrary id list.
+	dir := t.TempDir()
+	writeJPEG(t, filepath.Join(dir, "one.jpg"), gradientImage(64, 48, false), 90)
+	writeJPEG(t, filepath.Join(dir, "two.jpg"), gradientImage(64, 48, false), 90)
+	writeJPEG(t, filepath.Join(dir, "three.jpg"), gradientImage(64, 48, false), 90)
+	service := newTestService(t)
+	if _, err := service.AddPaths([]string{dir}); err != nil {
+		t.Fatal(err)
+	}
+	state := service.State()
+	if len(state.Items) != 3 {
+		t.Fatalf("items = %d", len(state.Items))
+	}
+	snap, err := service.Remove([]int64{state.Items[0].ID, state.Items[2].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// WalkDir is lexical: one.jpg, three.jpg, two.jpg — so removing the
+	// first and third entries leaves three.jpg.
+	if len(snap.Items) != 1 || snap.Items[0].Name != "three.jpg" {
+		t.Fatalf("left = %+v, want only three.jpg", snap.Items)
+	}
+}
+
+func TestIssue6OpenFileBuffersUntilPageAttaches(t *testing.T) {
+	// Files opened from the file manager can arrive before the page has
+	// loaded its event listeners (cold start, or the app waking in the tray).
+	// Until the page drains them, paths wait in the service; afterwards they
+	// go out as events and are not buffered again.
+	service := newTestService(t)
+	service.OpenFile("/tmp/one.jpg")
+	service.OpenFile("/tmp/two.png")
+	paths := service.TakePendingOpen()
+	if len(paths) != 2 || paths[0] != "/tmp/one.jpg" || paths[1] != "/tmp/two.png" {
+		t.Fatalf("pending = %v", paths)
+	}
+	if again := service.TakePendingOpen(); len(again) != 0 {
+		t.Fatalf("draining twice returned %v", again)
+	}
+	service.OpenFile("/tmp/three.webp")
+	if buffered := service.TakePendingOpen(); len(buffered) != 0 {
+		t.Fatalf("open after the page attached was buffered: %v", buffered)
 	}
 }

@@ -88,6 +88,11 @@ export interface Item {
   hasAlpha: boolean;
   passedThrough: boolean;
   savedPercent: number;
+  /**
+   * Animated marks a multi-frame GIF/WebP that converts to animated WebP
+   * instead of a still re-encode (#8).
+   */
+  animated: boolean;
 }
 
 /** Preview holds before and after previews for the comparison view. */
@@ -208,6 +213,14 @@ export const AnyPic = {
     return call("AnyPic.Compress", s);
   },
   /**
+   * CompressFailed resets the images that failed the previous pass (#11) and
+   * starts the same kind of pass CompressReady runs, so finished images are
+   * never re-encoded by a retry.
+   */
+  compressFailed(s: Settings): Promise<void> {
+    return call("AnyPic.CompressFailed", s);
+  },
+  /**
    * CompressReady starts a pass over the images that have not been compressed
    * yet. The automatic flow uses it to pick up images added while an earlier
    * pass was running without re-encoding the ones already finished.
@@ -277,6 +290,15 @@ export const AnyPic = {
     return call("AnyPic.OpenAtLoginSetting");
   },
   /**
+   * OpenFile receives a path the OS opened with the app: a file association,
+   * a drop on the Dock or taskbar icon, or a command line argument (#6).
+   * Until the page drains the buffer it queues there; afterwards it goes out
+   * as an event.
+   */
+  openFile(path: string): Promise<void> {
+    return call("AnyPic.OpenFile", path);
+  },
+  /**
    * OpenReleasePage opens the latest release's page in the browser, the path
    * when no installer asset matches this platform.
    */
@@ -290,6 +312,14 @@ export const AnyPic = {
    */
   openScreenRecordingSettings(): Promise<void> {
     return call("AnyPic.OpenScreenRecordingSettings");
+  },
+  /**
+   * PasteImage stores the image currently on the clipboard in Pictures/AnyPic,
+   * the same place screenshots live, and adds it to the queue. An explicit paste
+   * is the only moment AnyPic reads the clipboard for images.
+   */
+  pasteImage(): Promise<AddResult> {
+    return call("AnyPic.PasteImage");
   },
   /** PickFiles shows the native open dialog and adds the chosen files. */
   pickFiles(): Promise<AddResult> {
@@ -340,6 +370,13 @@ export const AnyPic = {
   state(): Promise<Snapshot> {
     return call("AnyPic.State");
   },
+  /**
+   * TakePendingOpen returns the paths opened before the page was ready and
+   * marks the page attached, so later opens arrive as events instead.
+   */
+  takePendingOpen(): Promise<string[]> {
+    return call("AnyPic.TakePendingOpen");
+  },
 } as const;
 
 // ---- Events ----
@@ -348,6 +385,11 @@ export const AnyPic = {
 export const events = {
   /** ItemChanged is sent whenever an image changes while a batch runs. */
   anypicItem: event<Item>("anypic:item"),
+  /**
+   * OpenRequested tells the page that the OS handed the app a file: a file
+   * association, a Dock drop, or a command line path.
+   */
+  anypicOpen: event<string>("anypic:open"),
   /** BatchChanged is sent while a compression batch progresses. */
   anypicBatch: event<Batch>("anypic:batch"),
   /** CommandRequested lets the native menu ask the page to do something. */

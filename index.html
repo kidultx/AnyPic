@@ -270,12 +270,12 @@
                 <svg aria-hidden="true" class="icon"><use href="#i-image" /></svg>
               </div>
               <h2 id="emptyTitle">拖入图片开始压缩</h2>
-              <p>支持 JPG、PNG、WebP、静态 GIF、BMP 和 TIFF</p>
+              <p>支持 JPG、PNG、WebP、GIF（含动画）、BMP 和 TIFF</p>
               <div class="empty-actions">
                 <button class="primary-btn compact" id="emptyAddBtn" type="button">选择图片…</button>
                 <span>或按 <kbd class="mod-key" data-shortcut="open">⌘O</kbd></span>
               </div>
-              <p class="empty-hint">按 <kbd class="mod-key" id="emptyShotKey">⌘⌥S</kbd> 直接截图，压缩后自动复制</p>
+              <p class="empty-hint">按 <kbd class="mod-key" id="emptyShotKey">⌘⌥S</kbd> 直接截图，或按 <kbd class="mod-key" data-shortcut="paste">⌘V</kbd> 粘贴图片</p>
             </div>
 
             <div class="queue" id="queue" hidden>
@@ -286,6 +286,8 @@
                   <button class="queue-tab" data-filter="error" role="tab" aria-selected="false">失败 <span id="tabErrorCount" hidden>0</span></button>
                 </div>
                 <div class="queue-tools">
+                  <input id="queueFilter" class="queue-filter" type="text" placeholder="按名称过滤" spellcheck="false" aria-label="按名称过滤" autocomplete="off" />
+                  <button class="text-button" id="selectAllBtn" type="button">全选</button>
                   <div class="view-switch" id="viewSwitch" role="group" aria-label="视图">
                     <button data-view="list" class="active" title="列表视图" aria-label="列表视图" aria-pressed="true"><svg aria-hidden="true" class="icon"><use href="#i-list" /></svg></button>
                     <button data-view="grid" title="网格视图" aria-label="网格视图" aria-pressed="false"><svg aria-hidden="true" class="icon"><use href="#i-grid" /></svg></button>
@@ -296,7 +298,14 @@
                   </button>
                 </div>
               </div>
+              <div class="selection-bar" id="selectionBar" hidden>
+                <span>已选 <b id="selectionCount">0</b> 张</span>
+                <button class="text-button" id="removeSelectedBtn" type="button">移除所选</button>
+                <button class="text-button" id="clearSelectionBtn" type="button">取消选择</button>
+              </div>
               <div class="queue-columns" id="queueColumns">
+                <span aria-hidden="true"></span>
+                <span aria-hidden="true"></span>
                 <span>名称</span>
                 <span>结果</span>
                 <span></span>
@@ -318,6 +327,7 @@
               <button class="text-button footer-open" id="openSavedBtn" type="button" hidden>打开文件夹</button>
             </div>
             <div class="batch-actions">
+              <button class="secondary-btn small" id="retryFailedBtn" type="button" hidden>重试失败项</button>
               <button class="secondary-btn small" id="cancelBtn" type="button" hidden>取消</button>
               <button class="primary-btn compact" id="stageActionBtn" type="button">
                 <svg aria-hidden="true" class="icon"><use href="#i-camera" id="stageActionIcon" /></svg>

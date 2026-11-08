@@ -10,7 +10,6 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	"image/gif"
 	"image/jpeg"
 	"image/png"
 	"io"
@@ -20,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/disintegration/imaging"
 	"github.com/egoist/mygo"
@@ -66,6 +66,9 @@ type Item struct {
 	HasAlpha       bool    `json:"hasAlpha"`
 	PassedThrough  bool    `json:"passedThrough"`
 	SavedPercent   float64 `json:"savedPercent"`
+	// Animated marks a multi-frame GIF/WebP that converts to animated WebP
+	// instead of a still re-encode (#8).
+	Animated bool `json:"animated"`
 
 	compressedPath string
 	stale          bool
@@ -178,10 +181,18 @@ type AnyPic struct {
 	// installer download at a time.
 	updateInfo  *UpdateInfo
 	downloading atomic.Bool
+
+	// Files the OS handed over before the page was ready to listen (#6).
+	pendingOpen  []string
+	pageAttached bool
 }
 
 // ItemChanged is sent whenever an image changes while a batch runs.
 var ItemChanged = mygo.NewEvent[Item]("anypic:item")
+
+// OpenRequested tells the page that the OS handed the app a file: a file
+// association, a Dock drop, or a command line path.
+var OpenRequested = mygo.NewEvent[string]("anypic:open")
 
 // BatchChanged is sent while a compression batch progresses.
 var BatchChanged = mygo.NewEvent[Batch]("anypic:batch")
@@ -252,6 +263,76 @@ func (a *AnyPic) AddPaths(paths []string) (AddResult, error) {
 	return a.addPaths(paths)
 }
 
+// PasteImage stores the image currently on the clipboard in Pictures/AnyPic,
+// the same place screenshots live, and adds it to the queue. An explicit paste
+// is the only moment AnyPic reads the clipboard for images.
+func (a *AnyPic) PasteImage() (AddResult, error) {
+	data := mygo.Clipboard.ReadImage()
+	if len(data) == 0 {
+		return AddResult{}, errors.New("剪贴板里没有图片")
+	}
+	base, err := mygo.App.Path(mygo.PathPictures)
+	if err != nil || base == "" {
+		base, err = mygo.App.Path(mygo.PathUserData)
+		if err != nil {
+			return AddResult{}, errors.New("无法确定保存位置")
+		}
+	}
+	path, err := savePastedImage(data, base, time.Now().Format("2006-01-02 15.04.05"))
+	if err != nil {
+		return AddResult{}, fmt.Errorf("无法保存粘贴的图片：%w", err)
+	}
+	result, err := a.AddPaths([]string{path})
+	if err != nil {
+		return AddResult{}, fmt.Errorf("粘贴的图片已保存到 %s，但无法加入队列：%w", path, err)
+	}
+	return result, nil
+}
+
+// savePastedImage writes a clipboard image into base/AnyPic and never
+// overwrites an earlier paste. base is injected so tests do not touch the
+// user's pictures folder.
+func savePastedImage(data []byte, base, stamp string) (string, error) {
+	if len(data) == 0 {
+		return "", errors.New("剪贴板里没有图片")
+	}
+	dir := filepath.Join(base, "AnyPic")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	path := uniquePath(filepath.Join(dir, "粘贴 "+stamp+".png"))
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// OpenFile receives a path the OS opened with the app: a file association,
+// a drop on the Dock or taskbar icon, or a command line argument (#6).
+// Until the page drains the buffer it queues there; afterwards it goes out
+// as an event.
+func (a *AnyPic) OpenFile(path string) {
+	a.mu.Lock()
+	if !a.pageAttached {
+		a.pendingOpen = append(a.pendingOpen, path)
+		a.mu.Unlock()
+		return
+	}
+	a.mu.Unlock()
+	_ = OpenRequested.Broadcast(path)
+}
+
+// TakePendingOpen returns the paths opened before the page was ready and
+// marks the page attached, so later opens arrive as events instead.
+func (a *AnyPic) TakePendingOpen() []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.pageAttached = true
+	paths := a.pendingOpen
+	a.pendingOpen = nil
+	return paths
+}
+
 // PickFiles shows the native open dialog and adds the chosen files.
 func (a *AnyPic) PickFiles(ctx context.Context) (AddResult, error) {
 	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
@@ -307,13 +388,9 @@ func (a *AnyPic) addPaths(paths []string) (AddResult, error) {
 			continue
 		}
 
-		animated, err := isAnimatedFile(path)
+		frames, err := animationFrameCount(path)
 		if err != nil {
 			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: "无法读取文件"})
-			continue
-		}
-		if animated {
-			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: "暂不支持动态图片"})
 			continue
 		}
 
@@ -337,6 +414,7 @@ func (a *AnyPic) addPaths(paths []string) (AddResult, error) {
 			Height:       cfg.Height,
 			OriginalSize: info.Size(),
 			Status:       statusReady,
+			Animated:     frames > 1,
 		}
 		newItems = append(newItems, item)
 		existing[path] = true
@@ -514,6 +592,12 @@ func (a *AnyPic) DecorateItem(id int64, style FrameStyle) (Snapshot, error) {
 		a.mu.Unlock()
 		return Snapshot{}, errors.New("图片不存在")
 	}
+	if item.Animated {
+		// Beautify re-renders the source as a still PNG; an animation would
+		// silently lose its frames.
+		a.mu.Unlock()
+		return Snapshot{}, errors.New("动图暂不支持美化")
+	}
 	path, dir, name := item.Path, item.Dir, item.Name
 	a.mu.Unlock()
 
@@ -587,6 +671,10 @@ func (a *AnyPic) PreviewDecorated(id int64, style FrameStyle) (string, error) {
 		a.mu.Unlock()
 		return "", errors.New("图片不存在")
 	}
+	if item.Animated {
+		a.mu.Unlock()
+		return "", errors.New("动图暂不支持美化")
+	}
 	path := item.Path
 	a.mu.Unlock()
 
@@ -640,6 +728,30 @@ func (a *AnyPic) Compress(s Settings) error {
 // yet. The automatic flow uses it to pick up images added while an earlier
 // pass was running without re-encoding the ones already finished.
 func (a *AnyPic) CompressReady(s Settings) error {
+	return a.startCompression(s, true)
+}
+
+// CompressFailed resets the images that failed the previous pass (#11) and
+// starts the same kind of pass CompressReady runs, so finished images are
+// never re-encoded by a retry.
+func (a *AnyPic) CompressFailed(s Settings) error {
+	a.mu.Lock()
+	if a.running {
+		a.mu.Unlock()
+		return errors.New("已经有一轮压缩正在进行")
+	}
+	found := false
+	for _, item := range a.items {
+		if item.Status == statusError {
+			item.Status = statusReady
+			item.Error = ""
+			found = true
+		}
+	}
+	a.mu.Unlock()
+	if !found {
+		return errors.New("没有失败的图片")
+	}
 	return a.startCompression(s, true)
 }
 
@@ -753,7 +865,7 @@ func (a *AnyPic) compressItem(ctx context.Context, id int64, s Settings) {
 	a.mu.Unlock()
 	_ = ItemChanged.Broadcast(snapshot)
 
-	result, err := a.compressOne(ctx, id, item.Path, item.Format, item.Name, s)
+	result, err := a.compressOne(ctx, id, item.Path, item.Format, item.Name, item.Animated, s)
 
 	a.mu.Lock()
 	item = a.byID[id]
@@ -805,7 +917,12 @@ type compressResult struct {
 	passedThrough bool
 }
 
-func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, name string, s Settings) (compressResult, error) {
+func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, name string, animated bool, s Settings) (compressResult, error) {
+	if animated {
+		// Animations never take the still path: the pipeline must keep every
+		// frame, never flatten to the first one (#8).
+		return a.compressAnimated(ctx, id, path, srcFormat, name, s)
+	}
 	if err := ctx.Err(); err != nil {
 		return compressResult{}, err
 	}
@@ -845,7 +962,7 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 			return compressResult{}, errors.New("JPEG 编码失败")
 		}
 	case "PNG":
-		enc := png.Encoder{CompressionLevel: png.BestCompression}
+		enc := png.Encoder{CompressionLevel: pngCompressionLevel(img.Bounds().Dx() * img.Bounds().Dy())}
 		if err := enc.Encode(&buf, img); err != nil {
 			return compressResult{}, errors.New("PNG 编码失败")
 		}
@@ -1319,31 +1436,16 @@ func (a *AnyPic) removeTemp(item *Item) {
 
 // isAnimatedFile reports whether a GIF or WebP holds more than one frame.
 // Static images of both formats are supported; animations are skipped rather
-// than silently flattened to their first frame.
+// than silently flattened to their first frame. Frame counting walks the file
+// structure without decoding pixels (see animation.go).
 func isAnimatedFile(path string) (bool, error) {
 	switch strings.ToLower(filepath.Ext(path)) {
-	case ".gif":
-		f, err := os.Open(path)
+	case ".gif", ".webp":
+		n, err := animationFrameCount(path)
 		if err != nil {
 			return false, err
 		}
-		defer f.Close()
-		anim, err := gif.DecodeAll(f)
-		if err != nil {
-			return false, err
-		}
-		return len(anim.Image) > 1, nil
-	case ".webp":
-		f, err := os.Open(path)
-		if err != nil {
-			return false, err
-		}
-		defer f.Close()
-		anim, err := webp.DecodeAll(f)
-		if err != nil {
-			return false, err
-		}
-		return len(anim.Image) > 1, nil
+		return n > 1, nil
 	}
 	return false, nil
 }
@@ -1493,8 +1595,25 @@ func extForFormat(format string) string {
 		return "png"
 	case "webp":
 		return "webp"
+	case "gif":
+		return "gif"
+	case "bmp":
+		return "bmp"
+	case "tiff", "tif":
+		return "tif"
 	}
 	return "jpg"
+}
+
+// pngCompressionLevel picks the deflate effort by pixel count (#10):
+// BestCompression saves a few percent on small images but costs seconds on
+// multi-megapixel ones, where DefaultCompression keeps the output lossless,
+// nearly as small, and much faster to produce.
+func pngCompressionLevel(pixels int) png.CompressionLevel {
+	if pixels <= 16<<20 {
+		return png.BestCompression
+	}
+	return png.DefaultCompression
 }
 
 func chooseOutputFormat(setting, srcFormat string, hasAlpha bool) string {

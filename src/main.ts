@@ -25,6 +25,10 @@ let items: Item[] = [];
 let batch: Batch = { running: false, total: 0, done: 0, failed: 0, canceled: false };
 let filter: "all" | "done" | "error" = "all";
 let view: "list" | "grid" = "list";
+/* Selected queue rows, by id; surviving across filter changes but pruned
+   when their images leave the queue. */
+const selected = new Set<number>();
+let nameFilter = "";
 let dirty = false;
 let compressedSignature = "";
 let demoMode = false;
@@ -95,12 +99,15 @@ async function init() {
     try {
       const snapshot = await AnyPic.state();
       applySnapshot(snapshot);
-      events.anypicItem.on((item) => {
-        upsertItem(item);
-        scheduleRender();
-      });
+      events.anypicItem.on((item) => renderItemUpdate(item));
       events.anypicBatch.on((next) => handleBatch(next));
       events.anypicCommand.on((command) => void handleCommand(command));
+      // Files opened from the file manager, a Dock drop or the command line
+      // (#6): several can arrive at once, so they are merged into one add.
+      events.anypicOpen.on((path) => queueOpenedPaths([path]));
+      void AnyPic.takePendingOpen()
+        .then((paths) => queueOpenedPaths(paths))
+        .catch(() => {});
       onFileDrop(({ paths }) => void addPaths(paths));
       void AnyPic.info()
         .then((info) => {
@@ -137,6 +144,7 @@ function detectPlatform() {
     const shortcut = el.dataset.shortcut;
     if (shortcut === "open") el.textContent = isMac ? "⌘ O" : "Ctrl O";
     else if (shortcut === "compress") el.textContent = isMac ? "⌘ ↵" : "Ctrl ↵";
+    else if (shortcut === "paste") el.textContent = isMac ? "⌘ V" : "Ctrl V";
   });
 }
 
@@ -217,6 +225,11 @@ function applySnapshot(snapshot: Snapshot, includeSettings = true) {
     const thumb = previousThumbs.get(item.id);
     return thumb ? { ...item, thumb } : item;
   });
+  // Selection never outlives its images.
+  const alive = new Set(items.map((item) => item.id));
+  for (const id of [...selected]) {
+    if (!alive.has(id)) selected.delete(id);
+  }
   if (includeSettings) {
     settings = { ...defaultSettings(), ...snapshot.settings };
     applyTheme(settings.theme);
@@ -267,6 +280,7 @@ function applyDemoState() {
       hasAlpha: name.endsWith(".png"),
       passedThrough: false,
       savedPercent: ready ? 0 : saved,
+      animated: false,
     };
   });
   batch = { running: false, total: items.length, done: 3, failed: 0, canceled: false };
@@ -441,7 +455,9 @@ function renderStats() {
 
 function renderQueue() {
   const list = $("#queueList");
+  const query = nameFilter.trim().toLowerCase();
   const filtered = items.filter((item) => {
+    if (query && !item.name.toLowerCase().includes(query)) return false;
     if (filter === "done") return item.status === "done";
     if (filter === "error") return item.status === "error";
     return true;
@@ -482,6 +498,36 @@ function renderQueue() {
     button.setAttribute("aria-selected", String(active));
   });
   $("#queueEmptyFilter").hidden = filtered.length > 0;
+  syncSelectionBar();
+  syncSelectAll();
+}
+
+/* The images the current status tab and name filter both let through (#5). */
+function visibleItems(): Item[] {
+  const query = nameFilter.trim().toLowerCase();
+  return items.filter((item) => {
+    if (query && !item.name.toLowerCase().includes(query)) return false;
+    return queueShows(item);
+  });
+}
+
+function allVisibleSelected(): boolean {
+  const visible = visibleItems();
+  return visible.length > 0 && visible.every((item) => selected.has(item.id));
+}
+
+function syncSelectionBar() {
+  $("#selectionBar").hidden = selected.size === 0 || batch.running;
+  $("#selectionCount").textContent = String(selected.size);
+  $<HTMLButtonElement>("#removeSelectedBtn").disabled = batch.running;
+}
+
+function syncSelectAll() {
+  const button = $<HTMLButtonElement>("#selectAllBtn");
+  const all = allVisibleSelected();
+  button.textContent = all ? "取消全选" : "全选";
+  button.setAttribute("aria-pressed", String(all));
+  button.disabled = visibleItems().length === 0 || batch.running;
 }
 
 function createRow(id: number): HTMLElement {
@@ -489,6 +535,9 @@ function createRow(id: number): HTMLElement {
   row.className = "queue-item";
   row.dataset.id = String(id);
   row.innerHTML = `
+    <label class="item-select">
+      <input type="checkbox" data-select aria-label="选择这张图片" />
+    </label>
     <div class="thumb">
       <div class="thumb-placeholder">${icon("image")}</div>
       <span class="thumb-state" hidden></span>
@@ -508,6 +557,17 @@ function createRow(id: number): HTMLElement {
       <button class="icon-btn" data-action="export" title="导出这张" aria-label="导出这张">${icon("download")}</button>
       <button class="icon-btn" data-action="remove" title="移除" aria-label="移除">${icon("x")}</button>
     </div>`;
+
+  const checkbox = row.querySelector<HTMLInputElement>("input[data-select]")!;
+  checkbox.addEventListener("change", () => {
+    if (checkbox.checked) selected.add(id);
+    else selected.delete(id);
+    row.classList.toggle("is-selected", checkbox.checked);
+    syncSelectionBar();
+    syncSelectAll();
+  });
+  // The label must not turn the click into "open preview".
+  checkbox.addEventListener("click", (event) => event.stopPropagation());
 
   row.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
@@ -541,6 +601,10 @@ function updateRow(row: HTMLElement, item: Item) {
   row.dataset.id = String(item.id);
   row.title = item.path ? `${item.name}\n${item.path}` : item.name;
   row.classList.toggle("is-clickable", item.status === "done" || item.status === "error");
+  row.classList.toggle("is-selected", selected.has(item.id));
+  const checkbox = row.querySelector<HTMLInputElement>("input[data-select]")!;
+  checkbox.checked = selected.has(item.id);
+  checkbox.disabled = batch.running;
 
   const thumb = row.querySelector<HTMLElement>(".thumb")!;
   let image = thumb.querySelector<HTMLImageElement>("img");
@@ -584,13 +648,14 @@ function updateRow(row: HTMLElement, item: Item) {
 
   const meta = row.querySelector<HTMLElement>(".item-meta")!;
   const formatClass = item.format.toLowerCase();
+  const animated = item.animated ? `<span class="animated-badge">动图</span>` : "";
   const output = item.status === "done" && item.outputFormat
     ? `<span class="output-format">→ ${esc(item.outputFormat)}</span>`
     : "";
   meta.innerHTML = `<span class="format-chip ${esc(formatClass)}">${esc(item.format || "IMG")}</span><span>${formatDimensions(
     item.width,
     item.height,
-  )}</span>${output}`;
+  )}</span>${animated}${output}`;
 
   const error = row.querySelector<HTMLElement>(".item-error")!;
   if (item.status === "error" && item.error) {
@@ -643,7 +708,8 @@ function updateRow(row: HTMLElement, item: Item) {
   const exportButton = row.querySelector<HTMLButtonElement>('[data-action="export"]')!;
   const removeButton = row.querySelector<HTMLButtonElement>('[data-action="remove"]')!;
   previewButton.disabled = item.status !== "done";
-  decorateButton.disabled = batch.running || (item.status !== "done" && item.status !== "ready");
+  decorateButton.disabled = batch.running || item.animated || (item.status !== "done" && item.status !== "ready");
+  decorateButton.title = item.animated ? "动图暂不支持美化" : "按当前设置美化";
   exportButton.disabled = item.status !== "done" || batch.running;
   removeButton.disabled = batch.running;
 }
@@ -685,6 +751,8 @@ function renderFooter() {
 
   $("#batchStatus").textContent = status;
   $("#openSavedBtn").hidden = !showOpen;
+  $("#retryFailedBtn").hidden = batch.running || failed.length === 0;
+  $("#retryFailedBtn").textContent = failed.length > 0 ? `重试失败项（${failed.length}）` : "重试失败项";
   $("#batchPercent").textContent = `${percent}%`;
   $("#progressFill").style.transform = `scaleX(${percent / 100})`;
   renderStageAction();
@@ -767,6 +835,12 @@ function renderActions() {
   $$<HTMLButtonElement>("#qualityPresets button").forEach((button) => {
     button.disabled = running || settings.format === "png";
   });
+  // Selection follows the removal rules: nothing selectable or removable
+  // while a pass owns the queue.
+  $<HTMLButtonElement>("#selectAllBtn").disabled = running || visibleItems().length === 0;
+  $<HTMLInputElement>("#queueFilter").disabled = running;
+  syncSelectionBar();
+  syncSelectAll();
 }
 
 /* ------------------------------------------------------------------ */
@@ -787,6 +861,7 @@ function bindEvents() {
   $("#screenshotBtn").addEventListener("click", () => void captureScreenshot());
   $("#compressBtn").addEventListener("click", () => void compressAll());
   $("#cancelBtn").addEventListener("click", () => void cancelCompression());
+  $("#retryFailedBtn").addEventListener("click", () => void retryFailed());
   $("#stageActionBtn").addEventListener("click", () => {
     const action = $<HTMLButtonElement>("#stageActionBtn").dataset.action;
     if (action === "screenshot") void captureScreenshot();
@@ -960,6 +1035,34 @@ function bindEvents() {
     next.focus();
   });
 
+  const queueFilter = $<HTMLInputElement>("#queueFilter");
+  queueFilter.addEventListener("input", () => {
+    nameFilter = queueFilter.value;
+    renderQueue();
+  });
+  queueFilter.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    queueFilter.value = "";
+    nameFilter = "";
+    renderQueue();
+  });
+  $("#selectAllBtn").addEventListener("click", () => {
+    const visible = visibleItems();
+    if (allVisibleSelected()) {
+      for (const item of visible) selected.delete(item.id);
+    } else {
+      for (const item of visible) selected.add(item.id);
+    }
+    renderQueue();
+  });
+  $("#removeSelectedBtn").addEventListener("click", () => void removeSelected());
+  $("#clearSelectionBtn").addEventListener("click", () => {
+    selected.clear();
+    renderQueue();
+  });
+
   $("#previewClose").addEventListener("click", closePreview);
   $("[data-close-modal]").addEventListener("click", closePreview);
   $("#previewExportBtn").addEventListener("click", () => {
@@ -998,7 +1101,14 @@ function bindEvents() {
       return;
     }
     if (!meta) return;
-    if (event.key.toLowerCase() === "o") {
+    if (event.key.toLowerCase() === "v") {
+      // Paste is the quickest way in: an image copied anywhere on the machine
+      // lands in the queue. Text fields keep the native paste.
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select") || target?.isContentEditable) return;
+      event.preventDefault();
+      void pasteImage();
+    } else if (event.key.toLowerCase() === "o") {
       event.preventDefault();
       void pickFiles();
     } else if (event.key === "Enter") {
@@ -1080,7 +1190,7 @@ async function captureScreenshot() {
     const result = await AnyPic.captureScreenshot();
     // A fresh capture is "ready", so a done/error filter would hide it.
     if (result.added > 0) filter = "all";
-    applyAddResult(result, "screenshot");
+    applyAddResult(result, "clipboard");
     if (result.copied) showToast("截图已复制到剪贴板", "info");
   } catch (error) {
     // Canceling the region selection, or a second press while the first
@@ -1095,7 +1205,28 @@ function isCaptureNotice(error: unknown) {
   return message.includes("已取消截图") || message.includes("正在截图中");
 }
 
-type AddSource = "files" | "screenshot";
+async function pasteImage() {
+  if (demoMode) {
+    showToast("浏览器预览模式无法读取剪贴板，请在 MyGo 桌面应用中使用", "info");
+    return;
+  }
+  try {
+    const result = await AnyPic.pasteImage();
+    if (result.added > 0) filter = "all";
+    applyAddResult(result, "clipboard");
+  } catch (error) {
+    // Pasting while the clipboard holds text is not an error worth a red
+    // toast; the app simply has nothing to add.
+    const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+    if (message.includes("剪贴板里没有图片")) {
+      showToast("剪贴板里没有图片", "info");
+      return;
+    }
+    showError(error, "粘贴失败");
+  }
+}
+
+type AddSource = "files" | "clipboard";
 
 async function addPaths(paths: string[]) {
   if (demoMode || paths.length === 0) return;
@@ -1105,6 +1236,23 @@ async function addPaths(paths: string[]) {
   } catch (error) {
     showError(error, "添加图片失败");
   }
+}
+
+/* Opened-file paths are merged on a short timer so a multi-file open adds
+   once instead of once per file. */
+let openedPaths: string[] = [];
+let openedTimer: number | undefined;
+
+function queueOpenedPaths(paths: string[]) {
+  if (paths.length === 0) return;
+  openedPaths.push(...paths);
+  if (openedTimer) window.clearTimeout(openedTimer);
+  openedTimer = window.setTimeout(() => {
+    const batch = openedPaths;
+    openedPaths = [];
+    openedTimer = undefined;
+    void addPaths(batch);
+  }, 60);
 }
 
 function applyAddResult(
@@ -1135,14 +1283,14 @@ function applyAddResult(
   }
 
   renderAll();
-  if (auto) startAutoRun(newIDs, source === "screenshot");
+  if (auto) startAutoRun(newIDs, source === "clipboard");
 }
 
-function startAutoRun(ids: number[], fromScreenshot: boolean) {
+function startAutoRun(ids: number[], fromClipboard: boolean) {
   if (ids.length === 0) return;
   autoRun ??= { ids: new Set<number>(), copyIDs: [] };
   for (const id of ids) autoRun.ids.add(id);
-  if (fromScreenshot) autoRun.copyIDs.push(ids[ids.length - 1]!);
+  if (fromClipboard) autoRun.copyIDs.push(ids[ids.length - 1]!);
   // A pass in progress picks the new images up when it ends; the start
   // guard covers the async gap before the backend call.
   if (batch.running || compressStarting) return;
@@ -1221,18 +1369,90 @@ async function cancelCompression() {
   }
 }
 
+async function retryFailed() {
+  if (batch.running || compressStarting) return;
+  const failed = items.filter((item) => item.status === "error");
+  if (failed.length === 0) return;
+  if (demoMode) {
+    showToast("浏览器预览模式无法重试，请在 MyGo 桌面应用中使用", "info");
+    return;
+  }
+  await flushSave();
+  // A retry in the automatic flow saves its results like any other pass.
+  if (autoProcessEnabled()) {
+    autoRun ??= { ids: new Set<number>(), copyIDs: [] };
+    for (const item of failed) autoRun.ids.add(item.id);
+  }
+  compressStarting = true;
+  try {
+    await AnyPic.compressFailed(settings);
+  } catch (error) {
+    autoRun = null;
+    showError(error, "重试失败");
+  } finally {
+    compressStarting = false;
+  }
+}
+
+async function removeSelected() {
+  if (batch.running || selected.size === 0) return;
+  const ids = [...selected];
+  const removed = items.filter((item) => ids.includes(item.id));
+  const ok = await askConfirm(`移除所选 ${ids.length} 张图片？`, "原始图片不会被删除。", "移除");
+  if (!ok) return;
+  if (demoMode) {
+    for (const item of removed) invalidatePreview(item.id);
+    items = items.filter((item) => !selected.has(item.id));
+    selected.clear();
+    renderAll();
+    return;
+  }
+  try {
+    const snapshot = await AnyPic.remove(ids);
+    selected.clear();
+    applySnapshot(snapshot, false);
+    renderAll();
+    // Selection can be undone the same way a single removal is: the files
+    // were never touched, so re-adding their paths restores the entries.
+    showToast(`已移除 ${ids.length} 张图片`, "info", {
+      label: "撤销",
+      onClick: () => void addPaths(removed.map((item) => item.path)),
+    });
+  } catch (error) {
+    showError(error, "移除失败");
+  }
+}
+
 async function removeItem(id: number) {
   if (batch.running) return;
+  const item = items.find((entry) => entry.id === id);
   if (demoMode) {
-    items = items.filter((item) => item.id !== id);
+    items = items.filter((entry) => entry.id !== id);
     invalidatePreview(id);
     scheduleRender();
+    if (item) {
+      showToast(`已移除 ${item.name}`, "info", {
+        label: "撤销",
+        onClick: () => {
+          items.push(item);
+          scheduleRender();
+        },
+      });
+    }
     return;
   }
   try {
     const snapshot = await AnyPic.remove([id]);
     applySnapshot(snapshot, false);
     renderAll();
+    if (item) {
+      // The original file was never touched, so re-adding it restores the
+      // entry; the automatic flow picks it up like a fresh addition.
+      showToast(`已移除 ${item.name}`, "info", {
+        label: "撤销",
+        onClick: () => void addPaths([item.path]),
+      });
+    }
   } catch (error) {
     showError(error, "移除失败");
   }
@@ -1246,6 +1466,7 @@ async function clearQueue() {
     items = [];
     compressedSignature = "";
     lastSaved = null;
+    selected.clear();
     batch = { running: false, total: 0, done: 0, failed: 0, canceled: false };
     renderAll();
     return;
@@ -1256,6 +1477,7 @@ async function clearQueue() {
     compressedSignature = "";
     dirty = false;
     lastSaved = null;
+    selected.clear();
     renderAll();
     showToast("队列已清空", "success");
   } catch (error) {
@@ -1550,7 +1772,35 @@ function handleBatch(next: Batch) {
       showBatchResult(next);
     }
   }
-  scheduleRender();
+  // Progress ticks only move the footer; a full render for every finished
+  // image rewrites every row of a large queue for nothing (#9). The running
+  // edge still gets one, because action buttons and labels change with it.
+  if (wasRunning !== next.running) scheduleRender();
+  else renderFooter();
+}
+
+/* One image changed mid-batch (status, sizes, thumbnail): repaint its row and
+   the aggregates instead of every row of the queue (#9). Rows outside the
+   active filter are not cached, so those fall back to a full render. */
+function renderItemUpdate(item: Item) {
+  upsertItem(item);
+  const row = rowCache.get(item.id);
+  if (!row || !queueShows(item)) {
+    scheduleRender();
+    return;
+  }
+  updateRow(row, item);
+  renderStats();
+  renderFooter();
+  const failed = items.filter((entry) => entry.status === "error").length;
+  $("#tabErrorCount").textContent = String(failed);
+  $("#tabErrorCount").hidden = failed === 0;
+}
+
+function queueShows(item: Item): boolean {
+  if (filter === "done") return item.status === "done";
+  if (filter === "error") return item.status === "error";
+  return true;
 }
 
 function showBatchResult(next: Batch) {
