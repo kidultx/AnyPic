@@ -12,7 +12,7 @@ AnyPic 是一款使用 [MyGo](https://github.com/egoist/mygo) 构建的跨平台
 | Windows 10/11 | `AnyPic Setup <版本> amd64.exe` |
 | Linux | `anypic_<版本>_amd64.deb` 或 `anypic-<版本>-linux-amd64.tar.gz` |
 
-到 [Releases](../../releases) 页面下载对应平台的安装包。安装包由 GitHub Actions 在每次发布 tag 时自动构建（见下文「发布」）。
+到 [Releases](../../releases) 页面下载对应平台的安装包。安装包由 GitHub Actions 在每次发布 tag 时自动构建（见下文「发布」）。装好之后，「关于 AnyPic → 检查更新」可以在应用内检查新版本并下载安装（macOS 挂载 DMG、Windows 运行安装器、Linux 定位到下载的文件）。
 
 > macOS：安装包未经过 Apple 公证，首次打开如果被 Gatekeeper 拦截，请在「系统设置 → 隐私与安全性」里点「仍要打开」。Linux 运行需要系统 WebKitGTK（`libwebkit2gtk-4.1`），Windows 需要 WebView2（Windows 10/11 通常已预装）。
 
@@ -30,7 +30,7 @@ AnyPic 是一款使用 [MyGo](https://github.com/egoist/mygo) 构建的跨平台
 - **前后对比**：在应用内拖动分割线查看压缩前后的细节差异。
 - **灵活的保存方式**：保存到原图旁边或指定文件夹，支持自定义文件名后缀与批量导出。
 - **简洁的桌面界面**：中性底色、白色细边卡片与清晰的表格，支持可隐藏式标题栏、原生菜单、快捷键、拖放、亮/暗主题和窗口状态记忆。
-- **隐私优先**：没有上传、没有账户、没有网络请求；关闭应用时会清理临时文件。
+- **隐私优先**：不上传图片、没有账户、没有遥测，图片处理完全在本机完成；应用唯一的联网行为是检查更新与下载安装包（仅在你操作时，只访问 GitHub Releases）。关闭应用时会清理临时文件。
 
 ## 技术栈
 
@@ -117,6 +117,7 @@ main.go            应用入口、窗口、原生菜单、托盘与命令事件
 compressor.go      图片队列、压缩管线、预览、导出、设置持久化
 screenshot.go      快捷键截图、剪贴板取图与截图归档
 decorate.go        截图外观美化：圆角、描边、投影与背景
+updater.go         应用内更新：检查新版本、下载并代开安装包
 compressor_test.go 后端测试
 screenshot_test.go 截图与设置归一化测试
 index.html         应用界面结构

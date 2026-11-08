@@ -2751,6 +2751,33 @@ body.side-drag * {
   margin-left: auto;
 }
 
+/* The update row is one quiet block under the facts: status line first,
+   actions after — the accent stays on 下载并安装, the only act here. */
+.about-update {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 16px;
+}
+
+.about-update-status {
+  margin: 0;
+  min-width: 0;
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.about-update-status strong {
+  color: var(--text);
+}
+
+.about-update-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
 /* ---------- toasts ---------- */
 
 .toast-stack {

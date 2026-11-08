@@ -1,4 +1,4 @@
-import { AnyPic, events, type Batch, type Item, type Preview, type Settings, type Snapshot } from "./mygo";
+import { AnyPic, events, type Batch, type Item, type Preview, type Settings, type Snapshot, type UpdateInfo } from "./mygo";
 import { isMyGo, onFileDrop, runtime } from "mygo-runtime";
 import { $, $$, closeModal, esc, formatBytes, formatDimensions, icon, openModal, pct, showError, shortenPath, showToast } from "./ui";
 import { bindPreview, closePreview, initPreview, invalidatePreview, openPreview, previewSelectedId } from "./preview";
@@ -110,6 +110,9 @@ async function init() {
           }
         })
         .catch(() => {});
+      // Silent boot-time update check: one GitHub API hit, failures stay
+      // quiet, and a newer release earns a single toast with a shortcut.
+      void checkForUpdate(true);
     } catch (error) {
       showError(error, "无法连接压缩引擎");
       applyDemoState();
@@ -864,6 +867,11 @@ function bindEvents() {
   $("#infoBtn").addEventListener("click", openAbout);
   $("#aboutClose").addEventListener("click", closeAbout);
   $$<HTMLElement>("[data-close-about]").forEach((el) => el.addEventListener("click", closeAbout));
+  $("#updateCheckBtn").addEventListener("click", () => void checkForUpdate(false));
+  $("#updateDownloadBtn").addEventListener("click", () => void downloadUpdate());
+  $("#updatePageBtn").addEventListener("click", () => {
+    void AnyPic.openReleasePage().catch((error) => showError(error, "无法打开发布页"));
+  });
 
   $("#resetBtn").addEventListener("click", () => {
     const next: Settings = {
@@ -1675,12 +1683,98 @@ function resolveConfirm(value: boolean) {
 }
 
 function openAbout() {
+  renderUpdateStatus();
   openModal($("#aboutModal"));
   $("#aboutClose").focus({ preventScroll: true });
 }
 
 function closeAbout() {
   closeModal($("#aboutModal"));
+}
+
+/* ------------------------------------------------------------------ */
+/* update check                                                        */
+/* ------------------------------------------------------------------ */
+
+let updateInfo: UpdateInfo | null = null;
+let updateBusy = false;
+
+function renderUpdateStatus(checking = false) {
+  const status = $("#aboutUpdateStatus");
+  const download = $<HTMLButtonElement>("#updateDownloadBtn");
+  const page = $<HTMLButtonElement>("#updatePageBtn");
+  $<HTMLButtonElement>("#updateCheckBtn").disabled = updateBusy;
+  if (checking) {
+    status.textContent = "正在检查更新…";
+    return;
+  }
+  if (updateInfo?.hasUpdate) {
+    status.innerHTML = `新版本 <strong>v${esc(updateInfo.latest)}</strong> 可用（当前 v${esc(updateInfo.current)}）`;
+    download.hidden = false;
+    page.hidden = false;
+    return;
+  }
+  if (updateInfo) {
+    status.textContent = `已是最新版本（v${esc(updateInfo.current)}）`;
+  }
+  download.hidden = true;
+  page.hidden = true;
+}
+
+/* silent: the boot-time check keeps failures to itself and only speaks when
+   a newer release exists; the About dialog's button always reports. */
+async function checkForUpdate(silent = false) {
+  if (demoMode) {
+    if (!silent) showToast("浏览器预览模式无法检查更新，请在 MyGo 桌面应用中使用", "info");
+    return;
+  }
+  if (updateBusy) return;
+  updateBusy = true;
+  renderUpdateStatus(true);
+  try {
+    updateInfo = await AnyPic.checkForUpdate();
+  } catch (error) {
+    updateInfo = null;
+    if (!silent) showError(error, "无法检查更新");
+    renderUpdateStatus();
+    return;
+  } finally {
+    updateBusy = false;
+  }
+  renderUpdateStatus();
+  if (silent && updateInfo.hasUpdate) {
+    showToast(`新版本 v${updateInfo.latest} 可用，在「关于」里可以更新`, "info", {
+      label: "查看更新",
+      onClick: () => openAbout(),
+    });
+  }
+}
+
+async function downloadUpdate() {
+  if (demoMode) {
+    showToast("浏览器预览模式无法下载更新，请在 MyGo 桌面应用中使用", "info");
+    return;
+  }
+  if (!updateInfo?.hasUpdate || updateBusy) return;
+  updateBusy = true;
+  renderUpdateStatus();
+  const label = $("#updateDownloadLabel");
+  const stopProgress = events.anypicDownload.on((progress) => {
+    label.textContent = progress.total > 0
+      ? `下载中 ${Math.round((progress.received / progress.total) * 100)}%`
+      : `下载中 ${formatBytes(progress.received)}`;
+  });
+  try {
+    const path = await AnyPic.downloadUpdate();
+    showToast(`安装包已下载并打开：${shortenPath(path)}`, "success");
+  } catch (error) {
+    showError(error, "下载失败");
+  } finally {
+    updateBusy = false;
+    stopProgress();
+    label.textContent = "下载并安装";
+    renderUpdateStatus();
+  }
 }
 
 /* ------------------------------------------------------------------ */

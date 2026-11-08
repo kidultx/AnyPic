@@ -492,6 +492,17 @@
           <div><dt>支持输出</dt><dd>JPG / PNG / WebP</dd></div>
           <div><dt>桌面框架</dt><dd>MyGo + Go</dd></div>
         </dl>
+        <div class="about-update">
+          <p class="about-update-status" id="aboutUpdateStatus">检查更新</p>
+          <div class="about-update-actions">
+            <button class="secondary-btn small" id="updateCheckBtn" type="button">检查更新</button>
+            <button class="primary-btn compact" id="updateDownloadBtn" type="button" hidden>
+              <svg aria-hidden="true" class="icon"><use href="#i-download" /></svg>
+              <span id="updateDownloadLabel">下载并安装</span>
+            </button>
+            <button class="secondary-btn small" id="updatePageBtn" type="button" hidden>前往发布页</button>
+          </div>
+        </div>
         <button class="secondary-btn" id="aboutClose" type="button">关闭</button>
       </article>
     </div>

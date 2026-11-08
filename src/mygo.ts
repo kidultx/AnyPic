@@ -32,6 +32,12 @@ export interface Batch {
   canceled: boolean;
 }
 
+/** DownloadProgress reports the installer download's byte counts. */
+export interface DownloadProgress {
+  received: number;
+  total: number;
+}
+
 /** ExportResult reports where compressed images went. */
 export interface ExportResult {
   count: number;
@@ -143,6 +149,17 @@ export interface Snapshot {
   batch: Batch;
 }
 
+/** UpdateInfo reports what CheckForUpdate found. */
+export interface UpdateInfo {
+  hasUpdate: boolean;
+  current: string;
+  latest: string;
+  pageURL: string;
+  assetName: string;
+  assetSize: number;
+  assetURL: string;
+}
+
 // ---- Services ----
 
 /** AnyPic is the service bound to the frontend. */
@@ -166,6 +183,13 @@ export const AnyPic = {
    */
   captureScreenshot(): Promise<AddResult> {
     return call("AnyPic.CaptureScreenshot");
+  },
+  /**
+   * CheckForUpdate asks GitHub for the latest release and compares it with the
+   * running version. The result is remembered for DownloadUpdate.
+   */
+  checkForUpdate(): Promise<UpdateInfo> {
+    return call("AnyPic.CheckForUpdate");
   },
   /** ChooseOutputFolder picks a folder where exports are written. */
   chooseOutputFolder(): Promise<Settings> {
@@ -209,6 +233,14 @@ export const AnyPic = {
   decorateItem(id: number, style: FrameStyle): Promise<Snapshot> {
     return call("AnyPic.DecorateItem", id, style);
   },
+  /**
+   * DownloadUpdate downloads the remembered release asset into the user's
+   * Downloads folder, reporting progress on anypic:download, then opens the
+   * installer. Only one download runs at a time.
+   */
+  downloadUpdate(): Promise<string> {
+    return call("AnyPic.DownloadUpdate");
+  },
   /** ExportAll writes every compressed image to the chosen folder. */
   exportAll(): Promise<ExportResult> {
     return call("AnyPic.ExportAll");
@@ -243,6 +275,13 @@ export const AnyPic = {
    */
   openAtLoginSetting(): Promise<boolean> {
     return call("AnyPic.OpenAtLoginSetting");
+  },
+  /**
+   * OpenReleasePage opens the latest release's page in the browser, the path
+   * when no installer asset matches this platform.
+   */
+  openReleasePage(): Promise<void> {
+    return call("AnyPic.OpenReleasePage");
   },
   /**
    * OpenScreenRecordingSettings opens the macOS privacy pane where the user
@@ -313,4 +352,6 @@ export const events = {
   anypicBatch: event<Batch>("anypic:batch"),
   /** CommandRequested lets the native menu ask the page to do something. */
   anypicCommand: event<string>("anypic:command"),
+  /** DownloadProgressChanged is sent while the installer downloads. */
+  anypicDownload: event<DownloadProgress>("anypic:download"),
 } as const;

@@ -19,6 +19,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/disintegration/imaging"
 	"github.com/egoist/mygo"
@@ -172,6 +173,11 @@ type AnyPic struct {
 	statePath string
 	tempDir   string
 	thumbSem  chan struct{}
+
+	// The updater's remembered check result; downloading guards one
+	// installer download at a time.
+	updateInfo  *UpdateInfo
+	downloading atomic.Bool
 }
 
 // ItemChanged is sent whenever an image changes while a batch runs.
