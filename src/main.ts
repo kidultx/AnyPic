@@ -1,7 +1,7 @@
 import { AnyPic, events, type Batch, type Item, type Preview, type Settings, type Snapshot } from "./mygo";
 import { isMyGo, onFileDrop, runtime } from "mygo-runtime";
 import { $, $$, closeModal, esc, formatBytes, formatDimensions, icon, openModal, pct, showError, shortenPath, showToast } from "./ui";
-import { bindPreview, closePreview, initPreview, invalidatePreview, loadFrameStyle, openPreview, previewSelectedId } from "./preview";
+import { bindPreview, closePreview, initPreview, invalidatePreview, openPreview, previewSelectedId } from "./preview";
 
 function signature(settings: Settings): string {
   return JSON.stringify([settings.format, settings.quality, settings.maxDimension, settings.suffix]);
@@ -89,7 +89,6 @@ async function init() {
   loadViewPreference();
   loadSidebarWidth();
   bindSidebarResize();
-  loadFrameStyle();
   applyTheme(settings.theme);
 
   if (isMyGo()) {

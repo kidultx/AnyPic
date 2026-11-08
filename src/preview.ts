@@ -67,6 +67,12 @@ export async function openPreview(id: number, mode: "compare" | "beautify" = "co
   if (mode === "compare" && item.status !== "done") return;
   if (mode === "beautify" && item.status !== "done" && item.status !== "ready") return;
   selectedId = id;
+  if (beautifyId !== id) {
+    // A fresh item opens the workbench neutral: neither the style nor the
+    // rendered previews of a previous image may leak into this one.
+    frameStyle = defaultFrameStyle();
+    frameCache.clear();
+  }
   beautifyId = id;
   lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   previewData = previewCache.get(id) ?? null;
@@ -238,25 +244,9 @@ function defaultFrameStyle(): FrameStyle {
   };
 }
 
-/* The last tuned style is remembered in localStorage, the same way the view
-   preference is: it is page state, not a compression setting. */
-export function loadFrameStyle() {
-  try {
-    const stored = localStorage.getItem("anypic-frame-style");
-    if (stored) frameStyle = { ...defaultFrameStyle(), ...JSON.parse(stored) };
-  } catch {
-    /* storage can be unavailable */
-  }
-}
-
-function saveFrameStyle() {
-  try {
-    localStorage.setItem("anypic-frame-style", JSON.stringify(frameStyle));
-  } catch {
-    /* storage can be unavailable */
-  }
-}
-
+/* The workbench style lives only for the item being tuned: it starts at the
+   documented default each time a new image opens, and nothing persists to
+   localStorage — a style set on one image must never leak into another. */
 function populateBeautifyControls() {
   const swatches = $("#beautifySwatches");
   for (const hex of BG_SWATCHES) {
@@ -402,7 +392,6 @@ async function applyBeautify() {
 
 function resetBeautify() {
   frameStyle = defaultFrameStyle();
-  saveFrameStyle();
   void renderBeautify();
 }
 
@@ -419,7 +408,6 @@ function bindBeautify() {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-kind]");
     if (!button) return;
     frameStyle.background = button.dataset.kind ?? "none";
-    saveFrameStyle();
     void renderBeautify();
   });
   $("#beautifySwatches").addEventListener("click", (event) => {
@@ -427,13 +415,11 @@ function bindBeautify() {
     if (!button) return;
     frameStyle.background = "solid";
     frameStyle.backgroundColor = button.dataset.color ?? "#e7e7ea";
-    saveFrameStyle();
     void renderBeautify();
   });
   $("#beautifyColor").addEventListener("input", (event) => {
     frameStyle.background = "solid";
     frameStyle.backgroundColor = (event.target as HTMLInputElement).value;
-    saveFrameStyle();
     void renderBeautify();
   });
   $("#beautifyGradients").addEventListener("click", (event) => {
@@ -441,7 +427,6 @@ function bindBeautify() {
     if (!button) return;
     frameStyle.background = "gradient";
     frameStyle.backgroundGradient = button.dataset.gradient ?? "indigo";
-    saveFrameStyle();
     void renderBeautify();
   });
 
@@ -449,33 +434,28 @@ function bindBeautify() {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-radius]");
     if (!button) return;
     frameStyle.radius = button.dataset.radius ?? "medium";
-    saveFrameStyle();
     void renderBeautify();
   });
   $("#beautifyRing").addEventListener("change", (event) => {
     frameStyle.ring = (event.target as HTMLInputElement).checked;
-    saveFrameStyle();
     void renderBeautify();
   });
   $("#beautifyShadow").addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-shadow]");
     if (!button) return;
     frameStyle.shadow = button.dataset.shadow ?? "soft";
-    saveFrameStyle();
     void renderBeautify();
   });
   $("#beautifyPadding").addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-padding]");
     if (!button) return;
     frameStyle.padding = button.dataset.padding ?? "normal";
-    saveFrameStyle();
     void renderBeautify();
   });
   $("#beautifyRatio").addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-ratio]");
     if (!button) return;
     frameStyle.ratio = button.dataset.ratio ?? "origin";
-    saveFrameStyle();
     void renderBeautify();
   });
 

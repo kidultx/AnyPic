@@ -17,8 +17,9 @@
   `ScreenshotClipboard`。
 - 美化样式:`FrameStyle`(decorate.go),六个旋钮——背景(无/纯色 hex/
   渐变预设)、圆角四档、描边、投影两档、边距三档、画布比例(只外扩不裁切)。
-  **样式由页面持有**(美化工作台的状态,存 localStorage 的
-  `anypic-frame-style`),不在 Settings/settings.json 里;后端只渲染,
+  **样式由页面持有,且只属于当前正在调的图**:换一张图,工作台即重置为
+  默认样式、渲染缓存清空——上一张的样式与渲染结果绝不泄漏到下一张;
+  不写 localStorage,不进 Settings/settings.json。后端只渲染,
   `normalizeFrameStyle` 把任何输入兜底成已定义渲染。
 - 视觉参数(边距/圆角缩放、渐变预设表、描边色、投影档位)定义在
   `decorate.go`;页面侧的色板与渐变 chip 列表在 `src/main.ts`
