@@ -95,10 +95,7 @@ async function init() {
     try {
       const snapshot = await AnyPic.state();
       applySnapshot(snapshot);
-      events.anypicItem.on((item) => {
-        upsertItem(item);
-        scheduleRender();
-      });
+      events.anypicItem.on((item) => renderItemUpdate(item));
       events.anypicBatch.on((next) => handleBatch(next));
       events.anypicCommand.on((command) => void handleCommand(command));
       onFileDrop(({ paths }) => void addPaths(paths));
@@ -1579,7 +1576,35 @@ function handleBatch(next: Batch) {
       showBatchResult(next);
     }
   }
-  scheduleRender();
+  // Progress ticks only move the footer; a full render for every finished
+  // image rewrites every row of a large queue for nothing (#9). The running
+  // edge still gets one, because action buttons and labels change with it.
+  if (wasRunning !== next.running) scheduleRender();
+  else renderFooter();
+}
+
+/* One image changed mid-batch (status, sizes, thumbnail): repaint its row and
+   the aggregates instead of every row of the queue (#9). Rows outside the
+   active filter are not cached, so those fall back to a full render. */
+function renderItemUpdate(item: Item) {
+  upsertItem(item);
+  const row = rowCache.get(item.id);
+  if (!row || !queueShows(item)) {
+    scheduleRender();
+    return;
+  }
+  updateRow(row, item);
+  renderStats();
+  renderFooter();
+  const failed = items.filter((entry) => entry.status === "error").length;
+  $("#tabErrorCount").textContent = String(failed);
+  $("#tabErrorCount").hidden = failed === 0;
+}
+
+function queueShows(item: Item): boolean {
+  if (filter === "done") return item.status === "done";
+  if (filter === "error") return item.status === "error";
+  return true;
 }
 
 function showBatchResult(next: Batch) {
