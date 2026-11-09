@@ -32,7 +32,7 @@
     "hero.download": "Download free", "hero.source": "View source",
     "stat.batch": "images per batch", "stat.file": "per-file limit", "stat.upload": "image uploads", "stat.os": "platforms",
     "v.title": "AnyPic in 40 seconds",
-    "v.note": "No sound · on-screen text in Chinese · file sizes are illustrative",
+    "v.note": "No sound · file sizes are illustrative · the app’s interface is currently in Chinese",
     "f.title": "Do one thing well — honestly.",
     "f1.t": "Smart compression",
     "f1.d": "JPG / PNG / WebP keep their format; GIF, BMP and TIFF become JPG or PNG. Quality 30–100, optional long-edge resize to 3840 / 2560 / 1920 / 1280 / 800 px.",
@@ -77,8 +77,32 @@
   const zh = new Map(nodes.map((n) => [n, n.innerHTML]));
   const zhTitle = document.title;
 
+  // The intro video has a Chinese and an English cut ("*.en.*") on the same
+  // timeline, so switching language mid-play picks up at the same moment.
+  const video = document.querySelector("#video video");
+  let resume = null; // { at, playing } waiting for the other cut's metadata
+  video?.addEventListener("loadedmetadata", () => {
+    if (!resume) return;
+    const { at, playing } = resume;
+    resume = null;
+    video.currentTime = at;
+    if (playing) video.play().catch(() => {});
+  });
+  const setVideo = (isEn) => {
+    if (!video) return;
+    const cut = (path) => path.replace(/(\.en)?(\.\w+)$/, (isEn ? ".en" : "") + "$2");
+    const poster = video.getAttribute("poster");
+    if (cut(poster) === poster) return;
+    const state = resume ?? { at: video.currentTime, playing: !video.paused };
+    video.setAttribute("poster", cut(poster));
+    for (const s of video.querySelectorAll("source")) s.setAttribute("src", cut(s.getAttribute("src")));
+    video.load();
+    resume = state.at > 0 || state.playing ? state : null;
+  };
+
   const setLang = (lang) => {
     const isEn = lang === "en";
+    setVideo(isEn);
     for (const n of nodes) n.innerHTML = isEn ? en[n.dataset.i18n] ?? zh.get(n) : zh.get(n);
     root.lang = isEn ? "en" : "zh-CN";
     document.title = isEn ? "AnyPic — Local image compression" : zhTitle;
