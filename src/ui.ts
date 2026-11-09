@@ -70,6 +70,27 @@ export function showError(error: unknown, fallback: string) {
   showToast(message || fallback, "error");
 }
 
+/* The exit class (.toast.leaving) fades with a transition, so an animation
+   event never fires. Listen for the element's own transition end and also
+   arm a timer slightly longer than the CSS fade (0.14s in style.css) as the
+   fallback for reduced motion, an interrupted transition, or a missed event.
+   Whichever arrives first removes the element; the other becomes a no-op. */
+const exitFallbackMs = 240;
+
+export function removeAfterExit(element: HTMLElement) {
+  let removed = false;
+  const remove = () => {
+    if (removed) return;
+    removed = true;
+    element.remove();
+  };
+  element.addEventListener("transitionend", (event) => {
+    // Only the element's own fade counts; children may transition too.
+    if (event.target === element) remove();
+  });
+  window.setTimeout(remove, exitFallbackMs);
+}
+
 export function showToast(
   message: string,
   kind: "success" | "error" | "info" = "info",
@@ -80,11 +101,16 @@ export function showToast(
   toast.className = `toast ${kind}`;
   const iconName = kind === "success" ? "check" : kind === "error" ? "alert" : "info";
   toast.innerHTML = `<span class="toast-icon">${icon(iconName)}</span><span>${esc(message)}</span>`;
+  let dismissed = false;
   if (action) {
     const button = document.createElement("button");
     button.className = "toast-action";
     button.textContent = action.label;
     button.addEventListener("click", () => {
+      // A faded toast ignores pointer events in CSS; this is the second
+      // guard, for anything that still reaches the handler programmatically:
+      // an action must die with its toast (issue #16).
+      if (dismissed) return;
       action.onClick();
       dismiss();
     });
@@ -97,8 +123,14 @@ export function showToast(
   }
 
   let timer = kind === "error" ? 0 : window.setTimeout(dismiss, 3600);
-  const pause = () => window.clearTimeout(timer);
+  const pause = () => {
+    if (dismissed) return;
+    window.clearTimeout(timer);
+  };
   const resume = () => {
+    // Hover/focus can outlive the dismissal (a fade is still on screen);
+    // never re-arm the timer once the toast is on its way out.
+    if (dismissed) return;
     window.clearTimeout(timer);
     timer = window.setTimeout(dismiss, 1800);
   };
@@ -108,8 +140,10 @@ export function showToast(
   toast.addEventListener("focusout", resume);
 
   function dismiss() {
+    if (dismissed) return;
+    dismissed = true;
     window.clearTimeout(timer);
     toast.classList.add("leaving");
-    toast.addEventListener("animationend", () => toast.remove(), { once: true });
+    removeAfterExit(toast);
   }
 }

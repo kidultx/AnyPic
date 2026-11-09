@@ -2,8 +2,7 @@
 
 窗口的那一页：header、队列表格、侧栏设置、对话框。register 和约束住在
 这里。每条约束按 magpie 的形状记录：**一句规则 → 一个 token/helper 名 →
-一个守卫测试 → 一段判例**。判例目前是 magpie 的（每条注明出处）——
-AnyPic 自己的第一起事故发生时，回来记在这里。
+一个守卫测试 → 一段判例**。借来的判例注明出处；自己的事故记在后面。
 
 ## Register
 
@@ -31,6 +30,32 @@ kept for what acts（`src/style.css` 第一行）。中性底、白色细边卡�
 | 动效尊重 `prefers-reduced-motion`；全站一条 easing | style.css `@media`；review 时查 |
 | 不用彩色左边条标状态；状态用圆点或色块 | review 时查 |
 | 对比度：token 注释里的测量数字是承诺（`--ctl-fg` 在它坐的每个面上 ≥4.5:1） | 改 token 值时重算并更新注释 |
+| 退场状态（`.leaving` 等）不接点击；移除只走 [`removeAfterExit`](../../src/ui.ts)，事件之外必须有定时器兜底；action 在 dismiss 后失效 | `TestIssue16ExitStatesIgnorePointerEvents`、`TestIssue16ExitRemovalHasTimerFallback` |
+
+## 退场的契约（#16）
+
+淡出中的元素不再属于界面：它不接点击，也不许无限期留在页面上。
+
+- **不接点击**：退场状态类（`.toast.leaving`，以及 `.hidden` 这类同类
+  关闭状态）在自己的规则里写 `pointer-events: none`，或从同一元素的
+  基础规则继承（`.compare-hint.hidden` 来自 `.compare-hint`）；`display:
+  none` 的状态本身安全。[style.css](../../src/style.css) 的
+  `.toast.leaving` 带一条注释说明它为什么不能只压低 opacity。
+- **移除走 helper**：[`showToast`](../../src/ui.ts) 的 `dismiss()` 只加
+  `.leaving` 并把元素交给 [`removeAfterExit`](../../src/ui.ts)。该
+  helper 监听元素自己的 `transitionend`（忽略子元素冒泡），另有一个略长
+  于 CSS 0.14s 过渡的定时器兜底；两条路谁先到谁移除，只移除一次。
+  `animationend`/`transitionend` 只许出现在这个 helper 里，别处直接挂
+  监听会红。
+- **action 随提示失效**：`dismiss()` 幂等，dismiss 后 mouseleave /
+  focusout 不再重排定时器；带「撤销」等 action 的按钮在 handler 里检查
+  dismissed，即使点击绕过 CSS 也不会执行。撤销入口随提示一起消失，
+  兑现 #12 的「toast 消失后入口随之失效」。
+
+同型审计：弹窗（`.modal` 去掉 `.open`）、拖放遮罩（`.drop-overlay`
+去掉 `.visible`）和快捷键提示（`[hidden]`）都用 `display: none`，关闭后
+不占点击区域；`.item-actions` 的 `opacity: 0` 是 hover 才显形的常驻
+控件，不是退场状态。
 
 ## 借来的判例（magpie 的，Why these rules exist）
 

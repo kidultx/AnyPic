@@ -2814,6 +2814,11 @@ body.side-drag * {
   opacity: 0;
   transform: translateY(3px);
   transition: opacity 0.14s ease, transform 0.14s ease;
+  /* A fading toast must stop eating clicks: the stack sits over the footer
+     actions, and .toast re-enables pointer events for its live state. Without
+     this an invisible toast (and its undo action) stays a click target until
+     removal (issue #16). */
+  pointer-events: none;
 }
 
 .toast-icon {
