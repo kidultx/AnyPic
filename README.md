@@ -1,5 +1,7 @@
 # AnyPic · 轻一点，依然惊艳
 
+中文 · [English](README.en.md)
+
 AnyPic 是一款使用 [MyGo](https://github.com/egoist/mygo) 构建的跨平台图片压缩桌面应用。界面取法简洁的桌面工具：中性画布上排布白色细边卡片，灰色药丸式控件、白色滑块的分段开关、发丝级分隔线与克制的靛蓝主色，设置收在侧栏，操作贴近内容。所有图片都只在本机处理。
 
 官网与 40 秒介绍视频：<https://kidultx.github.io/AnyPic/>
