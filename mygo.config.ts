@@ -3,7 +3,7 @@ import { defineConfig } from "mygo-cli";
 export default defineConfig(({ command }) => ({
   name: "AnyPic",
   identifier: "com.anypic.desktop",
-  version: "0.1.7",
+  version: "0.1.8",
   // `mygo dev` runs devCommand and loads devUrl; `mygo build` runs
   // buildCommand and embeds frontendDist into the app.
   devUrl: "http://localhost:5173",
