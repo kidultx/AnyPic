@@ -1919,11 +1919,12 @@ function applyTheme(mode: string) {
 /* modals                                                              */
 /* ------------------------------------------------------------------ */
 
-function askConfirm(title: string, body: string, confirmLabel: string): Promise<boolean> {
+function askConfirm(title: string, body: string, confirmLabel: string, cancelLabel = "取消"): Promise<boolean> {
   if (confirmResolve) resolveConfirm(false);
   $("#confirmTitle").textContent = title;
   $("#confirmBody").textContent = body;
   $("#confirmOk").textContent = confirmLabel;
+  $("#confirmCancel").textContent = cancelLabel;
   openModal($("#confirmModal"));
   $("#confirmCancel").focus({ preventScroll: true });
   return new Promise<boolean>((resolve) => {
@@ -2021,8 +2022,44 @@ async function downloadUpdate() {
       : `下载中 ${formatBytes(progress.received)}`;
   });
   try {
-    const path = await AnyPic.downloadUpdate();
-    showToast(`安装包已下载并打开：${shortenPath(path)}`, "success");
+    const download = await AnyPic.downloadUpdate();
+    if (!download.needsQuit) {
+      showToast(`安装包已下载并打开：${shortenPath(download.path)}`, "success");
+      return;
+    }
+    // The installer replaces the running app (NSIS cannot overwrite
+    // AnyPic.exe; Finder will not replace a running .app), so the page asks
+    // before quitting (#14). The About dialog closes so the confirmation is
+    // the only modal open.
+    closeAbout();
+    let unsavedNote = "";
+    try {
+      const unsaved = await AnyPic.unsavedResults();
+      if (unsaved > 0) {
+        unsavedNote = `队列里还有 ${unsaved} 张已压缩但未保存的图片，退出后会丢失。`;
+      }
+    } catch {
+      unsavedNote = "如果队列里还有未保存的压缩结果，退出后会丢失。";
+    }
+    const install = await askConfirm(
+      "安装新版本需要先退出 AnyPic",
+      unsavedNote ? `AnyPic 会退出并打开安装程序。${unsavedNote}` : "AnyPic 会退出并打开安装程序。",
+      "退出并安装",
+      "稍后",
+    );
+    if (!install) {
+      void AnyPic.revealPath(download.path);
+      showToast(`安装包已下载到 ${download.path}。安装前请先从托盘退出 AnyPic，再运行安装包。`, "info", {
+        label: "在文件夹中显示",
+        onClick: () => void AnyPic.revealPath(download.path),
+      });
+      return;
+    }
+    try {
+      await AnyPic.installUpdate(download.path);
+    } catch (error) {
+      showError(error, "无法安装更新");
+    }
   } catch (error) {
     showError(error, "下载失败");
   } finally {

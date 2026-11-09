@@ -77,6 +77,10 @@ type Item struct {
 
 	compressedPath string
 	stale          bool
+	// saved records that a copy of the compressed result already exists
+	// outside the session temp directory (an export wrote it), so quitting
+	// will not lose it. See UnsavedResults.
+	saved bool
 }
 
 // Settings are the compression preferences, persisted between launches.
@@ -183,9 +187,11 @@ type AnyPic struct {
 	thumbSem  chan struct{}
 
 	// The updater's remembered check result; downloading guards one
-	// installer download at a time.
-	updateInfo  *UpdateInfo
-	downloading atomic.Bool
+	// installer download at a time, and pendingInstaller is the one path
+	// InstallUpdate may open (set on Windows and macOS).
+	updateInfo       *UpdateInfo
+	downloading      atomic.Bool
+	pendingInstaller string
 
 	// Files the OS handed over before the page was ready to listen (#6).
 	pendingOpen  []string
@@ -778,6 +784,7 @@ func (a *AnyPic) startCompression(s Settings, onlyReady bool) error {
 		item.stale = false
 		item.Status = statusReady
 		item.Error = ""
+		item.saved = false
 	}
 	if len(ids) == 0 {
 		a.mu.Unlock()
@@ -868,6 +875,7 @@ func (a *AnyPic) compressItem(ctx context.Context, id int64, s Settings) {
 	item.TransparencyKept = false
 	item.SavedPercent = 0
 	item.CompressedSize = 0
+	item.saved = false
 	snapshot := *item
 	a.mu.Unlock()
 	_ = ItemChanged.Broadcast(snapshot)
@@ -1116,6 +1124,7 @@ func (a *AnyPic) ExportAll(ctx context.Context) (ExportResult, error) {
 	}
 
 	result := ExportResult{Folder: folder}
+	saved := make([]int64, 0, len(done))
 	for _, item := range done {
 		src := item.compressedPath
 		if item.PassedThrough || src == "" {
@@ -1123,11 +1132,14 @@ func (a *AnyPic) ExportAll(ctx context.Context) (ExportResult, error) {
 		}
 		dest := uniquePath(filepath.Join(folder, item.OutputName))
 		if err := copyFile(src, dest); err != nil {
+			a.markResultsSaved(saved)
 			return result, fmt.Errorf("导出 %s 失败: %w", item.Name, err)
 		}
 		result.Paths = append(result.Paths, dest)
 		result.Count++
+		saved = append(saved, item.ID)
 	}
+	a.markResultsSaved(saved)
 	return result, nil
 }
 
@@ -1160,6 +1172,7 @@ func (a *AnyPic) ExportProcessed(ids []int64) (ExportResult, error) {
 
 	result := ExportResult{}
 	dirs := map[string]bool{}
+	saved := make([]int64, 0, len(done))
 	for _, item := range done {
 		destDir := item.Dir
 		if mode == "folder" && folder != "" {
@@ -1171,15 +1184,18 @@ func (a *AnyPic) ExportProcessed(ids []int64) (ExportResult, error) {
 		}
 		dest := uniquePath(filepath.Join(destDir, item.OutputName))
 		if err := copyFile(src, dest); err != nil {
+			a.markResultsSaved(saved)
 			return result, fmt.Errorf("保存 %s 失败: %w", item.Name, err)
 		}
 		result.Paths = append(result.Paths, dest)
 		result.Count++
+		saved = append(saved, item.ID)
 		if result.Folder == "" {
 			result.Folder = destDir
 		}
 		dirs[destDir] = true
 	}
+	a.markResultsSaved(saved)
 	// A single folder is worth offering to reveal; mixed "alongside" outputs
 	// are spread over several folders, so the caller reveals the first file.
 	if len(dirs) > 1 {
@@ -1227,6 +1243,10 @@ func (a *AnyPic) CopyItemToClipboard(id int64) error {
 	return nil
 }
 
+// saveDialog asks where to write one exported image. A package variable so
+// tests can answer without a native save dialog; the app always uses mygo's.
+var saveDialog = mygo.Dialog.Save
+
 // ExportOne asks where to save one compressed image.
 func (a *AnyPic) ExportOne(ctx context.Context, id int64) (ExportResult, error) {
 	a.mu.Lock()
@@ -1247,7 +1267,7 @@ func (a *AnyPic) ExportOne(ctx context.Context, id int64) (ExportResult, error) 
 	if folder != "" {
 		defaultPath = filepath.Join(folder, copyItem.OutputName)
 	}
-	dest, err := mygo.Dialog.Save(mygo.SaveDialogOptions{
+	dest, err := saveDialog(mygo.SaveDialogOptions{
 		Parent:      mygo.CallerWindow(ctx),
 		Title:       "导出压缩图片",
 		DefaultPath: defaultPath,
@@ -1266,6 +1286,7 @@ func (a *AnyPic) ExportOne(ctx context.Context, id int64) (ExportResult, error) 
 	if err := copyFile(src, dest); err != nil {
 		return ExportResult{}, err
 	}
+	a.markResultsSaved([]int64{id})
 	return ExportResult{Count: 1, Folder: filepath.Dir(dest), Paths: []string{dest}}, nil
 }
 
@@ -1302,6 +1323,36 @@ func (a *AnyPic) Info() AppInfo {
 		ScreenshotShortcut: shortcut,
 		ScreenshotActive:   mygo.GlobalShortcut.IsRegistered(shortcut),
 	}
+}
+
+// markResultsSaved records that copies of the given items' compressed results
+// now exist outside the session temp directory, so quitting will not lose
+// them (see UnsavedResults).
+func (a *AnyPic) markResultsSaved(ids []int64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, id := range ids {
+		if item := a.byID[id]; item != nil {
+			item.saved = true
+		}
+	}
+}
+
+// UnsavedResults reports how many compressed images exist only in this
+// session's temporary directory: the item is done, it did not pass through
+// (a passed-through result is the original file), and no export has written a
+// copy to disk. Cleanup removes the temp files on quit (invariant 4), so
+// these results would be lost.
+func (a *AnyPic) UnsavedResults() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	count := 0
+	for _, item := range a.items {
+		if item.Status == statusDone && !item.saved && !item.PassedThrough && item.compressedPath != "" {
+			count++
+		}
+	}
+	return count
 }
 
 // Cleanup removes this session's temporary files.

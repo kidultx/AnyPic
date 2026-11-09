@@ -18,7 +18,7 @@ Website and 40-second intro video: <https://kidultx.github.io/AnyPic/>
 | Windows 10/11 | `AnyPic Setup <version> amd64.exe` |
 | Linux | `anypic_<version>_amd64.deb` or `anypic-<version>-linux-amd64.tar.gz` |
 
-Download the installer for your platform from the [Releases](../../releases) page. Installers are built automatically by GitHub Actions whenever a release tag is pushed (see “Release & CI” below). After installation, About AnyPic → Check for Updates (「关于 AnyPic → 检查更新」) lets you check for a new version from inside the app and download and install it (mounts the DMG on macOS, runs the installer on Windows, reveals the downloaded file on Linux).
+Download the installer for your platform from the [Releases](../../releases) page. Installers are built automatically by GitHub Actions whenever a release tag is pushed (see “Release & CI” below). After installation, About AnyPic → Check for Updates (「关于 AnyPic → 检查更新」) lets you check for a new version from inside the app and download and install it: on Windows and macOS AnyPic asks you to quit before it opens the installer, and on Linux it reveals the downloaded file.
 
 > macOS: the installer is not notarized by Apple. If Gatekeeper blocks the first launch, go to System Settings → Privacy & Security and click “Open Anyway”. Linux requires system WebKitGTK (`libwebkit2gtk-4.1`) to run; Windows requires WebView2 (usually preinstalled on Windows 10/11).
 
@@ -41,7 +41,7 @@ Download the installer for your platform from the [Releases](../../releases) pag
 - **Before / after**: drag a divider in the app to inspect the difference in detail before and after compression.
 - **Flexible saving**: save next to the original or to a folder you choose, with a custom filename suffix and batch export.
 - **A clean desktop interface**: a neutral background, white cards with hairline borders and clear tables, with a hideable title bar, native menus, keyboard shortcuts, drag and drop, light / dark themes, and window-state memory.
-- **Privacy first**: no image uploads, no accounts, no telemetry; image processing happens entirely on your machine. The app's only network activity is checking for updates and downloading installers (only when you act, and only from GitHub Releases). Temporary files are cleaned up when the app quits.
+- **Privacy first**: no image uploads, no accounts, no telemetry; image processing happens entirely on your machine. The app's only network activity is checking for updates and downloading installers (only when you act, and only from GitHub Releases). Temporary files are cleaned up when the app quits (unsaved compression results are lost).
 
 ## Tech stack
 
@@ -130,7 +130,7 @@ compressor.go      image queue, compression pipeline, previews, export, settings
 animation.go       animated-image frame counting: walks the file structure without decoding pixels
 screenshot.go      hotkey screenshots, clipboard image capture and screenshot archiving
 decorate.go        screenshot beautification: corner radius, border, shadow and background
-updater.go         in-app updates: check for new versions, download and open installers
+updater.go         in-app updates: check for new versions, download installers, quit and open them when installing
 compressor_test.go backend tests
 screenshot_test.go screenshot and settings-normalization tests
 index.html         app UI markup

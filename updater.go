@@ -26,16 +26,36 @@ import (
 // it at a loopback server; the app itself talks to nothing else.
 var releaseAPIBase = "https://api.github.com"
 
+// installerPlatform is the OS the installer flow is written for. A package
+// variable (rather than runtime.GOOS inline) so tests can exercise the
+// Windows, macOS and Linux branches on any host.
+var installerPlatform = runtime.GOOS
+
+// installerRequiresQuit reports whether the platform's installer replaces the
+// running app's files. Windows' NSIS setup cannot overwrite AnyPic.exe while
+// AnyPic runs, and Finder refuses to replace a running .app; both must quit
+// first. Linux installs through the package manager outside the app, so it
+// keeps the reveal-in-folder flow.
+func installerRequiresQuit(goos string) bool {
+	return goos == "windows" || goos == "darwin"
+}
+
 // openInstaller opens the downloaded installer for the user: mounting the
 // DMG on macOS, running the Setup on Windows, showing the file on Linux. A
 // package variable so tests can watch it instead of the OS.
 var openInstaller = func(path string) error {
-	if runtime.GOOS == "linux" {
+	if installerPlatform == "linux" {
 		mygo.Shell.ShowItemInFolder(path)
 		return nil
 	}
 	return mygo.Shell.OpenPath(path)
 }
+
+// quitApp ends the app through the normal quit path, so OnBeforeQuit runs
+// Cleanup and the window's hide-to-tray handler lets the close through. A
+// package variable so tests can observe the quit instead of ending the test
+// process.
+var quitApp = func() { mygo.App.Quit() }
 
 // downloadSizeCap refuses absurd responses rather than filling the disk.
 const downloadSizeCap = 1 << 30
@@ -70,6 +90,14 @@ type UpdateInfo struct {
 type DownloadProgress struct {
 	Received int64 `json:"received"`
 	Total    int64 `json:"total"`
+}
+
+// UpdateDownload reports a finished installer download. NeedsQuit means the
+// installer replaces the running app, so it has not been opened yet: the
+// page confirms with the user, then calls InstallUpdate.
+type UpdateDownload struct {
+	Path      string `json:"path"`
+	NeedsQuit bool   `json:"needsQuit"`
 }
 
 // DownloadProgressChanged is sent while the installer downloads.
@@ -182,36 +210,42 @@ func checkForUpdate() (UpdateInfo, error) {
 }
 
 // DownloadUpdate downloads the remembered release asset into the user's
-// Downloads folder, reporting progress on anypic:download, then opens the
-// installer. Only one download runs at a time.
-func (a *AnyPic) DownloadUpdate() (string, error) {
+// Downloads folder, reporting progress on anypic:download. On Windows and
+// macOS it stops there — the installer rewrites the running app's files — and
+// the page asks the user to quit before InstallUpdate opens it. Linux keeps
+// revealing the downloaded file immediately. Only one download runs at a
+// time.
+func (a *AnyPic) DownloadUpdate() (UpdateDownload, error) {
 	if !a.downloading.CompareAndSwap(false, true) {
-		return "", errors.New("已经在下载中")
+		return UpdateDownload{}, errors.New("已经在下载中")
 	}
 	defer a.downloading.Store(false)
 
 	a.mu.Lock()
 	info := a.updateInfo
+	// A new attempt invalidates the installer the previous download left
+	// behind: InstallUpdate only accepts the latest one.
+	a.pendingInstaller = ""
 	a.mu.Unlock()
 	if info == nil || !info.HasUpdate || info.AssetURL == "" {
-		return "", errors.New("请先检查更新")
+		return UpdateDownload{}, errors.New("请先检查更新")
 	}
 	// The asset URL comes from the api.github.com response over HTTPS; only
 	// https is trusted. Loopback http stays allowed for the tests.
 	u, err := url.Parse(info.AssetURL)
 	if err != nil || (u.Scheme != "https" && u.Hostname() != "127.0.0.1" && u.Hostname() != "localhost") {
-		return "", errors.New("下载地址不可信，已取消")
+		return UpdateDownload{}, errors.New("下载地址不可信，已取消")
 	}
 
 	destDir, err := mygo.App.Path(mygo.PathDownloads)
 	if err != nil || destDir == "" {
 		destDir, err = mygo.App.Path(mygo.PathCache)
 		if err != nil {
-			return "", fmt.Errorf("无法确定下载目录：%w", err)
+			return UpdateDownload{}, fmt.Errorf("无法确定下载目录：%w", err)
 		}
 	}
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		return "", fmt.Errorf("无法准备下载目录：%w", err)
+		return UpdateDownload{}, fmt.Errorf("无法准备下载目录：%w", err)
 	}
 	dest := uniquePath(filepath.Join(destDir, info.AssetName))
 	part := dest + ".part"
@@ -219,11 +253,11 @@ func (a *AnyPic) DownloadUpdate() (string, error) {
 	client := &http.Client{Timeout: 30 * time.Minute}
 	resp, err := client.Get(info.AssetURL)
 	if err != nil {
-		return "", fmt.Errorf("下载失败：%w", err)
+		return UpdateDownload{}, fmt.Errorf("下载失败：%w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("下载失败：更新服务返回 %s", resp.Status)
+		return UpdateDownload{}, fmt.Errorf("下载失败：更新服务返回 %s", resp.Status)
 	}
 
 	total := info.AssetSize
@@ -232,7 +266,7 @@ func (a *AnyPic) DownloadUpdate() (string, error) {
 	}
 	out, err := os.Create(part)
 	if err != nil {
-		return "", fmt.Errorf("无法写入下载文件：%w", err)
+		return UpdateDownload{}, fmt.Errorf("无法写入下载文件：%w", err)
 	}
 	var received int64
 	lastEmit := time.Now()
@@ -244,12 +278,12 @@ func (a *AnyPic) DownloadUpdate() (string, error) {
 			if received > downloadSizeCap {
 				out.Close()
 				_ = os.Remove(part)
-				return "", errors.New("安装包超过大小上限，已取消下载")
+				return UpdateDownload{}, errors.New("安装包超过大小上限，已取消下载")
 			}
 			if _, werr := out.Write(buf[:n]); werr != nil {
 				out.Close()
 				_ = os.Remove(part)
-				return "", fmt.Errorf("无法写入下载文件：%w", werr)
+				return UpdateDownload{}, fmt.Errorf("无法写入下载文件：%w", werr)
 			}
 			if time.Since(lastEmit) >= 200*time.Millisecond {
 				lastEmit = time.Now()
@@ -262,22 +296,57 @@ func (a *AnyPic) DownloadUpdate() (string, error) {
 		if readErr != nil {
 			out.Close()
 			_ = os.Remove(part)
-			return "", fmt.Errorf("下载中断：%w", readErr)
+			return UpdateDownload{}, fmt.Errorf("下载中断：%w", readErr)
 		}
 	}
 	if err := out.Close(); err != nil {
 		_ = os.Remove(part)
-		return "", fmt.Errorf("无法写入下载文件：%w", err)
+		return UpdateDownload{}, fmt.Errorf("无法写入下载文件：%w", err)
 	}
 	_ = DownloadProgressChanged.Broadcast(DownloadProgress{Received: received, Total: received})
 	if err := os.Rename(part, dest); err != nil {
 		_ = os.Remove(part)
-		return "", fmt.Errorf("无法完成下载：%w", err)
+		return UpdateDownload{}, fmt.Errorf("无法完成下载：%w", err)
+	}
+	download := UpdateDownload{Path: dest}
+	if installerRequiresQuit(installerPlatform) {
+		a.mu.Lock()
+		a.pendingInstaller = dest
+		a.mu.Unlock()
+		download.NeedsQuit = true
+		return download, nil
 	}
 	if err := openInstaller(dest); err != nil {
-		return dest, fmt.Errorf("已下载到 %s，但无法打开：%w", dest, err)
+		return download, fmt.Errorf("已下载到 %s，但无法打开：%w", dest, err)
 	}
-	return dest, nil
+	return download, nil
+}
+
+// InstallUpdate opens the installer the latest DownloadUpdate wrote and then
+// quits so it can replace the running app. It accepts only that path — never
+// an arbitrary one — and leaves the app running when the installer cannot be
+// opened. Platforms whose installer does not replace the app (Linux) never
+// get a pending path, so they are refused here.
+func (a *AnyPic) InstallUpdate(path string) error {
+	a.mu.Lock()
+	pending := a.pendingInstaller
+	a.mu.Unlock()
+	if pending == "" || path != pending {
+		return errors.New("请先下载更新")
+	}
+	if _, err := os.Stat(pending); err != nil {
+		return fmt.Errorf("安装包已不存在，AnyPic 仍在运行：%w", err)
+	}
+	if err := openInstaller(pending); err != nil {
+		return fmt.Errorf("无法打开安装包，AnyPic 仍在运行：%w", err)
+	}
+	a.mu.Lock()
+	if a.pendingInstaller == pending {
+		a.pendingInstaller = ""
+	}
+	a.mu.Unlock()
+	quitApp()
+	return nil
 }
 
 // OpenReleasePage opens the latest release's page in the browser, the path

@@ -161,6 +161,16 @@ export interface Snapshot {
   batch: Batch;
 }
 
+/**
+ * UpdateDownload reports a finished installer download. NeedsQuit means the
+ * installer replaces the running app, so it has not been opened yet: the
+ * page confirms with the user, then calls InstallUpdate.
+ */
+export interface UpdateDownload {
+  path: string;
+  needsQuit: boolean;
+}
+
 /** UpdateInfo reports what CheckForUpdate found. */
 export interface UpdateInfo {
   hasUpdate: boolean;
@@ -255,10 +265,13 @@ export const AnyPic = {
   },
   /**
    * DownloadUpdate downloads the remembered release asset into the user's
-   * Downloads folder, reporting progress on anypic:download, then opens the
-   * installer. Only one download runs at a time.
+   * Downloads folder, reporting progress on anypic:download. On Windows and
+   * macOS it stops there — the installer rewrites the running app's files — and
+   * the page asks the user to quit before InstallUpdate opens it. Linux keeps
+   * revealing the downloaded file immediately. Only one download runs at a
+   * time.
    */
-  downloadUpdate(): Promise<string> {
+  downloadUpdate(): Promise<UpdateDownload> {
     return call("AnyPic.DownloadUpdate");
   },
   /** ExportAll writes every compressed image to the chosen folder. */
@@ -287,6 +300,16 @@ export const AnyPic = {
   /** Info returns app and runtime information. */
   info(): Promise<AppInfo> {
     return call("AnyPic.Info");
+  },
+  /**
+   * InstallUpdate opens the installer the latest DownloadUpdate wrote and then
+   * quits so it can replace the running app. It accepts only that path — never
+   * an arbitrary one — and leaves the app running when the installer cannot be
+   * opened. Platforms whose installer does not replace the app (Linux) never
+   * get a pending path, so they are refused here.
+   */
+  installUpdate(path: string): Promise<void> {
+    return call("AnyPic.InstallUpdate", path);
   },
   /**
    * OpenAtLoginSetting reports the app's startup-at-login preference as the
@@ -383,6 +406,16 @@ export const AnyPic = {
    */
   takePendingOpen(): Promise<string[]> {
     return call("AnyPic.TakePendingOpen");
+  },
+  /**
+   * UnsavedResults reports how many compressed images exist only in this
+   * session's temporary directory: the item is done, it did not pass through
+   * (a passed-through result is the original file), and no export has written a
+   * copy to disk. Cleanup removes the temp files on quit (invariant 4), so
+   * these results would be lost.
+   */
+  unsavedResults(): Promise<number> {
+    return call("AnyPic.UnsavedResults");
   },
 } as const;
 
