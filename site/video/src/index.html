@@ -5,7 +5,9 @@
 <title>AnyPic intro — storyboard</title>
 <!-- 40 s intro, 1920×1080. Every frame is a pure function of seek(t), so
      render.mjs can screenshot it frame by frame. Open without ?render to
-     watch it play live. Sizes in scenes 2–3 are illustrative (marked so). -->
+     watch it play live. Sizes in scenes 2–3 are illustrative (marked so).
+     Chinese is the default; ?lang=en swaps every [data-t] text (and the
+     queue's status words) for the English lines in the script below. -->
 <style>
   :root {
     --canvas: #f4f4f6; --surface: #fff; --alt: #f9f9fb; --pill: #f1f1f4; --text: #1c1c21; --soft: #4b4b53;
@@ -107,11 +109,11 @@
 <section class="scene" id="s1">
   <img class="logo" src="../../assets/icon.png" alt="">
   <h1>AnyPic</h1>
-  <p class="sub">把图片压小，不把它交给任何人。</p>
+  <p class="sub" data-t="s1.sub">把图片压小，不把它交给任何人。</p>
 </section>
 
 <section class="scene" id="s2">
-  <h2>拖进来，一次最多 500 张</h2>
+  <h2 data-t="s2.h">拖进来，一次最多 500 张</h2>
   <div class="panel">
     <div class="row"><div class="thumb" style="background:linear-gradient(160deg,#fdba74,#f97316 45%,#7c2d12)"></div>
       <div class="meta"><b>sunrise-over-dolomites.jpg</b><span><em>JPEG</em>6016 × 4016</span></div>
@@ -127,52 +129,52 @@
       <span class="size">38 KB</span><span class="arr">→</span><span class="new" data-v="38 KB">—</span><span class="pill" data-v="已是最优" data-same>待处理</span></div>
   </div>
   <div class="prog"><span>0 / 4 完成</span><div class="bar"><i></i></div></div>
-  <p class="note">数字为示意</p>
+  <p class="note" data-t="note">数字为示意</p>
 </section>
 
 <section class="scene" id="s3">
   <div class="big">−0%</div>
   <p class="sub"><b>8.8 MB</b> → <b>2.4 MB</b></p>
-  <p class="foot">变大了？那就保留原图，标注「已是最优」。</p>
-  <p class="note">数字为示意</p>
+  <p class="foot" data-t="s3.foot">变大了？那就保留原图，标注「已是最优」。</p>
+  <p class="note" data-t="note">数字为示意</p>
 </section>
 
 <section class="scene" id="s4">
-  <h2>动图不丢帧，透明不变色</h2>
+  <h2 data-t="s4.h">动图不丢帧，透明不变色</h2>
   <div class="pair">
     <div class="col">
       <div class="stage"><span class="ball"></span></div>
       <div class="strip"><div class="fr"><i></i></div><div class="fr"><i></i></div><div class="fr"><i></i></div><div class="fr"><i></i></div><div class="fr"><i></i></div><div class="fr"><i></i></div></div>
-      <p class="cap">动画 GIF / WebP → 动画 WebP<small>帧数、节奏、循环都保留</small></p>
+      <p class="cap" data-t="s4.anim">动画 GIF / WebP → 动画 WebP<small>帧数、节奏、循环都保留</small></p>
     </div>
     <div class="col">
       <div class="checker"><i></i><i></i></div>
-      <p class="cap">透明背景原样保留<small>不会被压成黑底或白底</small></p>
+      <p class="cap" data-t="s4.alpha">透明背景原样保留<small>不会被压成黑底或白底</small></p>
     </div>
   </div>
 </section>
 
 <section class="scene" id="s5">
-  <h2>快捷键截图，一键美化</h2>
+  <h2 data-t="s5.h">快捷键截图，一键美化</h2>
   <div class="keys"><b>⌘</b><b>⌥</b><b>S</b></div>
   <div class="bwrap"><div class="bg"></div>
     <div class="shot"><div class="tb"><i></i><i></i><i></i></div>
       <div class="body"><div class="img"></div><div class="lines"><i></i><i></i><i></i><i style="width:60%"></i></div></div></div>
   </div>
-  <div class="chips knobs"><span>背景</span><span>圆角</span><span>描边</span><span>投影</span><span>边距</span><span>画布比例</span></div>
-  <p class="foot">Windows / Linux：Ctrl + Alt + S</p>
+  <div class="chips knobs" data-t="s5.knobs"><span>背景</span><span>圆角</span><span>描边</span><span>投影</span><span>边距</span><span>画布比例</span></div>
+  <p class="foot" data-t="s5.foot">Windows / Linux：Ctrl + Alt + S</p>
 </section>
 
 <section class="scene" id="s6">
   <div class="lock"><svg viewBox="0 0 24 24" width="104" height="104" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1.1" fill="currentColor"/></svg></div>
-  <h2>图片处理，全部在你的电脑上完成</h2>
-  <div class="chips priv"><span>不上传图片</span><span>无账户</span><span>无遥测</span><span>开源</span></div>
-  <p class="foot">唯一的联网：检查更新与下载安装包，只访问 GitHub Releases</p>
+  <h2 data-t="s6.h">图片处理，全部在你的电脑上完成</h2>
+  <div class="chips priv" data-t="s6.chips"><span>不上传图片</span><span>无账户</span><span>无遥测</span><span>开源</span></div>
+  <p class="foot" data-t="s6.foot">唯一的联网：检查更新与下载安装包，只访问 GitHub Releases</p>
 </section>
 
 <section class="scene" id="s7">
   <img class="logo" src="../../assets/icon.png" alt="">
-  <h2>免费下载 AnyPic</h2>
+  <h2 data-t="s7.h">免费下载 AnyPic</h2>
   <div class="chips"><span>macOS</span><span>Windows</span><span>Linux</span></div>
   <div class="cta">github.com/kidultx/AnyPic</div>
 </section>
@@ -187,6 +189,37 @@
   const inOut = (x) => (x = clamp(x), x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+  // English cut: same timing and layout, only the words change. Wording
+  // follows the site's English copy (site/main.js).
+  const EN = {
+    "s1.sub": "Make images smaller. Hand them to no one.",
+    "s2.h": "Drop them in — up to 500 at once",
+    "note": "Figures are illustrative",
+    "s3.foot": "Re-encoding made it bigger? AnyPic keeps the original and labels it “Already optimal”.",
+    "s4.h": "Every frame kept. Transparency intact.",
+    "s4.anim": "Animated GIF / WebP → animated WebP<small>Frames, timing and looping preserved</small>",
+    "s4.alpha": "Transparency preserved<small>Never flattened onto black or white</small>",
+    "s5.h": "Snap with a hotkey, beautify in one click",
+    "s5.knobs": "<span>Background</span><span>Corners</span><span>Border</span><span>Shadow</span><span>Padding</span><span>Canvas ratio</span>",
+    "s5.foot": "Windows / Linux: Ctrl + Alt + S",
+    "s6.h": "Images never leave your computer",
+    "s6.chips": "<span>No uploads</span><span>No account</span><span>No telemetry</span><span>Open source</span>",
+    "s6.foot": "Only network access: update checks and installer downloads, from GitHub Releases only",
+    "s7.h": "Download AnyPic for free",
+  };
+  // Words the queue writes while it runs (scene 2).
+  const WORDS = {
+    zh: { pending: "待处理", running: "压缩中…", optimal: "已是最优", done: (n, all) => `${n} / ${all} 完成` },
+    en: { pending: "Pending", running: "Compressing…", optimal: "Already optimal", done: (n, all) => `${n} / ${all} done` },
+  };
+  const LANG = new URLSearchParams(location.search).get("lang") === "en" ? "en" : "zh";
+  const W = WORDS[LANG];
+  if (LANG === "en") {
+    document.documentElement.lang = "en";
+    for (const el of $$("[data-t]")) el.innerHTML = EN[el.dataset.t];
+  }
+  for (const el of $$("[data-same]")) el.dataset.v = W.optimal;
 
   // Entrance: fade + slide (y/x px) + scale from s, starting at local time a.
   function show(el, t, a, { d = 600, y = 26, x = 0, s = 1 } = {}) {
@@ -235,14 +268,14 @@
           nw.style.opacity = out(prog(L, end, 300));
         } else {
           const running = L >= b0 + i * step;
-          pill.textContent = running ? "压缩中…" : "待处理";
+          pill.textContent = running ? W.running : W.pending;
           pill.className = running ? "pill run" : "pill";
           pill.style.transform = "none";
           nw.textContent = "—";
           nw.style.opacity = .35;
         }
       });
-      $(".prog span", el).textContent = `${done} / ${rows.length} 完成`;
+      $(".prog span", el).textContent = W.done(done, rows.length);
     },
     s3(L, el) {
       show($(".big", el), L, 100, { d: 700, y: 0, s: .9 });
