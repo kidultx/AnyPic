@@ -34,7 +34,7 @@ Download the installer for your platform from the [Releases](../../releases) pag
 - **Launch at login**: the sidebar has a Launch AnyPic at login (「开机时启动 AnyPic」) toggle that writes to the system's login items (Login Items on macOS / XDG autostart on Linux / the Run registry key on Windows); the toggle stays in sync with the actual system state.
 - **Smart compression**: JPG/PNG/WebP keep their format; GIF/BMP/TIFF are converted to the more widely supported JPG or PNG; transparent images are never silently flattened onto black or white.
 - **Animated images to WebP**: animated GIF / WebP become animated WebP with frame count, timing, looping and transparency preserved — never just the first frame; if transcoding makes the file bigger, the original is kept and labeled “Already optimal” (「已是最优」). Beautify (borders, backgrounds, etc.) does not support animated images yet.
-- **Output formats**: Auto (「自动」), or JPG / PNG / WebP, with a quality slider covering 30–100.
+- **Output formats**: Auto (「自动」), or JPG / PNG / WebP, with a quality slider covering 30–100; when JPG is selected, images with transparency are saved as PNG instead of being flattened onto a background.
 - **Resize on demand**: limit the long edge to 3840, 2560, 1920, 1280 or 800 pixels, using Lanczos resampling.
 - **Honest processing that never sacrifices clarity**: if re-encoding would make the file bigger, the original is used as-is and labeled “Already optimal”.
 - **Retry failures**: failed images can be retried in one click; completed images are not re-encoded.
@@ -115,7 +115,7 @@ The interface is organized around a flat set of design tokens (the UI language t
 ## Supported formats & limits
 
 - Input: JPG/JPEG, PNG, WebP, GIF (including animated), BMP, TIFF/TIF.
-- Output: JPG, PNG, WebP; animated GIF / WebP are output as animated WebP.
+- Output: JPG, PNG, WebP (when JPG is selected, images with transparency are saved as PNG instead of being flattened onto a background); animated GIF / WebP are output as animated WebP.
 - Up to 250 MB per file and 500 images per batch.
 - HEIC and AVIF are not supported yet.
 - PNG output is a lossless re-encode, so the quality slider has no effect; this is a limitation of the PNG format itself.

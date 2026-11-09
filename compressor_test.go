@@ -6,8 +6,10 @@ import (
 	"encoding/base64"
 	"image"
 	"image/color"
+	"image/gif"
 	"image/jpeg"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +18,7 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/gen2brain/webp"
+	"golang.org/x/image/tiff"
 )
 
 func gradientImage(width, height int, alpha bool) *image.NRGBA {
@@ -74,6 +77,111 @@ func writePNG(t *testing.T, path string, img image.Image) int64 {
 	}
 	return info.Size()
 }
+
+func writeWebP(t *testing.T, path string, img image.Image) {
+	t.Helper()
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := webp.Encode(f, img, webp.Options{Quality: 80}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// writeTransparentGIF writes a single-frame GIF whose background uses the
+// transparent palette index, the sibling case for indexed transparency.
+func writeTransparentGIF(t *testing.T, path string, img image.Image) {
+	t.Helper()
+	pal := color.Palette{
+		color.NRGBA{A: 0},
+		color.NRGBA{R: 220, G: 60, B: 90, A: 255},
+	}
+	b := img.Bounds()
+	p := image.NewPaletted(b, pal)
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			if _, _, _, a := img.At(x, y).RGBA(); a == 0xffff {
+				p.SetColorIndex(x, y, 1)
+			}
+		}
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := gif.Encode(f, p, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeTIFF(t *testing.T, path string, img image.Image) {
+	t.Helper()
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tiff.Encode(f, img, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// logoImage synthesizes the issue-15 report scene in code: a static image
+// with a fully transparent background, an opaque core and a semi-transparent
+// anti-aliased edge. The reporter's original file was not attached; this keeps
+// the features that matter here (static, alpha with both 0 and intermediate
+// values) and the same scene is written as PNG, WebP, GIF and TIFF.
+func logoImage(width, height int) *image.NRGBA {
+	img := image.NewNRGBA(image.Rect(0, 0, width, height))
+	cx, cy := float64(width)/2, float64(height)/2
+	radius := float64(min(width, height)) / 3
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			d := math.Hypot(float64(x)+0.5-cx, float64(y)+0.5-cy)
+			a := uint8(0)
+			switch {
+			case d <= radius-1:
+				a = 255
+			case d <= radius:
+				a = 128
+			}
+			img.SetNRGBA(x, y, color.NRGBA{R: 220, G: 60, B: 90, A: a})
+		}
+	}
+	return img
+}
+
+func decodePNGFile(t *testing.T, path string) image.Image {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	img, err := png.Decode(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return img
+}
+
+// alphaChannelNRGBA keeps the PNG encoder on the RGBA path even when every
+// pixel is opaque, so the fixture really has an alpha channel. Go's encoder
+// otherwise notices an opaque *image.NRGBA and writes RGB (color type 2),
+// which would make the "alpha channel but fully opaque" case a duplicate of
+// the opaque RGB one.
+type alphaChannelNRGBA struct{ *image.NRGBA }
+
+func (alphaChannelNRGBA) Opaque() bool { return false }
 
 func TestCompressJPEGProducesSmallerFile(t *testing.T) {
 	dir := t.TempDir()
@@ -211,20 +319,269 @@ func TestWebPOutput(t *testing.T) {
 	}
 }
 
-func TestAlphaFlattenedForJPEG(t *testing.T) {
+func TestIssue15JPEGKeepsTransparency(t *testing.T) {
+	// Synthesized report scenario (the reporter's original file was not
+	// attached): a static PNG with a fully transparent background and a
+	// semi-transparent anti-aliased edge, compressed with Format "jpeg",
+	// Quality 82 and suffix "-anypic". The same scene covers the sibling
+	// inputs: static WebP, a static GIF with a transparent palette index, an
+	// alpha TIFF, and a transparent PNG that is resized before encoding.
+	const w, h = 240, 180
+	cases := []struct {
+		name      string
+		ext       string
+		srcFormat string
+		write     func(t *testing.T, path string, img image.Image)
+	}{
+		{"PNG", ".png", "PNG", func(t *testing.T, path string, img image.Image) { writePNG(t, path, img) }},
+		{"WebP", ".webp", "WEBP", writeWebP},
+		{"GIF", ".gif", "GIF", writeTransparentGIF},
+		{"TIFF", ".tif", "TIFF", writeTIFF},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			src := filepath.Join(dir, "logo"+tc.ext)
+			tc.write(t, src, logoImage(w, h))
+
+			service := &AnyPic{tempDir: t.TempDir()}
+			result, err := service.compressOne(context.Background(), 15, src, tc.srcFormat, "logo"+tc.ext, false, Settings{
+				Format: "jpeg", Quality: 82, Suffix: "-anypic",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.format != "PNG" {
+				t.Fatalf("format = %s, want PNG (JPG must not flatten transparency)", result.format)
+			}
+			if !strings.HasSuffix(result.outputName, "-anypic.png") {
+				t.Fatalf("output name = %q, want a .png name", result.outputName)
+			}
+			if !result.transparencyKept {
+				t.Fatal("transparencyKept = false, want true")
+			}
+			if !result.hasAlpha {
+				t.Fatal("result reports no alpha; PNG output must keep it")
+			}
+
+			decoded := decodePNGFile(t, result.path)
+			if _, _, _, a := decoded.At(0, 0).RGBA(); a != 0 {
+				t.Fatalf("background alpha = %#x, want fully transparent", a)
+			}
+			if !imageHasAlpha(decoded, "PNG") {
+				t.Fatal("decoded PNG has no transparency")
+			}
+			if tc.name == "PNG" {
+				// PNG output is a lossless re-encode, so every alpha value
+				// must survive exactly, including the half-transparent edge.
+				orig := logoImage(w, h)
+				for y := 0; y < h; y++ {
+					for x := 0; x < w; x++ {
+						_, _, _, want := orig.At(x, y).RGBA()
+						_, _, _, got := decoded.At(x, y).RGBA()
+						if got != want {
+							t.Fatalf("alpha at (%d,%d) = %#x, want %#x", x, y, got, want)
+						}
+					}
+				}
+			}
+		})
+	}
+
+	t.Run("PNGResized", func(t *testing.T) {
+		dir := t.TempDir()
+		src := filepath.Join(dir, "logo.png")
+		writePNG(t, src, logoImage(600, 400))
+
+		service := &AnyPic{tempDir: t.TempDir()}
+		result, err := service.compressOne(context.Background(), 16, src, "PNG", "logo.png", false, Settings{
+			Format: "jpeg", Quality: 82, MaxDimension: 100, Suffix: "-anypic",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.format != "PNG" {
+			t.Fatalf("format = %s, want PNG", result.format)
+		}
+		if max(result.width, result.height) != 100 {
+			t.Fatalf("resized to %dx%d, want long edge 100", result.width, result.height)
+		}
+		if !result.transparencyKept || !result.hasAlpha {
+			t.Fatalf("transparencyKept=%v hasAlpha=%v, want both true", result.transparencyKept, result.hasAlpha)
+		}
+		decoded := decodePNGFile(t, result.path)
+		if _, _, _, a := decoded.At(0, 0).RGBA(); a != 0 {
+			t.Fatalf("background alpha after resize = %#x, want fully transparent", a)
+		}
+	})
+}
+
+func TestIssue15JPEGWithoutTransparencyStaysJPEG(t *testing.T) {
+	// The JPG choice is only overridden when the post-resize pixels actually
+	// carry transparency. Opaque images keep the requested JPG, and the other
+	// format choices are untouched.
+	gray := image.NewGray(image.Rect(0, 0, 240, 180))
+	for i := range gray.Pix {
+		gray.Pix[i] = uint8(i)
+	}
+	transparent := logoImage(240, 180)
+
+	cases := []struct {
+		name      string
+		img       image.Image
+		srcFormat string
+		format    string
+		want      string
+		wantExt   string
+		colorType byte // nonzero: assert the PNG IHDR color type of the source
+	}{
+		{"opaque PNG keeps JPG", gray, "PNG", "jpeg", "JPEG", "-anypic.jpg", 0},
+		{"alpha channel but fully opaque keeps JPG", alphaChannelNRGBA{gradientImage(240, 180, false)}, "PNG", "jpeg", "JPEG", "-anypic.jpg", 6},
+		{"transparent PNG with auto stays PNG", transparent, "PNG", "auto", "PNG", "-anypic.png", 0},
+		{"transparent PNG with WebP stays WEBP", transparent, "PNG", "webp", "WEBP", "-anypic.webp", 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			src := filepath.Join(dir, "input.png")
+			writePNG(t, src, tc.img)
+			if tc.colorType != 0 {
+				data, err := os.ReadFile(src)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(data) < 26 {
+					t.Fatalf("PNG is %d bytes, too short to carry an IHDR", len(data))
+				}
+				// IHDR color type: signature(8) + length(4) + "IHDR"(4) +
+				// width(4) + height(4) + bit depth(1) = offset 25.
+				if data[25] != tc.colorType {
+					t.Fatalf("PNG color type = %d, want %d (fixture must carry an alpha channel)", data[25], tc.colorType)
+				}
+			}
+
+			service := &AnyPic{tempDir: t.TempDir()}
+			result, err := service.compressOne(context.Background(), 17, src, tc.srcFormat, "input.png", false, Settings{
+				Format: tc.format, Quality: 82, Suffix: "-anypic",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.format != tc.want {
+				t.Fatalf("format = %s, want %s", result.format, tc.want)
+			}
+			if result.transparencyKept {
+				t.Fatal("transparencyKept = true, want false")
+			}
+			if !strings.HasSuffix(result.outputName, tc.wantExt) {
+				t.Fatalf("output name = %q, want a %s name", result.outputName, tc.wantExt)
+			}
+		})
+	}
+}
+
+func TestIssue15PassthroughKeepsTransparency(t *testing.T) {
+	// A transparent PNG already encoded as well as the pipeline can do: the
+	// re-encode cannot beat it, so the original is kept. The output format is
+	// still PNG (the JPG request was overridden) and the flag stays true.
 	dir := t.TempDir()
-	src := filepath.Join(dir, "alpha.png")
-	writePNG(t, src, gradientImage(400, 300, true))
+	src := filepath.Join(dir, "logo.png")
+	img := logoImage(400, 300)
+	f, err := os.Create(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	enc := png.Encoder{CompressionLevel: pngCompressionLevel(img.Bounds().Dx() * img.Bounds().Dy())}
+	if err := enc.Encode(f, img); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 6, src, "PNG", "alpha.png", false, Settings{
+	result, err := service.compressOne(context.Background(), 19, src, "PNG", "logo.png", false, Settings{
 		Format: "jpeg", Quality: 82, Suffix: "-anypic",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.hasAlpha {
-		t.Fatal("JPEG output must not have alpha")
+	if !result.passedThrough {
+		t.Fatalf("expected passthrough, got %d bytes", result.size)
+	}
+	if result.path != src {
+		t.Fatalf("passthrough path = %q, want %q", result.path, src)
+	}
+	if result.format != "PNG" {
+		t.Fatalf("format = %s, want PNG", result.format)
+	}
+	if !result.transparencyKept {
+		t.Fatal("passthrough must still report transparencyKept")
+	}
+}
+
+func TestIssue15TransparencyFlagReachesItemAndResets(t *testing.T) {
+	srcDir := t.TempDir()
+	writePNG(t, filepath.Join(srcDir, "logo.png"), logoImage(200, 150))
+	service := newTestService(t)
+	if _, err := service.AddPaths([]string{srcDir}); err != nil {
+		t.Fatal(err)
+	}
+
+	jpegSettings := Settings{Format: "jpeg", Quality: 82, Suffix: "-anypic", Theme: "system"}
+	if err := service.Compress(jpegSettings); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "jpeg pass", func() bool {
+		state := service.State()
+		return !state.Batch.Running && state.Batch.Total == 1 && allStatus(state, statusDone, statusError)
+	})
+	item := service.State().Items[0]
+	if item.Status != statusDone {
+		t.Fatalf("status = %s (%s)", item.Status, item.Error)
+	}
+	if item.OutputFormat != "PNG" || !item.TransparencyKept {
+		t.Fatalf("after JPG pass: format=%s transparencyKept=%v", item.OutputFormat, item.TransparencyKept)
+	}
+	if !strings.HasSuffix(item.OutputName, "-anypic.png") {
+		t.Fatalf("output name = %q", item.OutputName)
+	}
+
+	// A new pass recomputes the flags from its own result; the WebP pass must
+	// clear the JPG-specific flag.
+	webpSettings := Settings{Format: "webp", Quality: 82, Suffix: "-anypic", Theme: "system"}
+	if err := service.Compress(webpSettings); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "webp pass", func() bool {
+		state := service.State()
+		return !state.Batch.Running && state.Batch.Total == 1 && allStatus(state, statusDone, statusError)
+	})
+	item = service.State().Items[0]
+	if item.OutputFormat != "WEBP" || item.TransparencyKept {
+		t.Fatalf("after WebP pass: format=%s transparencyKept=%v", item.OutputFormat, item.TransparencyKept)
+	}
+}
+
+func TestIssue15AnimatedKeepsItsOwnPath(t *testing.T) {
+	// Animated files ignore the format setting (#8), so the JPG request must
+	// not flip them to PNG and the transparency flag stays false.
+	dir := t.TempDir()
+	src := filepath.Join(dir, "loop.gif")
+	threeFrameGIFFixture(t, src, 48, 32)
+
+	service := &AnyPic{tempDir: t.TempDir()}
+	result, err := service.compressOne(context.Background(), 20, src, "GIF", "loop.gif", true, Settings{
+		Format: "jpeg", Quality: 82, Suffix: "-anypic",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.format == "PNG" {
+		t.Fatal("animated path must not switch to PNG")
+	}
+	if result.transparencyKept {
+		t.Fatal("animated path must not report transparencyKept")
 	}
 }
 
@@ -594,7 +951,6 @@ func decodeDataURLConfig(t *testing.T, s string) image.Config {
 	}
 	return cfg
 }
-
 
 func TestIssue2InfoVersionFollowsTheApp(t *testing.T) {
 	// The About dialog must show the packaged app's version, not a constant

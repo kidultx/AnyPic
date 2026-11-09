@@ -49,23 +49,28 @@ var supportedExtensions = map[string]bool{
 
 // Item is one image in the queue.
 type Item struct {
-	ID             int64   `json:"id"`
-	Name           string  `json:"name"`
-	Path           string  `json:"path"`
-	Dir            string  `json:"dir"`
-	Format         string  `json:"format"`
-	Width          int     `json:"width"`
-	Height         int     `json:"height"`
-	OriginalSize   int64   `json:"originalSize"`
-	CompressedSize int64   `json:"compressedSize"`
-	Status         string  `json:"status"`
-	Error          string  `json:"error,omitempty"`
-	OutputFormat   string  `json:"outputFormat"`
-	OutputName     string  `json:"outputName"`
-	Thumb          string  `json:"thumb,omitempty"`
-	HasAlpha       bool    `json:"hasAlpha"`
-	PassedThrough  bool    `json:"passedThrough"`
-	SavedPercent   float64 `json:"savedPercent"`
+	ID             int64  `json:"id"`
+	Name           string `json:"name"`
+	Path           string `json:"path"`
+	Dir            string `json:"dir"`
+	Format         string `json:"format"`
+	Width          int    `json:"width"`
+	Height         int    `json:"height"`
+	OriginalSize   int64  `json:"originalSize"`
+	CompressedSize int64  `json:"compressedSize"`
+	Status         string `json:"status"`
+	Error          string `json:"error,omitempty"`
+	OutputFormat   string `json:"outputFormat"`
+	OutputName     string `json:"outputName"`
+	Thumb          string `json:"thumb,omitempty"`
+	HasAlpha       bool   `json:"hasAlpha"`
+	PassedThrough  bool   `json:"passedThrough"`
+	// TransparencyKept reports that the user chose JPG but the image has
+	// transparency, so the output was saved as PNG instead of being
+	// flattened onto a background (#15). Passthrough results carry it too,
+	// because the reason still holds.
+	TransparencyKept bool    `json:"transparencyKept"`
+	SavedPercent     float64 `json:"savedPercent"`
 	// Animated marks a multi-frame GIF/WebP that converts to animated WebP
 	// instead of a still re-encode (#8).
 	Animated bool `json:"animated"`
@@ -651,6 +656,7 @@ func (a *AnyPic) DecorateItem(id int64, style FrameStyle) (Snapshot, error) {
 	item.OutputFormat = ""
 	item.OutputName = ""
 	item.PassedThrough = false
+	item.TransparencyKept = false
 	item.SavedPercent = 0
 	item.CompressedSize = 0
 	snapshot := *item
@@ -859,6 +865,7 @@ func (a *AnyPic) compressItem(ctx context.Context, id int64, s Settings) {
 	item.Status = statusWorking
 	item.Error = ""
 	item.PassedThrough = false
+	item.TransparencyKept = false
 	item.SavedPercent = 0
 	item.CompressedSize = 0
 	snapshot := *item
@@ -887,6 +894,7 @@ func (a *AnyPic) compressItem(ctx context.Context, id int64, s Settings) {
 		item.Height = result.height
 		item.HasAlpha = result.hasAlpha
 		item.PassedThrough = result.passedThrough
+		item.TransparencyKept = result.transparencyKept
 		if item.OriginalSize > 0 {
 			item.SavedPercent = float64(item.OriginalSize-result.size) / float64(item.OriginalSize) * 100
 			if item.SavedPercent < 0 {
@@ -907,14 +915,15 @@ func (a *AnyPic) compressItem(ctx context.Context, id int64, s Settings) {
 }
 
 type compressResult struct {
-	path          string
-	size          int64
-	format        string
-	outputName    string
-	width         int
-	height        int
-	hasAlpha      bool
-	passedThrough bool
+	path             string
+	size             int64
+	format           string
+	outputName       string
+	width            int
+	height           int
+	hasAlpha         bool
+	passedThrough    bool
+	transparencyKept bool
 }
 
 func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, name string, animated bool, s Settings) (compressResult, error) {
@@ -948,17 +957,15 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 
 	hasAlpha := imageHasAlpha(img, srcFormat)
 	outFormat := chooseOutputFormat(s.Format, srcFormat, hasAlpha)
+	// The user asked for JPG but the image has transparency, so the output is
+	// PNG; the page says so instead of silently flattening the image (#15).
+	transparencyKept := s.Format == "jpeg" && hasAlpha && outFormat == "PNG"
 	outputName := outputFilename(name, s.Suffix, extForFormat(outFormat))
 
 	var buf bytes.Buffer
 	switch outFormat {
 	case "JPEG":
-		toEncode := img
-		if hasAlpha {
-			toEncode = flattenOnWhite(img)
-			hasAlpha = false
-		}
-		if err := jpeg.Encode(&buf, toEncode, &jpeg.Options{Quality: s.Quality}); err != nil {
+		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: s.Quality}); err != nil {
 			return compressResult{}, errors.New("JPEG 编码失败")
 		}
 	case "PNG":
@@ -989,14 +996,15 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 	// was requested: the original is already better.
 	if !resized && strings.EqualFold(outFormat, srcFormat) && int64(buf.Len()) >= info.Size() {
 		return compressResult{
-			path:          path,
-			size:          info.Size(),
-			format:        displayFormat(strings.ToLower(srcFormat)),
-			outputName:    outputFilename(name, s.Suffix, extForFormat(srcFormat)),
-			width:         b.Dx(),
-			height:        b.Dy(),
-			hasAlpha:      hasAlpha,
-			passedThrough: true,
+			path:             path,
+			size:             info.Size(),
+			format:           displayFormat(strings.ToLower(srcFormat)),
+			outputName:       outputFilename(name, s.Suffix, extForFormat(srcFormat)),
+			width:            b.Dx(),
+			height:           b.Dy(),
+			hasAlpha:         hasAlpha,
+			passedThrough:    true,
+			transparencyKept: transparencyKept,
 		}, nil
 	}
 
@@ -1017,13 +1025,14 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 	}
 
 	return compressResult{
-		path:       outPath,
-		size:       int64(buf.Len()),
-		format:     outFormat,
-		outputName: outputName,
-		width:      b.Dx(),
-		height:     b.Dy(),
-		hasAlpha:   hasAlpha,
+		path:             outPath,
+		size:             int64(buf.Len()),
+		format:           outFormat,
+		outputName:       outputName,
+		width:            b.Dx(),
+		height:           b.Dy(),
+		hasAlpha:         hasAlpha,
+		transparencyKept: transparencyKept,
 	}, nil
 }
 
@@ -1619,6 +1628,12 @@ func pngCompressionLevel(pixels int) png.CompressionLevel {
 func chooseOutputFormat(setting, srcFormat string, hasAlpha bool) string {
 	switch setting {
 	case "jpeg":
+		if hasAlpha {
+			// JPG cannot store transparency and flattening would silently
+			// paint a white background, so a transparent image is saved as
+			// lossless PNG instead (invariant 3, #15).
+			return "PNG"
+		}
 		return "JPEG"
 	case "png":
 		return "PNG"

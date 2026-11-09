@@ -98,14 +98,16 @@ func TestNoNewNativeSelects(t *testing.T) {
 // queue/entry features grew all three: paste-to-queue (#4), batch selection
 // with name filter (#5), retry-failed (#11) and undo-remove (#12) in
 // main.ts; the selection checkbox column, filter field and selection bar in
-// style.css and index.html. Each budget is current + ~2% headroom. Over
-// budget: move the code to its own module, or raise the budget here and say
-// what the growth was for.
+// style.css and index.html. #15 grew main.ts to 77,153: the JPG transparency
+// sidebar note, the "→ PNG · 保留透明" queue row and the demo's JPG→PNG
+// result. Each budget is current + ~2% headroom. Over budget: move the code
+// to its own module, or raise the budget here and say what the growth was
+// for.
 var uiBudgets = []struct {
 	file   string
 	budget int
 }{
-	{"src/main.ts", 76_800},
+	{"src/main.ts", 78_700},
 	{"src/style.css", 58_400},
 	{"index.html", 31_000},
 }

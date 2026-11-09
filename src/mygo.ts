@@ -87,6 +87,13 @@ export interface Item {
   thumb?: string;
   hasAlpha: boolean;
   passedThrough: boolean;
+  /**
+   * TransparencyKept reports that the user chose JPG but the image has
+   * transparency, so the output was saved as PNG instead of being
+   * flattened onto a background (#15). Passthrough results carry it too,
+   * because the reason still holds.
+   */
+  transparencyKept: boolean;
   savedPercent: number;
   /**
    * Animated marks a multi-frame GIF/WebP that converts to animated WebP

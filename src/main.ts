@@ -261,7 +261,9 @@ function applyDemoState() {
   ] as const;
   items = names.map((entry, index) => {
     const [name, original, width, height, compressed, outputFormat, saved] = entry;
-    const ready = index === 3;
+    // The transparent PNG starts pending so the demo can exercise the
+    // JPG → PNG transparency rule when the format is switched (#15).
+    const ready = index === 1 || index === 3;
     const thumb = demoThumb(index, palettes[index] ?? palettes[0]!);
     return {
       id: index + 1,
@@ -279,11 +281,12 @@ function applyDemoState() {
       thumb,
       hasAlpha: name.endsWith(".png"),
       passedThrough: false,
+      transparencyKept: false,
       savedPercent: ready ? 0 : saved,
       animated: false,
     };
   });
-  batch = { running: false, total: items.length, done: 3, failed: 0, canceled: false };
+  batch = { running: false, total: items.length, done: 2, failed: 0, canceled: false };
   compressedSignature = signature(settings);
   syncSettingsToUI();
   applyTheme("system");
@@ -405,7 +408,7 @@ function renderSettings() {
   const tips: Record<string, [string, string]> = {
     auto: ["保持原格式", "原格式保留；其他格式转为 JPG 或 PNG。"],
     webp: ["WebP", "体积更小，支持透明。"],
-    jpeg: ["JPG", "兼容性最好，适合照片。"],
+    jpeg: ["JPG", "兼容性最好，适合照片；透明图片存为 PNG。"],
     png: ["PNG", "无损压缩，质量设置不适用。"],
   };
   const [tipTitle, tipText] = tips[format] ?? tips.auto!;
@@ -650,7 +653,9 @@ function updateRow(row: HTMLElement, item: Item) {
   const formatClass = item.format.toLowerCase();
   const animated = item.animated ? `<span class="animated-badge">动图</span>` : "";
   const output = item.status === "done" && item.outputFormat
-    ? `<span class="output-format">→ ${esc(item.outputFormat)}</span>`
+    ? item.transparencyKept
+      ? `<span class="output-format" title="JPG 不支持透明，已改存为 PNG（无损，质量设置不适用）">→ PNG · 保留透明</span>`
+      : `<span class="output-format">→ ${esc(item.outputFormat)}</span>`
     : "";
   meta.innerHTML = `<span class="format-chip ${esc(formatClass)}">${esc(item.format || "IMG")}</span><span>${formatDimensions(
     item.width,
@@ -1329,6 +1334,7 @@ async function compressAll(auto = false) {
       compressedSize: 0,
       savedPercent: 0,
       passedThrough: false,
+      transparencyKept: false,
       outputFormat: "",
       outputName: "",
     }));
@@ -2048,8 +2054,17 @@ async function demoCompress() {
     item.status = "done";
     item.compressedSize = Math.round(item.originalSize * (0.19 + Math.random() * 0.12));
     item.savedPercent = ((item.originalSize - item.compressedSize) / item.originalSize) * 100;
-    item.outputFormat = settings.format === "auto" ? "WEBP" : settings.format.toUpperCase();
-    item.outputName = item.name.replace(/\.[^.]+$/, `${settings.suffix}.${settings.format === "png" ? "png" : settings.format === "jpeg" ? "jpg" : "webp"}`);
+    if (settings.format === "jpeg" && item.hasAlpha) {
+      // JPG cannot carry transparency; the demo mirrors the backend, which
+      // saves a transparent image as lossless PNG instead (#15).
+      item.outputFormat = "PNG";
+      item.transparencyKept = true;
+      item.outputName = item.name.replace(/\.[^.]+$/, `${settings.suffix}.png`);
+    } else {
+      item.outputFormat = settings.format === "auto" ? "WEBP" : settings.format.toUpperCase();
+      item.transparencyKept = false;
+      item.outputName = item.name.replace(/\.[^.]+$/, `${settings.suffix}.${settings.format === "png" ? "png" : settings.format === "jpeg" ? "jpg" : "webp"}`);
+    }
     batch.done++;
     scheduleRender();
   }
