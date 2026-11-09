@@ -351,6 +351,69 @@ func functionBody(src, name string) (body string, start, end int, ok bool) {
 	return body, open, end, ok
 }
 
+// ruleSourcePath returns the lookup form of a source path: forward slashes
+// on every OS. filepath.ToSlash only converts the host OS separator, so it
+// would leave a Windows-style path untouched when the tests run on macOS or
+// Linux; the explicit ReplaceAll keeps the rule testable on all three
+// platforms.
+func ruleSourcePath(path string) string {
+	return strings.ReplaceAll(path, "\\", "/")
+}
+
+// readRuleSources indexes the TypeScript files the UI rules apply to, keyed
+// by the slash-normalized path the rule checks look up. readSource is
+// injected so tests can feed Windows-style paths without depending on the
+// host OS.
+func readRuleSources(files []string, readSource func(string) ([]byte, error)) (map[string]string, error) {
+	sources := make(map[string]string, len(files))
+	for _, file := range files {
+		key := ruleSourcePath(file)
+		if key == "src/mygo.ts" {
+			continue
+		}
+		raw, err := readSource(file)
+		if err != nil {
+			return nil, err
+		}
+		sources[key] = stripTSComments(string(raw))
+	}
+	return sources, nil
+}
+
+// ruleSources collects src/*.ts from the real tree, keyed by normalized path.
+func ruleSources(t *testing.T) map[string]string {
+	t.Helper()
+	files, err := filepath.Glob("src/*.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sources, err := readRuleSources(files, os.ReadFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sources
+}
+
+// TestIssue16SourcePathsAreSlashNormalized guards the Windows half of the
+// #16 checks: filepath.Glob returns `src\ui.ts` there, while every lookup is
+// written as `src/ui.ts`. The Windows spelling is injected on every OS, so
+// this test catches a regression on macOS and Linux too.
+func TestIssue16SourcePathsAreSlashNormalized(t *testing.T) {
+	sources, err := readRuleSources(
+		[]string{`src\ui.ts`, `src\mygo.ts`},
+		func(string) ([]byte, error) { return []byte("// source"), nil },
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := sources["src/ui.ts"]; !ok {
+		t.Fatalf(`src\ui.ts was not indexed as "src/ui.ts" — the #16 lookups would miss it on Windows`)
+	}
+	if _, ok := sources["src/mygo.ts"]; ok {
+		t.Errorf(`src\mygo.ts is generated and must stay out of the rule sources`)
+	}
+}
+
 // TestIssue16ExitRemovalHasTimerFallback guards the #16 rule behind the CSS
 // one: removal after an exit cannot depend on an event that may never fire.
 // All "wait for the exit, then remove" behavior lives in one helper in
@@ -360,22 +423,7 @@ func functionBody(src, name string) (body string, start, end int, ok bool) {
 // nowhere else. A new direct listener, a helper without a timer, or a timer
 // that forgets to remove all fail here.
 func TestIssue16ExitRemovalHasTimerFallback(t *testing.T) {
-	files, err := filepath.Glob("src/*.ts")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	stripped := map[string]string{}
-	for _, file := range files {
-		if filepath.Base(file) == "mygo.ts" {
-			continue
-		}
-		raw, err := os.ReadFile(file)
-		if err != nil {
-			t.Fatal(err)
-		}
-		stripped[file] = stripTSComments(string(raw))
-	}
+	stripped := ruleSources(t)
 
 	body, helperStart, helperEnd, ok := functionBody(stripped["src/ui.ts"], exitRemoveHelper)
 	if !ok {
