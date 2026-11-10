@@ -912,7 +912,7 @@ function bindEvents() {
   $("#screenPermissionBtn").addEventListener("click", () => {
     if (demoMode) return;
     void AnyPic.openScreenRecordingSettings().catch(() => {
-      showToast("请手动打开「系统设置 → 隐私与安全性 → 屏幕录制」", "info");
+      showToast("请手动打开「系统设置 → 隐私与安全性 → 屏幕与系统录音」", "info");
     });
   });
   document.addEventListener(
@@ -1201,6 +1201,12 @@ async function captureScreenshot() {
     // Canceling the region selection, or a second press while the first
     // capture is still open, is not an error the user needs to see.
     if (isCaptureNotice(error)) return;
+    // macOS refused the capture: explain the permission and offer the
+    // settings instead of a toast that fades away (#17).
+    if (isScreenCapturePermission(error)) {
+      await showScreenCapturePermission();
+      return;
+    }
     showError(error, "截图失败");
   }
 }
@@ -1208,6 +1214,24 @@ async function captureScreenshot() {
 function isCaptureNotice(error: unknown) {
   const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
   return message.includes("已取消截图") || message.includes("正在截图中");
+}
+
+function isScreenCapturePermission(error: unknown) {
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  return message.includes("需要屏幕录制权限");
+}
+
+async function showScreenCapturePermission() {
+  const openSettings = await askConfirm(
+    "AnyPic 需要屏幕录制权限",
+    "去「系统设置 → 隐私与安全性 → 屏幕与系统录音」允许 AnyPic（旧系统叫「屏幕录制」）。如果 AnyPic 的开关已经打开，却还是出现这个提示，先选中它点「−」删掉，再回来截图、重新允许。允许后要退出并重新打开 AnyPic。",
+    "打开系统设置",
+    "稍后",
+  );
+  if (!openSettings) return;
+  await AnyPic.openScreenRecordingSettings().catch(() => {
+    showToast("请手动打开「系统设置 → 隐私与安全性 → 屏幕与系统录音」", "info");
+  });
 }
 
 async function pasteImage() {

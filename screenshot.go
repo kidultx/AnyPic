@@ -23,8 +23,25 @@ const DefaultScreenshotShortcut = "CmdOrCtrl+Alt+S"
 var (
 	errCaptureCanceled = errors.New("已取消截图")
 	errCaptureBusy     = errors.New("正在截图中")
-	captureBusy        atomic.Bool
-	shortcutMu         sync.Mutex
+	// errScreenCapturePermission is matched by its text in src/main.ts, which
+	// then offers the system settings dialog instead of a generic error. Keep
+	// the Go error and the page check in sync (TestIssue17Page... guards it).
+	errScreenCapturePermission = errors.New("需要屏幕录制权限")
+	captureBusy                atomic.Bool
+	shortcutMu                 sync.Mutex
+)
+
+// Seams for tests: the platform check, the two TCC calls, the capture plan,
+// the command runner and the window hand-off. Production uses the real
+// implementations above and below.
+var (
+	screenshotGOOS             = runtime.GOOS
+	screenCapturePreflight     = preflightScreenCaptureAccess
+	screenCaptureRequestAccess = requestScreenCaptureAccess
+	screenshotPlanFor          = screenshotPlan
+	runCaptureCommand          = func(cmd *exec.Cmd) error { return cmd.Run() }
+	startCaptureCommand        = func(cmd *exec.Cmd) error { return cmd.Start() }
+	focusScreenshotWindow      = focusCaptureWindow
 )
 
 // screenshotRequested asks the page to run a capture, so the queue, toasts and
@@ -53,12 +70,28 @@ func replaceScreenshotShortcut(prev, next string) error {
 
 // CaptureScreenshot runs the desktop's region capture, saves the PNG under
 // Pictures/AnyPic and adds it to the queue. A canceled capture returns
-// errCaptureCanceled so the page can stay quiet.
-func (a *AnyPic) CaptureScreenshot(ctx context.Context) (AddResult, error) {
+// errCaptureCanceled so the page can stay quiet; a missing macOS screen
+// recording permission returns errScreenCapturePermission so the page can
+// offer the system settings.
+func (a *AnyPic) CaptureScreenshot(ctx context.Context) (result AddResult, err error) {
 	if !captureBusy.CompareAndSwap(false, true) {
 		return AddResult{}, errCaptureBusy
 	}
 	defer captureBusy.Store(false)
+	// The global shortcut can fire while AnyPic is behind another app or
+	// hidden. Every failure except a cancel (and a second press while a
+	// capture is open) brings the window forward, or the page's message is
+	// never seen.
+	defer func() {
+		if err != nil && !errors.Is(err, errCaptureCanceled) {
+			focusScreenshotWindow(ctx)
+		}
+	}()
+
+	if err = requireScreenCaptureAccess(); err != nil {
+		return AddResult{}, err
+	}
+
 	data, viaClipboard, err := captureRegion(ctx)
 	if err != nil {
 		return AddResult{}, err
@@ -91,7 +124,7 @@ func (a *AnyPic) CaptureScreenshot(ctx context.Context) (AddResult, error) {
 	if err != nil {
 		return AddResult{}, fmt.Errorf("截图已生成，但无法保存：%w", err)
 	}
-	result, err := a.AddPaths([]string{path})
+	result, err = a.AddPaths([]string{path})
 	if err != nil {
 		return AddResult{}, fmt.Errorf("截图已保存到 %s，但无法加入队列：%w", path, err)
 	}
@@ -102,15 +135,40 @@ func (a *AnyPic) CaptureScreenshot(ctx context.Context) (AddResult, error) {
 	// leaves the app in the background instead: the user is about to paste,
 	// not to open the queue.
 	if !(autoProcess && copyToClipboard) {
-		if win := mygo.CallerWindow(ctx); win != nil {
-			if win.IsMinimized() {
-				win.Restore()
-			}
-			win.Show()
-			win.Focus()
-		}
+		focusScreenshotWindow(ctx)
 	}
 	return result, nil
+}
+
+// focusCaptureWindow brings the app forward so a capture result or error is
+// visible even when the global shortcut fired in the background.
+func focusCaptureWindow(ctx context.Context) {
+	win := mygo.CallerWindow(ctx)
+	if win == nil {
+		return
+	}
+	if win.IsMinimized() {
+		win.Restore()
+	}
+	win.Show()
+	win.Focus()
+}
+
+// requireScreenCaptureAccess checks macOS's screen recording permission
+// before the capture command runs. Without it screencapture can return only
+// the desktop wallpaper, and the user has no idea why. A failed symbol
+// lookup keeps the old behavior (try the capture).
+func requireScreenCaptureAccess() error {
+	if screenshotGOOS != "darwin" {
+		return nil
+	}
+	allowed, err := screenCapturePreflight()
+	if err != nil || allowed {
+		return nil
+	}
+	// The first call adds AnyPic to the system list and shows the prompt.
+	screenCaptureRequestAccess()
+	return errScreenCapturePermission
 }
 
 // OpenScreenRecordingSettings opens the macOS privacy pane where the user
@@ -175,7 +233,7 @@ func hasCommands(names ...string) bool {
 // image was fetched from the clipboard; file-based captures never touch it,
 // which avoids macOS's paste permission prompt.
 func captureRegion(ctx context.Context) ([]byte, bool, error) {
-	plan, err := screenshotPlan()
+	plan, err := screenshotPlanFor()
 	if err != nil {
 		return nil, false, err
 	}
@@ -198,7 +256,7 @@ func captureRegion(ctx context.Context) ([]byte, bool, error) {
 
 	baseline := clipboardImageDigest()
 	if plan.blocking {
-		if err := cmd.Run(); err != nil {
+		if err := runCaptureCommand(cmd); err != nil {
 			return nil, false, errCaptureCanceled
 		}
 		if data := waitForNewImage(ctx, baseline, 3*time.Second); data != nil {
@@ -207,7 +265,7 @@ func captureRegion(ctx context.Context) ([]byte, bool, error) {
 		return nil, false, errCaptureCanceled
 	}
 
-	if err := cmd.Start(); err != nil {
+	if err := startCaptureCommand(cmd); err != nil {
 		return nil, false, fmt.Errorf("无法启动截图工具：%w", err)
 	}
 	go func() { _ = cmd.Wait() }()
@@ -231,7 +289,7 @@ func captureToFile(cmd *exec.Cmd, plan screenshotCommand) (string, error) {
 		path := filepath.Join(dir, "shot.png")
 		cmd.Args = append(cmd.Args, path)
 		cmd.Path = plan.name
-		if err := cmd.Run(); err != nil {
+		if err := runCaptureCommand(cmd); err != nil {
 			return "", errCaptureCanceled
 		}
 		if _, err := os.Stat(path); err != nil {

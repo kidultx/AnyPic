@@ -28,9 +28,9 @@
 ## 主要运行路径
 
 1. 快捷键/托盘/菜单 → `screenshotRequested` → 页面 `captureScreenshot`
-   → `AnyPic.CaptureScreenshot`:`captureRegion` 取 PNG → 剪贴板偏好 →
-   `writeScreenshot`(Pictures/AnyPic)→ `AddPaths`。**截图从不被隐式
-   美化。**
+   → `AnyPic.CaptureScreenshot`:macOS 权限检查 → `captureRegion` 取 PNG
+   → 剪贴板偏好 → `writeScreenshot`(Pictures/AnyPic)→ `AddPaths`。
+   **截图从不被隐式美化。**
 2. 美化工作台(预览模态「美化」tab,行内 ✨ 或 tab 进入):
    每次调旋钮 → `AnyPic.previewDecorated(id, style)` 返回 dataURL 实时
    上屏(结果按样式缓存)→「应用」→ `AnyPic.decorateItem(id, style)`
@@ -44,6 +44,25 @@
 - 美化:只对 ready/done 条目开放;压缩中(`a.running`)时
   `DecorateItem` 拒绝并删除已写出的文件;应用后条目回到 ready。
 
+## 权限与错误(#17)
+
+- **权限检查**:macOS 上 `CaptureScreenshot` 在运行截图命令前调用
+  `CGPreflightScreenCaptureAccess`(`screenshot_permission_darwin.go`,
+  purego 解析 CoreGraphics 符号,不用 cgo);没有权限时调用
+  `CGRequestScreenCaptureAccess` 让系统把 AnyPic 加进权限列表并弹出
+  提示,但**不运行 screencapture**。其他平台视为有权限;符号解析失败
+  也按有权限处理,退回旧行为。
+- **错误文本契约**:Go 与页面靠错误文本识别。`已取消截图`、`正在截图中`
+  静默;`需要屏幕录制权限` 由页面弹说明并打开系统设置。Go 侧
+  `errScreenCapturePermission` 与 `src/main.ts` 的
+  `isScreenCapturePermission` 由 `TestIssue17PageHandlesScreenPermission`
+  锁在一起。文件型 screencapture 运行失败或没产出文件仍按取消处理
+  (真机未验证 Esc 的实际退出码与 stderr);权限失败已由 preflight 在截图
+  前拦下。
+- **出错时窗口前置**:除取消与「正在截图中」外,`CaptureScreenshot` 的
+  任何错误(权限、截图工具、保存、入队)都会恢复/显示/聚焦窗口——全局
+  快捷键在后台触发时,错误提示才看得见。成功路径的零点击例外不变。
+
 ## 重要约束
 
 - 全部在本机完成(不变量 1);`decorateScreenshot` 是纯 Go 绘制,无网络。
@@ -55,6 +74,7 @@
 ## 验证命令
 
 ```sh
+go test -race -run 'TestIssue17' .   # 权限检查、错误文本契约、窗口前置
 go test -race -run 'TestIssue1' .   # 样式归一化、各旋钮、条目应用、预览
 go test -race ./...                 # 全量
 bun run typecheck                   # tsc --noEmit

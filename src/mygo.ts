@@ -201,7 +201,9 @@ export const AnyPic = {
   /**
    * CaptureScreenshot runs the desktop's region capture, saves the PNG under
    * Pictures/AnyPic and adds it to the queue. A canceled capture returns
-   * errCaptureCanceled so the page can stay quiet.
+   * errCaptureCanceled so the page can stay quiet; a missing macOS screen
+   * recording permission returns errScreenCapturePermission so the page can
+   * offer the system settings.
    */
   captureScreenshot(): Promise<AddResult> {
     return call("AnyPic.CaptureScreenshot");

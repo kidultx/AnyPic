@@ -324,7 +324,7 @@ func braceBodyAt(src string, open int) (body string, end int, ok bool) {
 // functionBody returns the brace-delimited body of a function declaration
 // (top-level or nested) plus its [start, end) offsets in src.
 func functionBody(src, name string) (body string, start, end int, ok bool) {
-	decl := regexp.MustCompile(`(?m)^\s*(?:export\s+)?function\s+` + regexp.QuoteMeta(name) + `\s*\(`)
+	decl := regexp.MustCompile(`(?m)^\s*(?:export\s+)?(?:async\s+)?function\s+` + regexp.QuoteMeta(name) + `\s*\(`)
 	loc := decl.FindStringIndex(src)
 	if loc == nil {
 		return "", 0, 0, false
