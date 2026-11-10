@@ -52,9 +52,32 @@ jobs:
           go vet ./...
           go test -race -count=1 ./...
 
+      - name: Import macOS signing certificate
+        if: runner.os == 'macOS'
+        env:
+          MACOS_SIGNING_P12: ${{ secrets.MACOS_SIGNING_P12 }}
+          MACOS_SIGNING_PASSWORD: ${{ secrets.MACOS_SIGNING_PASSWORD }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.ref_type }}" != "tag" ]; then
+            .github/scripts/macos-signing-setup.sh --allow-adhoc
+          else
+            .github/scripts/macos-signing-setup.sh
+          fi
+
       - name: Build (macOS)
         if: runner.os == 'macOS'
         run: bunx mygo build -platform darwin/universal
+
+      - name: Verify macOS signature
+        if: runner.os == 'macOS'
+        run: |
+          if [ "${MACOS_SIGNING_MODE:-adhoc}" = "certificate" ]; then
+            .github/scripts/macos-verify-release.sh \
+              build/darwin-universal/AnyPic.app \
+              build/darwin-universal/AnyPic*.dmg
+          else
+            echo "ad-hoc build (no signing secrets): skipping certificate verification"
+          fi
 
       - name: Build (Linux)
         if: runner.os == 'Linux'
@@ -78,6 +101,10 @@ jobs:
         with:
           name: AnyPic-${{ matrix.os }}
           path: release/*
+
+      - name: Remove temporary macOS signing keychain
+        if: always() && runner.os == 'macOS'
+        run: .github/scripts/macos-signing-cleanup.sh
 
   release:
     needs: build

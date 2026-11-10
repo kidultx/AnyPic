@@ -78,7 +78,7 @@ go test -race ./...  # 后端单元与集成测试
 bun run build        # 生成 build/ 下的应用包与安装包
 ```
 
-`bun run build` 会自动解锁本地签名钥匙串（`~/Library/Keychains/anypic-signing.keychain-db`，密码 `anypic-local`），并使用其中的自签名证书「AnyPic Local Signing」签名；证书身份固定，因此 macOS 的屏幕录制授权在重新打包后依然有效。在 CI 环境（设置了 `CI`）里构建会自动退回 ad-hoc 签名，不需要任何密钥。
+`bun run build` 会自动解锁本地签名钥匙串（`~/Library/Keychains/anypic-signing.keychain-db`，密码 `anypic-local`），并使用其中的自签名证书「AnyPic Local Signing」签名；证书身份固定，因此 macOS 的屏幕录制授权在重新打包后依然有效。CI 构建不再一律使用 ad-hoc：发布构建用固定的发布证书签名（见下文「发布与 CI」），只有没配 secret 的冒烟构建或手动分支构建才退回 ad-hoc。
 
 跨平台打包（MyGo 不依赖 cgo，可在 macOS 上交叉构建）：
 
@@ -106,7 +106,7 @@ git push origin main v0.1.1
 # 3. 等 Actions 跑完，在 Releases 里把草稿发布
 ```
 
-CI 产物为 ad-hoc 签名（无 Apple 证书），与本地自签名构建相比，macOS 用户首次打开需要右键 → 打开，或在系统设置里放行；如需公证分发，给仓库配置 Apple Developer 证书与 `macos.notarize` 即可。
+macOS 发布包用一张固定不变的自签名证书「AnyPic Release Signing」签名，designated requirement 因而跨版本保持为 `com.anypic.desktop` 加证书哈希，升级后屏幕录制授权不再丢失。证书放在两个仓库 secret 里：`MACOS_SIGNING_P12`（p12 的 base64）和 `MACOS_SIGNING_PASSWORD`；`.github/workflows/release.yml` 在 macOS job 构建前把它们导入临时钥匙串，构建后用 `.github/scripts/macos-verify-release.sh` 校验 `.app` 与 DMG 的签名。仓库里的 `.github/macos-signing-cert.pem` 是公钥证书，也是期望的签名身份，CI 会确认导入的证书与它一致。tag 构建缺少这两个 secret 会直接失败，绝不会悄悄发出 ad-hoc 包；手动 `workflow_dispatch` 缺 secret 时会退回 ad-hoc 并打一条 warning。换证书会让 designated requirement 改变，所有 Mac 用户都要重新授权一次屏幕录制，属于破坏性变更。如需公证分发，给仓库配置 Apple Developer 证书与 `macos.notarize` 即可。
 
 界面按一套扁平的设计 token 组织（界面语言参考 [magpie](https://github.com/yetone/magpie)），并使用 [Hallmark](https://github.com/Nutlope/hallmark) 的 app-scope 规则做过静态审计，检查颜色 token、对比度、焦点与禁用态、溢出和 ARIA。Hallmark 只参与设计检查，不进入构建产物。
 
@@ -118,7 +118,7 @@ CI 产物为 ad-hoc 签名（无 Apple 证书），与本地自签名构建相�
 - 暂不支持 HEIC 与 AVIF。
 - PNG 输出为无损重编码，质量滑杆不生效；这是 PNG 格式本身的限制。
 - 重新编码会移除 EXIF / XMP 等元数据（包括拍摄信息与方向标记），方向会在处理前自动校正。
-- macOS 上截图前，AnyPic 会检查「屏幕与系统录音」（旧系统叫「屏幕录制」）权限；没有权限时不会去截图，而是提示你去「系统设置 → 隐私与安全性 → 屏幕与系统录音」允许 AnyPic（如果 AnyPic 的开关已经打开，却还是出现这个提示，先选中它点「−」删掉，再重新允许；允许后退出并重新打开 AnyPic）。侧栏的「无法截图？检查屏幕录制权限」可直接打开该设置。从源码构建时请参考上文「验证与打包」配置固定的签名身份，否则每次重新打包都要重新授权；对外分发时改用 Developer ID 证书并公证。Linux 需要 gnome-screenshot、spectacle 或 grim + slurp + wl-copy 之一。
+- macOS 上截图前，AnyPic 会检查「屏幕与系统录音」（旧系统叫「屏幕录制」）权限；没有权限时不会去截图，而是提示你去「系统设置 → 隐私与安全性 → 屏幕与系统录音」允许 AnyPic（如果 AnyPic 的开关已经打开，却还是出现这个提示，先选中它点「−」删掉，再重新允许；允许后退出并重新打开 AnyPic）。侧栏的「无法截图？检查屏幕录制权限」可直接打开该设置。正式版安装包用固定的自签名证书签名，升级后这项权限会保留；从 0.1.7 及更早的版本升级时，需要按提示重新允许一次。从源码构建时请参考上文「验证与打包」配置固定的签名身份，否则每次重新打包都要重新授权；对外分发时改用 Developer ID 证书并公证。Linux 需要 gnome-screenshot、spectacle 或 grim + slurp + wl-copy 之一。
 
 ## 项目结构
 

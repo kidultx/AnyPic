@@ -23,12 +23,14 @@ export default defineConfig(({ command }) => ({
     { ext: ["bmp"], name: "BMP image", mimeType: "image/bmp", role: "Viewer" },
     { ext: ["tif", "tiff"], name: "TIFF image", mimeType: "image/tiff", role: "Viewer" },
   ],
-  // A stable self-signed identity keeps macOS TCC grants (screen recording)
-  // across rebuilds; ad-hoc signatures change their cdhash every build.
-  // For distribution, replace with a Developer ID Application certificate.
-  // CI signs ad hoc: its runners have no keychain, and unsigned downloads
-  // require the same right-click open as an unidentified developer.
+  // A stable signing identity keeps macOS TCC grants (screen recording)
+  // across rebuilds and upgrades; ad-hoc signatures pin the cdhash instead,
+  // which changes every build.
+  // Release builds import the fixed self-signed "AnyPic Release Signing"
+  // certificate into a temporary keychain and pass its name in
+  // MACOS_SIGNING_IDENTITY. Without it (local CI smoke builds) they sign ad
+  // hoc. A Developer ID certificate would work here too for notarization.
   macos: command === "build" && process.env.CI
-    ? { signingIdentity: "-" }
+    ? { signingIdentity: process.env.MACOS_SIGNING_IDENTITY || "-" }
     : { signingIdentity: "AnyPic Local Signing" },
 }));
