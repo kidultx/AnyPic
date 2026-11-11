@@ -652,3 +652,43 @@ func TestIssue32ADialogsButtonsKeepTheirOwnWords(t *testing.T) {
 		}
 	}
 }
+
+// TestIssue32TheFooterSaysItsSummaryInTheCurrentLanguage: the automatic pass
+// remembers where it saved, so the footer can say it again later. Remembering
+// the translated words instead ("…到 原图旁边") means the sentence keeps the
+// language of the moment it saved in, and English cannot say "Saved 3 images
+// to Next to the originals" at all — the folder is data, the sentence is
+// built when it is drawn, and "beside the originals" has a sentence of its
+// own.
+func TestIssue32TheFooterSaysItsSummaryInTheCurrentLanguage(t *testing.T) {
+	raw, err := os.ReadFile("src/main.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := string(raw)
+
+	remember := regexp.MustCompile(`(?s)lastSaved = \{.*?\n\s*\};`).FindString(ts)
+	if remember == "" {
+		t.Fatal("src/main.ts: no lastSaved assignment to check (#32)")
+	}
+	if regexp.MustCompile(`\bt\.[A-Za-z]+\(`).MatchString(remember) {
+		t.Errorf("src/main.ts: the remembered save holds translated words — the footer would repeat them in the language of that moment (#32):\n%s", remember)
+	}
+
+	footer, _, _, ok := functionBody(ts, "renderFooter")
+	if !ok {
+		t.Fatal("src/main.ts: no renderFooter function")
+	}
+	for _, call := range []string{"t.savedTo(", "t.savedAlongside("} {
+		if !strings.Contains(footer, call) {
+			t.Errorf("src/main.ts: renderFooter does not build the summary with %s) (#32)", call)
+		}
+	}
+
+	for _, path := range []string{"locales/zh-Hans.json", "locales/en.json"} {
+		catalog := readCatalog(t, path)
+		if _, ok := catalog["savedAlongside"]; !ok {
+			t.Errorf("%s: no savedAlongside — the footer has no sentence for results saved beside the originals (#32)", path)
+		}
+	}
+}

@@ -540,6 +540,10 @@ export interface Messages {
    */
   savedTo(count: number, target: string, savings: string): string;
   /**
+   * `{count, plural, other {已保存 # 张到原图旁边 · {savings}}}`
+   */
+  savedAlongside(count: number, savings: string): string;
+  /**
    * `压缩已取消`
    */
   compressionCanceled(): string;
@@ -1711,6 +1715,7 @@ const catalog = createCatalog<Messages>({
     "savedPercent": ["pct"],
     "grewPercent": ["pct"],
     "savedTo": ["count", "target", "savings"],
+    "savedAlongside": ["count", "savings"],
     "compressionCanceled": [],
     "compressionComplete": [],
     "someFailed": [],
@@ -2105,6 +2110,7 @@ const catalog = createCatalog<Messages>({
       "savedPercent": "省 {pct}%",
       "grewPercent": "增大 {pct}%",
       "savedTo": "{count, plural, other {已保存 # 张到 {target} · {savings}}}",
+      "savedAlongside": "{count, plural, other {已保存 # 张到原图旁边 · {savings}}}",
       "compressionCanceled": "压缩已取消",
       "compressionComplete": "压缩完成",
       "someFailed": "部分图片未能压缩",
@@ -2498,6 +2504,7 @@ const catalog = createCatalog<Messages>({
       "savedPercent": "Saved {pct}%",
       "grewPercent": "Grew {pct}%",
       "savedTo": "{count, plural, one {Saved # image to {target} · {savings}} other {Saved # images to {target} · {savings}}}",
+      "savedAlongside": "{count, plural, one {Saved # image next to the original · {savings}} other {Saved # images next to the originals · {savings}}}",
       "compressionCanceled": "Compression canceled",
       "compressionComplete": "Compression complete",
       "someFailed": "Some images could not be compressed",

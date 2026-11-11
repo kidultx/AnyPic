@@ -134,6 +134,7 @@
   "savedPercent": "Saved {pct}%",
   "grewPercent": "Grew {pct}%",
   "savedTo": "{count, plural, one {Saved # image to {target} · {savings}} other {Saved # images to {target} · {savings}}}",
+  "savedAlongside": "{count, plural, one {Saved # image next to the original · {savings}} other {Saved # images next to the originals · {savings}}}",
   "compressionCanceled": "Compression canceled",
   "compressionComplete": "Compression complete",
   "someFailed": "Some images could not be compressed",

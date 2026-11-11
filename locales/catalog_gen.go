@@ -1380,6 +1380,18 @@ func (msgs Messages) SavedTo(count int, target string, savings string) string {
 	return Catalog.Format(msgs.locale, "savedTo", map[string]any{"count": count, "target": target, "savings": savings})
 }
 
+// SavedAlongside says "{count, plural, other {已保存 # 张到原图旁边 · {savings}}}"
+// in the language the app shows.
+func SavedAlongside(count int, savings string) string {
+	return In(i18n.Locale()).SavedAlongside(count, savings)
+}
+
+// SavedAlongside says "{count, plural, other {已保存 # 张到原图旁边 · {savings}}}"
+// in the language of msgs.
+func (msgs Messages) SavedAlongside(count int, savings string) string {
+	return Catalog.Format(msgs.locale, "savedAlongside", map[string]any{"count": count, "savings": savings})
+}
+
 // CompressionCanceled says "压缩已取消"
 // in the language the app shows.
 func CompressionCanceled() string { return In(i18n.Locale()).CompressionCanceled() }

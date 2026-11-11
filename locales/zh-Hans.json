@@ -141,6 +141,7 @@
   "savedPercent": "省 {pct}%",
   "grewPercent": "增大 {pct}%",
   "savedTo": "{count, plural, other {已保存 # 张到 {target} · {savings}}}",
+  "savedAlongside": "{count, plural, other {已保存 # 张到原图旁边 · {savings}}}",
   "compressionCanceled": "压缩已取消",
   "compressionComplete": "压缩完成",
   "someFailed": "部分图片未能压缩",

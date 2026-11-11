@@ -45,9 +45,11 @@ let recordingShortcut = false;
 let autoRun: { ids: Set<number>; copyIDs: number[] } | null = null;
 /* Guards the async gap between deciding to compress and the backend call. */
 let compressStarting = false;
-/* Where the last automatic pass saved its results, for the footer summary.
-   percent is signed: negative when the pass produced larger files. */
-let lastSaved: { count: number; target: string; percent: number; path: string } | null = null;
+/* Where the last automatic pass saved its results, for the footer summary:
+   the folder, or "" for beside the originals — data, so the footer says it
+   in the language of the moment (#32). percent is signed: negative when the
+   pass produced larger files. */
+let lastSaved: { count: number; folder: string; percent: number; path: string } | null = null;
 /* The About dialog's version line, kept as data so it can be said again in a
    new language (#32). demoVersion picks the browser-preview wording. */
 let aboutVersion: { version: string; platform: string; arch: string } | null = null;
@@ -822,7 +824,9 @@ function renderFooter() {
     const savings = lastSaved.percent >= 0
       ? t.savedPercent(String(lastSaved.percent))
       : t.grewPercent(String(-lastSaved.percent));
-    status = t.savedTo(lastSaved.count, lastSaved.target, savings);
+    status = lastSaved.folder
+      ? t.savedTo(lastSaved.count, shortenPath(lastSaved.folder), savings)
+      : t.savedAlongside(lastSaved.count, savings);
     showOpen = lastSaved.path !== "";
   } else if (batch.canceled) {
     status = t.compressionCanceled();
@@ -1891,7 +1895,7 @@ async function finishAutoRun() {
     const first = result.paths[0] ?? "";
     lastSaved = {
       count: result.paths.length || done.length,
-      target: result.folder ? shortenPath(result.folder) : t.alongsideOriginal(),
+      folder: result.folder || "",
       percent,
       path: result.folder || first,
     };
