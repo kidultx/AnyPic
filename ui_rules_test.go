@@ -105,12 +105,16 @@ func TestNoNewNativeSelects(t *testing.T) {
 // its unsaved-results warning, and the "later" toast that names the
 // installer. Each budget is current + ~2% headroom. Over budget: move the
 // code to its own module, or raise the budget here and say what the growth
-// was for.
+// was for. The 2026-11 walk-through's first fixes crossed main.ts's line;
+// its shortcut notation (labels, accelerators, reserved keys) moved to
+// src/shortcuts.ts instead, budgeted here so the split is a move with a
+// ledger entry, not a second hiding place.
 var uiBudgets = []struct {
 	file   string
 	budget int
 }{
 	{"src/main.ts", 80_200},
+	{"src/shortcuts.ts", 4_200},
 	{"src/style.css", 58_400},
 	{"index.html", 31_000},
 }
