@@ -751,3 +751,75 @@ func TestIssue29HeadingsAreNotShouted(t *testing.T) {
 		}
 	}
 }
+
+// TestIssue30ActionsColumnFitsTheButtons guards #30. The walk-through feared
+// the hover actions overflowed onto the saving pill; measurement in the page
+// showed the opposite — the flex row shrank the four 28px buttons to 21px
+// instead, below the hit target every other icon button in the app keeps.
+// So the check is the column's arithmetic: every list grid's last track must
+// hold the buttons at full size, and the count comes from the row template,
+// so a fifth action added later fails here until the column grows with it.
+func TestIssue30ActionsColumnFitsTheButtons(t *testing.T) {
+	src, err := os.ReadFile("src/main.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := stripTSComments(string(src))
+	inner := regexp.MustCompile(`(?s)<div class="item-actions">(.*?)</div>`).FindStringSubmatch(ts)
+	if inner == nil {
+		t.Fatal("src/main.ts: no .item-actions block in the row template (#30)")
+	}
+	buttons := strings.Count(inner[1], `data-action="`)
+	if buttons == 0 {
+		t.Fatal("src/main.ts: .item-actions has no data-action buttons (#30)")
+	}
+
+	cssRaw, err := os.ReadFile("src/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := stripBlockComments(string(cssRaw))
+	px := func(rule, prop string) int {
+		m := regexp.MustCompile(`(?s)` + rule + `\s*\{([^{}]*)\}`).FindStringSubmatch(css)
+		if m == nil {
+			t.Fatalf("src/style.css: no %s rule (#30)", rule)
+		}
+		v := regexp.MustCompile(`(?m)(?:^|[;\s])` + prop + `\s*:\s*(\d+)px`).FindStringSubmatch(m[1])
+		if v == nil {
+			t.Fatalf("src/style.css: %s has no px %s (#30):%s", rule, prop, m[1])
+		}
+		n := 0
+		for _, c := range v[1] {
+			n = n*10 + int(c-'0')
+		}
+		return n
+	}
+	size := px(`\.item-actions \.icon-btn`, "width")
+	gap := px(`\.item-actions`, "gap")
+	need := buttons*size + (buttons-1)*gap
+
+	grids := regexp.MustCompile(`(?s)\.queue-(?:item|columns)\s*\{([^{}]*)\}`).FindAllStringSubmatch(css, -1)
+	if len(grids) == 0 {
+		t.Fatal("src/style.css: no queue list grid rule (#30)")
+	}
+	for _, g := range grids {
+		tpl := regexp.MustCompile(`(?m)grid-template-columns\s*:\s*([^;]+);`).FindStringSubmatch(g[1])
+		if tpl == nil {
+			continue
+		}
+		tracks := strings.Fields(tpl[1])
+		last := tracks[len(tracks)-1]
+		v := regexp.MustCompile(`^(\d+)px$`).FindStringSubmatch(last)
+		if v == nil {
+			continue
+		}
+		width := 0
+		for _, c := range v[1] {
+			width = width*10 + int(c-'0')
+		}
+		if width < need {
+			t.Errorf("src/style.css: actions column is %dpx but the row holds %d × %dpx buttons + %d of gap = %dpx, so they shrink below their size (#30)", width, buttons, size, (buttons-1)*gap, need)
+		}
+	}
+}
+

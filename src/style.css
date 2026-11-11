@@ -1670,7 +1670,7 @@ body.side-drag * {
   display: grid;
   height: 32px;
   flex: 0 0 32px;
-  grid-template-columns: 20px 36px minmax(0, 1fr) 208px 88px;
+  grid-template-columns: 20px 36px minmax(0, 1fr) 208px 118px;
   align-items: center;
   gap: 12px;
   padding: 0 14px;
@@ -1698,7 +1698,7 @@ body.side-drag * {
 
 .queue-item {
   display: grid;
-  grid-template-columns: 20px 36px minmax(0, 1fr) 208px 88px;
+  grid-template-columns: 20px 36px minmax(0, 1fr) 208px 118px;
   min-height: 52px;
   align-items: center;
   gap: 12px;
@@ -2935,11 +2935,11 @@ body.side-drag * {
   }
 
   .queue-item {
-    grid-template-columns: 20px 36px minmax(0, 1fr) 208px 84px;
+    grid-template-columns: 20px 36px minmax(0, 1fr) 208px 118px;
   }
 
   .queue-columns {
-    grid-template-columns: 20px 36px minmax(0, 1fr) 208px 84px;
+    grid-template-columns: 20px 36px minmax(0, 1fr) 208px 118px;
   }
 
   .summary-foot {
