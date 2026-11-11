@@ -725,3 +725,29 @@ func TestIssue24MustReadCopyIsNotFaint(t *testing.T) {
 	}
 }
 
+
+// TestIssue29HeadingsAreNotShouted guards #29: the section heads borrow an
+// English pattern — uppercase plus 0.05em tracking — that does nothing to
+// Chinese (there are no capitals) and only stretches the characters apart.
+// Weight and colour already carry the hierarchy, so the rules must not set
+// either property; per-language treatment belongs to the i18n pass (#32).
+func TestIssue29HeadingsAreNotShouted(t *testing.T) {
+	raw, err := os.ReadFile("src/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := stripBlockComments(string(raw))
+	for _, sel := range []string{`.block-head h2`, `.more-settings-summary`} {
+		m := regexp.MustCompile(`(?s)` + regexp.QuoteMeta(sel) + `\s*\{([^{}]*)\}`).FindStringSubmatch(css)
+		if m == nil {
+			t.Errorf("src/style.css: no %s rule — update this list if the rule was renamed (#29)", sel)
+			continue
+		}
+		if regexp.MustCompile(`text-transform\s*:`).MatchString(m[1]) {
+			t.Errorf("src/style.css: %s still sets text-transform, which does nothing to Chinese (#29):%s", sel, m[1])
+		}
+		if regexp.MustCompile(`letter-spacing\s*:`).MatchString(m[1]) {
+			t.Errorf("src/style.css: %s still sets letter-spacing, which only stretches Chinese (#29):%s", sel, m[1])
+		}
+	}
+}
