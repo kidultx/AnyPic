@@ -17,7 +17,7 @@ import (
 // issue17Seams restores every injected screenshot seam after the test.
 func issue17Seams(t *testing.T) {
 	// Nothing this file captures may land in the developer's real $TMPDIR (#18).
-	t.Setenv("TMPDIR", t.TempDir())
+	setTempDir(t, t.TempDir())
 	t.Helper()
 	goos := screenshotGOOS
 	preflight := screenCapturePreflight

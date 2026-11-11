@@ -31,7 +31,7 @@ func issue18Capture(t *testing.T, run func(*exec.Cmd) error) []string {
 	t.Helper()
 	issue17Seams(t)
 	tmp := t.TempDir()
-	t.Setenv("TMPDIR", tmp)
+	setTempDir(t, tmp)
 	screenshotPlanFor = issue17Plan
 	if run == nil {
 		run = issue17Runner(issue17PNG(t))
@@ -63,7 +63,7 @@ func TestIssue18CaptureLeavesNoTempDir(t *testing.T) {
 func TestIssue18UnsupportedToolLeavesNoTempDir(t *testing.T) {
 	issue17Seams(t)
 	tmp := t.TempDir()
-	t.Setenv("TMPDIR", tmp)
+	setTempDir(t, tmp)
 	screenshotPlanFor = func() (screenshotCommand, error) {
 		return screenshotCommand{name: "/usr/bin/gnome-screenshot", args: []string{"-a"}, blocking: true}, nil
 	}
@@ -76,12 +76,23 @@ func TestIssue18UnsupportedToolLeavesNoTempDir(t *testing.T) {
 	}
 }
 
+// setTempDir points os.TempDir at dir for the rest of the test. os.TempDir
+// reads TMPDIR on Unix but TMP/TEMP on Windows, so set all three.
+func setTempDir(t *testing.T, dir string) {
+	t.Helper()
+	for _, key := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(key, dir)
+	}
+}
+
 // TestIssue18StartupSweepsOldShotDirs covers the folders earlier versions
 // already left behind: the fix cannot remove them retroactively, so the app
 // sweeps anypic-shot-* from its temp directory at start, touching nothing else.
 func TestIssue18StartupSweepsOldShotDirs(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("TMPDIR", tmp)
+	// os.TempDir reads TMPDIR on Unix but TMP/TEMP on Windows, so set all of
+	// them; otherwise this test only exercises the sweep on macOS/Linux.
+	setTempDir(t, tmp)
 	stale := filepath.Join(tmp, "anypic-shot-123456")
 	if err := os.Mkdir(stale, 0o700); err != nil {
 		t.Fatal(err)
