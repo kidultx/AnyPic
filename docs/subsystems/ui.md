@@ -54,6 +54,26 @@ kept for what acts（`src/style.css` 第一行）。中性底、白色细边卡�
 
 守卫：`TestIssue21PreviewZoomsAndNavigates`。
 
+## 队列的键盘与右键（#20）
+
+队列是一张可选列表，不是一堆可点的 div；行为住在 `src/queue-keys.ts`，
+main.ts 只提供状态（`QueueKeysContext`）。
+
+- **一个 Tab 站**：行用 roving tabindex（`queueRowTabIndex`），只有当前行是
+  `0`，其余 `-1`；`ensureQueueFocus` 在过滤 / 渲染后把焦点留在仍可见的行上。
+  ↑/↓ 移动焦点；Shift+↑/↓ 以锚点扩选。Shift+点击的锚点在 `pointerdown` 时
+  记住（点击会先把焦点移到新行，click 里再读就已经太晚）。
+- **快捷键分层**：⌘/Ctrl+A 选可见项、Delete/Backspace 移除所选；⌘⌫ 仍是
+  「清空队列」（main.ts 拥有，列表快捷键遇 meta 直接让路）。输入框与打开的
+  对话框期间一律不接管按键。
+- **右键菜单**（`.context-menu`）只做行上已有的操作加「在文件夹中显示」；
+  右击未选中的行先把选择收成这一行，右击已选中的行保留整组，移除项的文案
+  随之变成「移除所选的 N 张」。菜单用 `role="menu"`、方向键 / Escape / Tab
+  / 点击外部都能收，Escape 把焦点还给行。
+- 列表与网格渲染的是同一个行元素，所以两种视图天然行为一致。
+
+守卫：`TestIssue20QueueIsAKeyboardList`。
+
 ## 约束与执行
 
 | 约束 | 现在由谁执行 |

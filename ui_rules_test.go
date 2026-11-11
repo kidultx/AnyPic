@@ -111,15 +111,18 @@ func TestNoNewNativeSelects(t *testing.T) {
 // ledger entry, not a second hiding place. #21 grew style.css to 59,208 and
 // index.html to 31,315: the zoom pill, pager and their over-image styling —
 // preview.ts, where the zoom/pan and paging state lives, is not in this
-// ledger yet.
+// ledger yet. #20 grew style.css to 60,571 and index.html to 32,423: the row
+// focus ring and the right-click menu's surface; its behaviour moved to
+// src/queue-keys.ts rather than pushing main.ts past its line.
 var uiBudgets = []struct {
 	file   string
 	budget int
 }{
 	{"src/main.ts", 80_200},
 	{"src/shortcuts.ts", 4_200},
-	{"src/style.css", 60_400},
-	{"index.html", 31_900},
+	{"src/queue-keys.ts", 12_300},
+	{"src/style.css", 61_400},
+	{"index.html", 32_900},
 }
 
 // TestScriptAndStyleBudgets guards them. Sizes are counted with LF line
@@ -1084,5 +1087,114 @@ func TestIssue21PreviewZoomsAndNavigates(t *testing.T) {
 	}
 	if !strings.Contains(string(main), "visibleIds:") {
 		t.Errorf("src/main.ts: the preview context does not expose visibleIds() — prev/next would ignore the current tab and name filter (#21)")
+	}
+}
+
+// TestIssue20QueueIsAKeyboardList guards #20: the queue looks like a table
+// but behaves like a pile of divs — rows cannot take focus, arrows do nothing,
+// there is no range selection, and the only destructive shortcut (⌘⌫) clears
+// the whole queue. The contract:
+//
+//   - a row is a real focus stop (roving tabindex, so the list adds one tab
+//     stop, not N) and ↑/↓ move between rows; Space/Enter run the same action
+//     as a click;
+//   - Shift+↑/↓ and Shift+click extend a range from the last focused row;
+//     ⌘/Ctrl+A selects the visible rows; Delete/Backspace removes the selection
+//     (⌘⌫ keeps clearing the queue, which main.ts owns);
+//   - text fields keep their native keys — no shortcut fires while typing;
+//   - every row has a right-click menu with the row's actions plus "show in
+//     folder", in list and grid alike (both render the same row element).
+func TestIssue20QueueIsAKeyboardList(t *testing.T) {
+	html, err := os.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	markup := string(html)
+	if !strings.Contains(markup, `id="queueMenu"`) {
+		t.Fatalf("index.html: no #queueMenu — rows have no right-click actions (#20)")
+	}
+	menu, ok := divBodyByClass(markup, "context-menu")
+	if !ok {
+		t.Fatalf("index.html: #queueMenu is not .context-menu (#20)")
+	}
+	if !regexp.MustCompile(`role="menu"`).MatchString(markup) {
+		t.Errorf("index.html: the queue menu has no role=\"menu\" (#20)")
+	}
+	for _, label := range []string{"对比预览", "导出", "在文件夹中显示", "移除"} {
+		if !strings.Contains(menu, label) {
+			t.Errorf("index.html: the queue menu is missing %q (#20)", label)
+		}
+	}
+
+	ts, err := os.ReadFile("src/queue-keys.ts")
+	if err != nil {
+		t.Fatalf("src/queue-keys.ts missing — the queue's keyboard and menu behaviour lives there (#20): %v", err)
+	}
+	src := stripTSComments(string(ts))
+
+	rowKeys, _, _, ok := functionBody(src, "queueRowKeys")
+	if !ok {
+		t.Fatal("src/queue-keys.ts: no queueRowKeys() (#20)")
+	}
+	for _, want := range []string{`"contextmenu"`, `"ArrowUp"`, `"ArrowDown"`, `"Enter"`, `" "`} {
+		if !strings.Contains(rowKeys, want) {
+			t.Errorf("src/queue-keys.ts: queueRowKeys() never handles %s (#20)", want)
+		}
+	}
+	if !strings.Contains(rowKeys, "event.shiftKey") {
+		t.Errorf("src/queue-keys.ts: Shift is not handled on a row — no range selection (#20)")
+	}
+	if !strings.Contains(rowKeys, "activate(") {
+		t.Errorf("src/queue-keys.ts: Space/Enter do not reuse the row's click action (#20)")
+	}
+	if !strings.Contains(rowKeys, "moveFocus(") {
+		t.Errorf("src/queue-keys.ts: arrows do not move focus through moveFocus() (#20)")
+	}
+
+	move, _, _, ok := functionBody(src, "moveFocus")
+	if !ok {
+		t.Fatal("src/queue-keys.ts: no moveFocus() (#20)")
+	}
+	if !regexp.MustCompile(`if\s*\(event\.shiftKey\)\s*anchorId`).MatchString(move) {
+		t.Errorf("src/queue-keys.ts: moveFocus() moves without setting the Shift anchor first — the range would grow from the wrong row (#20)")
+	}
+	if !strings.Contains(move, "rangeTo(") {
+		t.Errorf("src/queue-keys.ts: moveFocus() does not extend a Shift range (#20)")
+	}
+
+	shortcuts, _, _, ok := functionBody(src, "bindQueueShortcuts")
+	if !ok {
+		t.Fatal("src/queue-keys.ts: no bindQueueShortcuts() (#20)")
+	}
+	for _, want := range []string{`"a"`, "Delete", "Backspace", `closest("input, textarea, select")`} {
+		if !strings.Contains(shortcuts, want) {
+			t.Errorf("src/queue-keys.ts: bindQueueShortcuts() never mentions %s (#20)", want)
+		}
+	}
+	if !regexp.MustCompile(`if\s*\(meta\)\s*return`).MatchString(shortcuts) {
+		t.Errorf("src/queue-keys.ts: the list shortcuts do not bow out when ⌘/Ctrl is held — ⌘⌫ must keep clearing the queue (#20)")
+	}
+
+	if _, _, _, ok := functionBody(src, "openQueueMenu"); !ok {
+		t.Fatal("src/queue-keys.ts: no openQueueMenu() (#20)")
+	}
+
+	cssRaw, err := os.ReadFile("src/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := stripBlockComments(string(cssRaw))
+	if !regexp.MustCompile(`(?m)^\.queue-item:focus-visible\s*\{`).MatchString(css) {
+		t.Errorf("src/style.css: rows have no focus-visible style — keyboard focus is invisible (#20)")
+	}
+
+	main, err := os.ReadFile("src/main.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"queueRowKeys(", "queueRowTabIndex("} {
+		if !strings.Contains(string(main), want) {
+			t.Errorf("src/main.ts: rows are not wired to %s (#20)", want)
+		}
 	}
 }

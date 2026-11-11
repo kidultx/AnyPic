@@ -2,6 +2,7 @@ import { AnyPic, events, type Batch, type Item, type Preview, type Settings, typ
 import { isMyGo, onFileDrop, runtime } from "mygo-runtime";
 import { $, $$, closeModal, esc, formatBytes, formatDimensions, icon, openModal, pct, showError, shortenPath, showToast } from "./ui";
 import { bindPreview, closePreview, initPreview, invalidatePreview, openPreview, previewSelectedId } from "./preview";
+import { ensureQueueFocus, initQueueKeys, queueFocusAfterRemoval, queueRowFocus, queueRowKeys, queueRowTabIndex } from "./queue-keys";
 import { DEFAULT_SHORTCUT, acceleratorFromEvent, formatShortcut, isReservedShortcut, setShortcutPlatform } from "./shortcuts";
 
 function signature(settings: Settings): string {
@@ -89,6 +90,20 @@ async function init() {
     applySnapshot,
     startAutoRun,
     renderAll,
+  });
+  initQueueKeys({
+    rows: () => rowCache,
+    visibleIds: () => visibleItems().map((item) => item.id),
+    selected: () => selected,
+    item: (id) => items.find((entry) => entry.id === id) ?? null,
+    running: () => batch.running,
+    syncSelection: syncRowSelection,
+    activate: activateItem,
+    decorate: (id) => void openPreview(id, "beautify"),
+    exportOne: (id) => void exportOne(id),
+    reveal: revealItem,
+    removeSelected: () => void removeSelected(),
+    removeOne: (id) => void removeItem(id),
   });
   bindEvents();
   loadViewPreference();
@@ -475,6 +490,7 @@ function renderQueue() {
   }
 
   const visibleIds = new Set<number>();
+  ensureQueueFocus(filtered.map((item) => item.id));
   for (const item of filtered) {
     visibleIds.add(item.id);
     let row = rowCache.get(item.id);
@@ -535,6 +551,38 @@ function syncSelectAll() {
   button.disabled = visibleItems().length === 0 || batch.running;
 }
 
+/* Repaints every cached row's selected state plus the bars that follow it.
+   The checkbox, Shift ranges and ⌘A all land here, so they cannot drift. */
+function syncRowSelection() {
+  for (const [id, row] of rowCache) {
+    const on = selected.has(id);
+    row.classList.toggle("is-selected", on);
+    row.setAttribute("aria-selected", String(on));
+    row.querySelector<HTMLInputElement>("input[data-select]")!.checked = on;
+  }
+  syncSelectionBar();
+  syncSelectAll();
+}
+
+/* What a click on a row means; queue-keys.ts reuses it for Space and Enter. */
+function activateItem(id: number) {
+  const item = items.find((entry) => entry.id === id);
+  if (!item) return;
+  if (item.status === "done" || item.status === "ready") void openPreview(item.id);
+  else if (item.status === "error" && item.error) showToast(item.error, "error");
+}
+
+/* The context menu's "show in folder"; the browser demo has no backend. */
+function revealItem(id: number) {
+  const item = items.find((entry) => entry.id === id);
+  if (!item?.path) return;
+  if (demoMode) {
+    showToast("浏览器预览模式无法打开文件夹，请在 MyGo 桌面应用中使用", "info");
+    return;
+  }
+  AnyPic.revealPath(item.path).catch((error) => showError(error, "无法打开文件夹"));
+}
+
 function createRow(id: number): HTMLElement {
   const row = document.createElement("article");
   row.className = "queue-item";
@@ -567,21 +615,14 @@ function createRow(id: number): HTMLElement {
   checkbox.addEventListener("change", () => {
     if (checkbox.checked) selected.add(id);
     else selected.delete(id);
-    row.classList.toggle("is-selected", checkbox.checked);
-    syncSelectionBar();
-    syncSelectAll();
+    syncRowSelection();
   });
   // The label must not turn the click into "open preview".
   checkbox.addEventListener("click", (event) => event.stopPropagation());
 
-  row.addEventListener("click", (event) => {
-    const target = event.target as HTMLElement;
-    if (target.closest("button")) return;
-    const item = items.find((entry) => entry.id === id);
-    if (!item) return;
-    if (item.status === "done" || item.status === "ready") void openPreview(item.id);
-    else if (item.status === "error" && item.error) showToast(item.error, "error");
-  });
+  // Focus, arrows, Shift ranges and the context menu live in queue-keys.ts,
+  // so the list and the grid get the same manners from one place (#20).
+  queueRowKeys(row, id);
 
   row.querySelector<HTMLButtonElement>('[data-action="preview"]')?.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -607,6 +648,10 @@ function updateRow(row: HTMLElement, item: Item) {
   row.title = item.path ? `${item.name}\n${item.path}` : item.name;
   row.classList.toggle("is-clickable", item.status === "done" || item.status === "error");
   row.classList.toggle("is-selected", selected.has(item.id));
+  row.setAttribute("aria-selected", String(selected.has(item.id)));
+  // Roving tab stop (#20): one focused row is Tab-reachable, the rest are
+  // reached with the arrow keys.
+  row.tabIndex = queueRowTabIndex(item.id);
   const checkbox = row.querySelector<HTMLInputElement>("input[data-select]")!;
   checkbox.checked = selected.has(item.id);
   checkbox.disabled = batch.running;
@@ -1410,13 +1455,18 @@ async function removeSelected() {
   if (batch.running || selected.size === 0) return;
   const ids = [...selected];
   const removed = items.filter((item) => ids.includes(item.id));
+  // Remembered before the confirmation steals focus: after the rows go,
+  // focus belongs back in the queue, not on the disappearing dialog (#20).
+  const focusInQueue = !!document.activeElement?.closest?.("#queueList");
   const ok = await askConfirm(`移除所选 ${ids.length} 张图片？`, "原始图片不会被删除。", "移除");
   if (!ok) return;
+  queueFocusAfterRemoval(new Set(ids));
   if (demoMode) {
     for (const item of removed) invalidatePreview(item.id);
     items = items.filter((item) => !selected.has(item.id));
     selected.clear();
     renderAll();
+    if (focusInQueue) queueRowFocus();
     return;
   }
   try {
@@ -1424,6 +1474,7 @@ async function removeSelected() {
     selected.clear();
     applySnapshot(snapshot, false);
     renderAll();
+    if (focusInQueue) queueRowFocus();
     // Selection can be undone the same way a single removal is: the files
     // were never touched, so re-adding their paths restores the entries.
     showToast(`已移除 ${ids.length} 张图片`, "info", {
@@ -1438,6 +1489,8 @@ async function removeSelected() {
 async function removeItem(id: number) {
   if (batch.running) return;
   const item = items.find((entry) => entry.id === id);
+  const focusInQueue = !!document.activeElement?.closest?.("#queueList");
+  queueFocusAfterRemoval(new Set([id]));
   if (demoMode) {
     items = items.filter((entry) => entry.id !== id);
     invalidatePreview(id);
@@ -1457,6 +1510,7 @@ async function removeItem(id: number) {
     const snapshot = await AnyPic.remove([id]);
     applySnapshot(snapshot, false);
     renderAll();
+    if (focusInQueue) queueRowFocus();
     if (item) {
       // The original file was never touched, so re-adding it restores the
       // entry; the automatic flow picks it up like a fresh addition.
