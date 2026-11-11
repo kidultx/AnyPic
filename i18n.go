@@ -41,9 +41,17 @@ import (
 var appLanguages = []string{"en", "zh-Hans", "zh-Hant"}
 
 // appLocale is the language MyGo shows: its pick among appLanguages for the
-// desktop. A variable so tests can stand in for a desktop without a running
-// app.
+// desktop, or the one SetLocale chose. A variable so tests can stand in for a
+// desktop without a running app.
 var appLocale = func() string { return mygo.App.Locale() }
+
+// setAppLocale hands a choice to MyGo, or "" to give the app back to the
+// desktop's language. MyGo relabels the items it names itself — About, Hide,
+// Quit, the Edit and Window menus — tells the page, and keeps the choice as
+// the app's language, which AppKit, WebKit and GTK say their own words in
+// from the next launch. A variable so tests can watch it without a running
+// app.
+var setAppLocale = func(tag string) { mygo.App.SetLocale(tag) }
 
 // uiLang holds the resolved language: "zh-Hans" or "en". The source
 // language is the default so a service built without a running app — the
@@ -92,11 +100,32 @@ func setUILanguage(setting string) string {
 }
 
 // resolveLanguageNow picks the language once the app is ready and returns it.
-// main.go calls it before building the menus, which say their labels.
+// main.go calls it before building the menus, which say their labels. An
+// explicit choice is handed to MyGo again on every launch, in case its own
+// record of it is gone. Following the system leaves MyGo as it is: what it
+// shows already is the desktop's language — or the one the user gave AnyPic
+// in the system's own per-app language setting, which is not ours to clear.
 func (a *AnyPic) resolveLanguageNow() string {
 	a.mu.Lock()
 	setting := a.settings.Language
 	a.mu.Unlock()
+	if setting == "zh-Hans" || setting == "en" {
+		setAppLocale(setting)
+	}
+	return setUILanguage(setting)
+}
+
+// changeLanguage applies a changed setting: it hands MyGo the choice, or —
+// when the user goes back to following the system — takes back the one it
+// handed over before, and returns the language to show. The caller relabels
+// the native menus (notifyLanguageChanged).
+func changeLanguage(setting string) string {
+	switch setting {
+	case "zh-Hans", "en":
+		setAppLocale(setting)
+	default:
+		setAppLocale("")
+	}
 	return setUILanguage(setting)
 }
 

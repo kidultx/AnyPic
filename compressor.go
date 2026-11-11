@@ -513,7 +513,7 @@ func (a *AnyPic) SaveSettings(s Settings) (Settings, error) {
 	a.mu.Unlock()
 	// Menus, dialogs and later errors take the new language at once (#32).
 	if languageChanged {
-		setUILanguage(s.Language)
+		changeLanguage(s.Language)
 		notifyLanguageChanged()
 	}
 	// Mirror the preference to the system login item before persisting; if

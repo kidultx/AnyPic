@@ -288,8 +288,11 @@ func TestIssue32LanguageIsASetting(t *testing.T) {
 	}
 }
 
-// The tests run without an app: the desktop is whatever a test says it is.
+// The tests run without an app: MyGo's language store must never be reached
+// from one — it keeps the choice for the next launch, on macOS in the app's
+// defaults — and the desktop is whatever a test says it is.
 func init() {
+	setAppLocale = func(string) {}
 	appLocale = func() string { return "zh-Hans" }
 }
 
@@ -573,5 +576,54 @@ func TestIssue32QueueRowsFollowALanguageChange(t *testing.T) {
 	}
 	if !regexp.MustCompile(`row\.dataset\.lang\s*!==\s*language`).MatchString(update) {
 		t.Error("src/main.ts: updateRow does not compare the row's language with the page's — relabel when they differ, not on every update (#32)")
+	}
+}
+
+// TestIssue32TheChoiceReachesMyGo: MyGo labels the menu items it names itself
+// (About, Hide, Quit, the Edit and Window menus) and tells AppKit, WebKit and
+// GTK which language to say their own words in. A choice of 中文 or English
+// has to reach it, or a Chinese desktop that chose English keeps a menu bar
+// of 编辑 / 窗口 / 帮助 around an English window; and going back to following
+// the system has to give the app back to the desktop's language. Following
+// the system leaves MyGo alone — what it shows already is that language, or
+// the one the user gave AnyPic in the system's own per-app language setting.
+func TestIssue32TheChoiceReachesMyGo(t *testing.T) {
+	original := setAppLocale
+	var told []string
+	setAppLocale = func(tag string) { told = append(told, tag) }
+	defer func() { setAppLocale = original }()
+	originalLang := uiLanguage()
+	defer setUILanguage(originalLang)
+	issue32Desktop(t, "zh-Hans-CN")
+
+	service := &AnyPic{settings: defaultSettings()}
+	service.resolveLanguageNow()
+	if len(told) != 0 {
+		t.Errorf("following the system told MyGo %v; the desktop's language is what it already shows (#32)", told)
+	}
+
+	next := service.settings
+	next.Language = "en"
+	if _, err := service.SaveSettings(next); err != nil {
+		t.Fatal(err)
+	}
+	if len(told) != 1 || told[0] != "en" {
+		t.Errorf("choosing English told MyGo %v, want [en] — its own menu items would stay in the desktop's language (#32)", told)
+	}
+
+	next.Language = "system"
+	if _, err := service.SaveSettings(next); err != nil {
+		t.Fatal(err)
+	}
+	if len(told) != 2 || told[1] != "" {
+		t.Errorf("going back to following the system told MyGo %v, want a final \"\" (#32)", told)
+	}
+
+	told = nil
+	explicit := &AnyPic{settings: defaultSettings()}
+	explicit.settings.Language = "en"
+	explicit.resolveLanguageNow()
+	if len(told) != 1 || told[0] != "en" {
+		t.Errorf("a launch pinned to English told MyGo %v, want [en] — the choice is handed over again in case its own record is gone (#32)", told)
 	}
 }
