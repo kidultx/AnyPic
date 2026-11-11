@@ -19,6 +19,26 @@ kept for what acts（`src/style.css` 第一行）。中性底、白色细边卡�
 | 守卫测试 | `ui_rules_test.go` | 违反 = 红，没人能忘掉 |
 | 判例 | magpie 的见下；自己的待第一起事故 | 规则 + 证据 + 测试名 |
 
+## 布局契约（#19 / #22 / #28）
+
+三条 2026-11 走查定下的骨架规则，改布局前先对照：
+
+- **一个实心主按钮**：住在页脚右端，位置不随模式移动；待处理或设置已改
+  时是「压缩全部 / 重新压缩」，全部完成后是「导出」。截图在标题栏，不再
+  借用页脚按钮。唯一例外是空状态——页脚此时隐藏，「选择图片…」就是下一
+  步。守卫：`TestIssue19OnePrimaryAction`。
+- **标题栏承载入口**：「截图 / 添加」在 46px 标题栏右侧（no-drag），页头
+  只有一行：计数 + 原始→压缩后·节省 + 未完成数。窗口按钮所在位置由
+  `--mygo-titlebar-inset-*` 留出，别在标题栏右侧加固定宽度。守卫：
+  `TestIssue28TitlebarCarriesTheActions`。
+- **侧栏只回答「这批图怎么压」**：首屏是质量、输出格式、保存到；应用偏好
+  （主题、开机启动、Dock、截图快捷键与剪贴板）在「偏好设置」对话框
+  （⌘,，菜单「视图」与侧栏底部都有入口）。守卫：
+  `TestIssue22PreferencesLiveInADialog`。
+- **窄窗口不许吞掉实话**：未完成数用 `.summary-pending`，不是会被
+  ≤1040px 规则隐藏的 `.summary-foot`。守卫：
+  `TestIssue31PendingNoteSurvivesNarrowWindows`。
+
 ## 约束与执行
 
 | 约束 | 现在由谁执行 |

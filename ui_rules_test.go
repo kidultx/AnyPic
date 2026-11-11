@@ -823,3 +823,180 @@ func TestIssue30ActionsColumnFitsTheButtons(t *testing.T) {
 	}
 }
 
+
+// TestIssue22PreferencesLiveInADialog guards #22: the sidebar answers "how
+// should this batch come out" — quality, output format, where it lands. The
+// application's own preferences (theme, launch at login, the Dock, the capture
+// shortcut and clipboard) moved into a preferences dialog reached by 偏好设置…
+// and Cmd+,. Output format is part of the answer every time, so it sits on the
+// first screen rather than behind 更多设置.
+func TestIssue22PreferencesLiveInADialog(t *testing.T) {
+	raw, err := os.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(raw)
+
+	start := strings.Index(html, `<aside class="sidebar">`)
+	end := strings.Index(html, `</aside>`)
+	if start < 0 || end < start {
+		t.Fatal("index.html: no <aside class=\"sidebar\"> block (#22)")
+	}
+	aside := html[start:end]
+	for _, id := range []string{"openAtLoginToggle", "dockToggle", "shortcutBtn", "clipboardToggle", "themeBtn"} {
+		if strings.Contains(aside, `id="`+id+`"`) {
+			t.Errorf("index.html: #%s still lives in the sidebar — application preferences belong in the preferences dialog (#22)", id)
+		}
+	}
+
+	if !strings.Contains(html, `id="prefsModal"`) {
+		t.Errorf("index.html: no #prefsModal — 偏好设置 has nowhere to open (#22)")
+	}
+	for _, id := range []string{"themeSeg", "openAtLoginToggle", "dockToggle", "shortcutBtn", "clipboardToggle"} {
+		if !strings.Contains(html, `id="`+id+`"`) {
+			t.Errorf("index.html: #%s is missing from the preferences dialog (#22)", id)
+		}
+	}
+
+	formatAt := strings.Index(html, `id="formatSeg"`)
+	detailsAt := strings.Index(html, `<details class="more-settings"`)
+	if formatAt < 0 || detailsAt < 0 {
+		t.Fatalf("index.html: missing #formatSeg or the 更多设置 disclosure (#22)")
+	}
+	if formatAt > detailsAt {
+		t.Errorf("index.html: 输出格式 still sits behind 更多设置 — it decides every result and belongs on the first screen (#22)")
+	}
+
+	goRaw, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	goSrc := string(goRaw)
+	if !strings.Contains(goSrc, `command("prefs")`) {
+		t.Errorf("main.go: no menu command for 偏好设置 (#22)")
+	}
+	if !strings.Contains(goSrc, `"CmdOrCtrl+,"`) {
+		t.Errorf("main.go: 偏好设置 has no CmdOrCtrl+, accelerator (#22)")
+	}
+}
+
+// elementBodyByClass returns the inner markup of the first <tag> whose class
+// list contains class, matched by nesting depth.
+func elementBodyByClass(src, tag, class string) (string, bool) {
+	open := regexp.MustCompile(`<` + tag + `[^>]*\bclass="[^"]*\b` + regexp.QuoteMeta(class) + `\b[^"]*"[^>]*>`)
+	loc := open.FindStringIndex(src)
+	if loc == nil {
+		return "", false
+	}
+	tags := regexp.MustCompile(`(?i)<` + tag + `\b|</` + tag + `\s*>`)
+	depth, i := 1, loc[1]
+	for depth > 0 {
+		m := tags.FindStringIndex(src[i:])
+		if m == nil {
+			return "", false
+		}
+		if strings.EqualFold(src[i+m[0]:i+m[0]+len(tag)+1], "<"+tag) {
+			depth++
+		} else {
+			depth--
+		}
+		i += m[1]
+	}
+	return src[loc[1]:i], true
+}
+
+// TestIssue19OnePrimaryAction guards #19: the window used to show up to three
+// solid accent buttons at once (添加, the sidebar's 压缩全部, the footer), and
+// the footer button changed identity between capture, compress and export.
+// There is now one primary action in the shell; it lives in the footer, keeps
+// its position, and 添加 is a secondary button. The empty state keeps its own
+// primary because the footer is hidden when the queue is empty.
+func TestIssue19OnePrimaryAction(t *testing.T) {
+	raw, err := os.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(raw)
+	if strings.Contains(html, `id="compressBtn"`) || strings.Contains(html, `id="sidebarActions"`) {
+		t.Errorf("index.html: the sidebar still owns a large compress button — the footer's is the one primary action (#19)")
+	}
+	add := regexp.MustCompile(`<button[^>]*id="addBtn"[^>]*>`).FindString(html)
+	if add == "" {
+		t.Fatal("index.html: no #addBtn (#19)")
+	}
+	if strings.Contains(add, "primary-btn") {
+		t.Errorf("index.html: 添加 is still a solid primary button next to the footer's — demote it (#19): %s", add)
+	}
+
+	src, err := os.ReadFile("src/main.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _, _, ok := functionBody(stripTSComments(string(src)), "renderStageAction")
+	if !ok {
+		t.Fatal("src/main.ts: no renderStageAction (#19)")
+	}
+	if strings.Contains(body, `"screenshot"`) {
+		t.Errorf("src/main.ts: the footer button still becomes 截图 — capture has its own fixed entry now (#19)")
+	}
+}
+
+// TestIssue28TitlebarCarriesTheActions guards #28: 截图 and 添加 moved into the
+// 46px titlebar, so the stage head is a single line (count, summary) instead of
+// a second toolbar. The brand subtitle 图片压缩 and the 本地处理 badge are gone
+// — the badge's promise already lives in the About dialog.
+func TestIssue28TitlebarCarriesTheActions(t *testing.T) {
+	raw, err := os.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(raw)
+	titlebar, ok := elementBodyByClass(html, "header", "titlebar")
+	if !ok {
+		t.Fatal("index.html: no .titlebar header (#28)")
+	}
+	for _, id := range []string{`id="screenshotBtn"`, `id="addBtn"`} {
+		if !strings.Contains(titlebar, id) {
+			t.Errorf("index.html: %s is not in the titlebar — the stage head keeps a whole toolbar row for it (#28)", id)
+		}
+	}
+	head, ok := elementBodyByClass(html, "header", "stage-head")
+	if !ok {
+		t.Fatal("index.html: no .stage-head header (#28)")
+	}
+	for _, id := range []string{`id="screenshotBtn"`, `id="addBtn"`} {
+		if strings.Contains(head, id) {
+			t.Errorf("index.html: %s still sits in the stage head as well (#28)", id)
+		}
+	}
+	for _, gone := range []string{"图片压缩", "本地处理", "window-subtitle", "titlebar-note"} {
+		if strings.Contains(titlebar, gone) {
+			t.Errorf("index.html: the titlebar still carries %q — it earns no row and no room (#28)", gone)
+		}
+	}
+}
+
+// TestIssue31PendingNoteSurvivesNarrowWindows guards a hole in #31's fix: the
+// pending note borrowed .summary-foot, which the ≤1040px rule hides, so at the
+// app's 940px minimum the header stopped saying that images were still
+// unfinished — exactly where honesty matters most, next to a savings figure.
+func TestIssue31PendingNoteSurvivesNarrowWindows(t *testing.T) {
+	raw, err := os.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tag := regexp.MustCompile(`<span[^>]*id="summaryPending"[^>]*>`).FindString(string(raw))
+	if tag == "" {
+		t.Fatal("index.html: no #summaryPending (#31)")
+	}
+	if strings.Contains(tag, "summary-foot") {
+		t.Errorf("index.html: #summaryPending still uses .summary-foot, which narrow windows hide (#31): %s", tag)
+	}
+	css, err := os.ReadFile("src/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`(?m)^\.summary-pending\s*\{`).MatchString(stripBlockComments(string(css))) {
+		t.Errorf("src/style.css: no .summary-pending rule for the note (#31)")
+	}
+}

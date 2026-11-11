@@ -140,12 +140,13 @@ function detectPlatform() {
   setShortcutPlatform(isMac);
   document.documentElement.classList.toggle("is-mac", isMac);
   $("#screenPermissionBtn").hidden = !(isMac && isMyGo());
-  $("#windowSettings").hidden = !isMac;
+  $("#windowSection").hidden = !isMac;
   $$<HTMLElement>("[data-shortcut]").forEach((el) => {
     const shortcut = el.dataset.shortcut;
     if (shortcut === "open") el.textContent = isMac ? "⌘ O" : "Ctrl O";
     else if (shortcut === "compress") el.textContent = isMac ? "⌘ ↵" : "Ctrl ↵";
     else if (shortcut === "paste") el.textContent = isMac ? "⌘ V" : "Ctrl V";
+    else if (shortcut === "prefs") el.textContent = isMac ? "⌘," : "Ctrl,";
   });
 }
 
@@ -375,7 +376,6 @@ function renderSettings() {
     : "关闭后需手动点「压缩全部」，再点「导出」。";
   $("#emptyTitle").textContent = autoProcessEnabled() ? "拖入图片，自动压缩保存" : "拖入图片开始压缩";
   $("#emptyShotKey").textContent = formatShortcut(settings.screenshotShortcut);
-  $("#outputInlineBtn").hidden = !autoProcessEnabled();
   $("#outputInlineLabel").textContent =
     settings.outputMode === "folder" && settings.outputFolder ? shortenPath(settings.outputFolder) : "原图旁边";
   $("#outputInlineBtn").title = settings.outputMode === "folder" && settings.outputFolder ? settings.outputFolder : "原图旁边";
@@ -396,15 +396,7 @@ function renderSettings() {
   $("#formatHint").textContent =
     format === "auto" ? "保持原格式" : format === "jpeg" ? "有损" : format === "png" ? "无损" : "有损";
 
-  if (settings.outputMode === "folder" && settings.outputFolder) {
-    $("#outputLabel").textContent = shortenPath(settings.outputFolder);
-    $("#outputLabel").title = settings.outputFolder;
-    $("#resetLocation").hidden = false;
-  } else {
-    $("#outputLabel").textContent = "原图旁边";
-    $("#outputLabel").title = "";
-    $("#resetLocation").hidden = true;
-  }
+  $("#resetLocation").hidden = !(settings.outputMode === "folder" && settings.outputFolder);
 
   const tips: Record<string, [string, string]> = {
     auto: ["保持原格式", "原格式保留；其他格式转为 JPG 或 PNG。"],
@@ -772,27 +764,20 @@ function renderFooter() {
   renderStageAction();
 }
 
-/* The footer carries the one action that matches the mode: capturing in the
-   automatic flow, compressing then exporting in the manual one. */
+/* The footer carries the one primary action (#19): compress while anything is
+   waiting or stale, export once every image is done. Capture lives in the
+   toolbar and no longer borrows this button, so its position never moves. */
 function renderStageAction() {
   const button = $<HTMLButtonElement>("#stageActionBtn");
   const label = $("#stageActionLabel");
-  const auto = autoProcessEnabled();
   const done = items.filter((item) => item.status === "done").length;
   const pending = items.some((item) => item.status === "ready" || item.status === "working");
 
-  let action: "screenshot" | "compress" | "export";
-  if (auto) action = "screenshot";
-  else if (!batch.running && done > 0 && !pending && !dirty) action = "export";
-  else action = "compress";
+  const action: "compress" | "export" =
+    !batch.running && done > 0 && !pending && !dirty ? "export" : "compress";
   button.dataset.action = action;
 
-  if (action === "screenshot") {
-    setUseIcon("stageActionIcon", "camera");
-    label.textContent = "截图";
-    button.title = `截取屏幕区域（${formatShortcut(settings.screenshotShortcut)}）`;
-    button.disabled = false;
-  } else if (action === "export") {
+  if (action === "export") {
     setUseIcon("stageActionIcon", "download");
     label.textContent = "导出";
     button.title = `导出 ${done} 张压缩后的图片`;
@@ -807,38 +792,11 @@ function renderStageAction() {
 
 function renderActions() {
   const running = batch.running;
-  const compress = $<HTMLButtonElement>("#compressBtn");
-  compress.disabled = running || items.length === 0;
-  compress.classList.toggle("loading", running);
-  const label = compress.querySelector<HTMLElement>(".primary-label");
-  if (label) {
-    const hasDone = items.some((item) => item.status === "done");
-    const hasPending = items.some((item) => item.status !== "done");
-    label.textContent = running
-      ? "正在压缩…"
-      : items.length === 0
-        ? "开始压缩"
-        : dirty
-          ? "应用新设置"
-          : hasPending
-            ? "压缩全部"
-            : hasDone
-              ? "重新压缩"
-              : "开始压缩";
-  }
-
-  // The automatic flow has no use for a second, large compress button; the
-  // footer owns the action. Hiding the whole block leaves no empty gap.
-  $("#sidebarActions").hidden = autoProcessEnabled();
   $("#cancelBtn").hidden = !running;
   $<HTMLButtonElement>("#clearBtn").disabled = running || items.length === 0;
   $<HTMLButtonElement>("#addBtn").disabled = running;
-  // In the automatic flow the footer owns the capture action, so the toolbar
-  // copy steps aside — except on an empty queue, where the footer is hidden.
-  $<HTMLButtonElement>("#screenshotBtn").hidden = autoProcessEnabled() && items.length > 0;
   $<HTMLButtonElement>("#screenshotBtn").disabled = running;
   $<HTMLButtonElement>("#emptyAddBtn").disabled = running;
-  $<HTMLButtonElement>("#outputBtn").disabled = running;
   $<HTMLButtonElement>("#resetBtn").disabled = running;
   $<HTMLButtonElement>("#suffix").disabled = running;
   $<HTMLButtonElement>("#maxDim").disabled = running;
@@ -873,7 +831,6 @@ function bindEvents() {
   $("#addBtn").addEventListener("click", () => void pickFiles());
   $("#emptyAddBtn").addEventListener("click", () => void pickFiles());
   $("#screenshotBtn").addEventListener("click", () => void captureScreenshot());
-  $("#compressBtn").addEventListener("click", () => void compressAll());
   $("#cancelBtn").addEventListener("click", () => void cancelCompression());
   $("#retryFailedBtn").addEventListener("click", () => void retryFailed());
   $("#stageActionBtn").addEventListener("click", () => {
@@ -886,10 +843,17 @@ function bindEvents() {
     if (lastSaved) void AnyPic.revealPath(lastSaved.path);
   });
   $("#clearBtn").addEventListener("click", () => void clearQueue());
-  $("#outputBtn").addEventListener("click", () => void chooseOutputFolder());
   $("#outputInlineBtn").addEventListener("click", () => void chooseOutputFolder());
   $("#resetLocation").addEventListener("click", () => void setSettings({ outputMode: "alongside" }));
-  $("#themeBtn").addEventListener("click", cycleTheme);
+  $("#prefsBtn").addEventListener("click", openPrefs);
+  $("#prefsClose").addEventListener("click", closePrefs);
+  $("#prefsDone").addEventListener("click", closePrefs);
+  $$<HTMLElement>("[data-close-prefs]").forEach((el) => el.addEventListener("click", closePrefs));
+  $("#themeSeg").addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-theme]");
+    if (!button) return;
+    void setSettings({ theme: button.dataset.theme ?? "system" });
+  });
   $("#shortcutBtn").addEventListener("click", () => {
     if (recordingShortcut) stopShortcutRecording();
     else startShortcutRecording();
@@ -1110,6 +1074,9 @@ function bindEvents() {
       } else if ($("#previewModal").classList.contains("open")) {
         event.preventDefault();
         closePreview();
+      } else if ($("#prefsModal").classList.contains("open")) {
+        event.preventDefault();
+        closePrefs();
       } else if (aboutModal.classList.contains("open")) {
         event.preventDefault();
         closeAbout();
@@ -1124,6 +1091,9 @@ function bindEvents() {
       if (target?.closest("input, textarea, select") || target?.isContentEditable) return;
       event.preventDefault();
       void pasteImage();
+    } else if (event.key === ",") {
+      event.preventDefault();
+      openPrefs();
     } else if (event.key.toLowerCase() === "o") {
       event.preventDefault();
       void pickFiles();
@@ -1851,10 +1821,11 @@ function applyTheme(mode: string) {
   } catch {
     /* storage can be unavailable */
   }
-  const name = theme === "system" ? "monitor" : theme === "dark" ? "moon" : "sun";
-  setUseIcon("themeIcon", name);
-  const button = document.getElementById("themeBtn");
-  if (button) button.title = theme === "system" ? "主题：跟随系统" : theme === "dark" ? "主题：深色" : "主题：浅色";
+  $$<HTMLButtonElement>("#themeSeg button").forEach((button) => {
+    const active = button.dataset.theme === theme;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -1889,6 +1860,15 @@ function openAbout() {
 
 function closeAbout() {
   closeModal($("#aboutModal"));
+}
+
+function openPrefs() {
+  openModal($("#prefsModal"));
+  $("#prefsClose").focus({ preventScroll: true });
+}
+
+function closePrefs() {
+  closeModal($("#prefsModal"));
 }
 
 /* ------------------------------------------------------------------ */
@@ -2074,6 +2054,9 @@ async function handleCommand(command: string) {
       break;
     case "theme":
       cycleTheme();
+      break;
+    case "prefs":
+      openPrefs();
       break;
   }
 }
