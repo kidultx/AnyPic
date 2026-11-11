@@ -2780,16 +2780,19 @@ body.side-drag * {
 
 /* ---------- toasts ---------- */
 
+/* Top centre over the titlebar's quiet middle: a toast must never sit on the
+   footer's primary action (issue #25). */
 .toast-stack {
   position: fixed;
   z-index: 90;
-  right: 20px;
-  bottom: 20px;
+  top: 8px;
+  left: 50%;
   display: flex;
   max-width: min(400px, calc(100vw - 40px));
   flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
   gap: 8px;
+  transform: translateX(-50%);
   pointer-events: none;
 }
 
@@ -2814,10 +2817,9 @@ body.side-drag * {
   opacity: 0;
   transform: translateY(3px);
   transition: opacity 0.14s ease, transform 0.14s ease;
-  /* A fading toast must stop eating clicks: the stack sits over the footer
-     actions, and .toast re-enables pointer events for its live state. Without
-     this an invisible toast (and its undo action) stays a click target until
-     removal (issue #16). */
+  /* A fading toast must stop eating clicks: .toast re-enables pointer events
+     for its live state, and without this an invisible toast (and its undo
+     action) stays a click target until removal (issue #16). */
   pointer-events: none;
 }
 

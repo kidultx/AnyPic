@@ -558,6 +558,35 @@ func TestIssue26ToggleToastsOnlyOnFailure(t *testing.T) {
 	}
 }
 
+// TestIssue25ToastsClearTheFooterButton guards #25: the toast stack used to
+// sit at right: 20px / bottom: 20px, exactly over the footer's primary action.
+// It now lives at the top centre, over the titlebar's non-interactive middle,
+// so a live toast covers no clickable control at the minimum 940×640 window.
+func TestIssue25ToastsClearTheFooterButton(t *testing.T) {
+	raw, err := os.ReadFile("src/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := stripBlockComments(string(raw))
+	ruleRE := regexp.MustCompile(`(?s)\.toast-stack\s*\{([^{}]*)\}`)
+	m := ruleRE.FindStringSubmatch(css)
+	if m == nil {
+		t.Fatalf("src/style.css: no .toast-stack rule (#25)")
+	}
+	body := m[1]
+	if regexp.MustCompile(`\b(right|bottom)\s*:`).MatchString(body) {
+		t.Errorf("src/style.css: .toast-stack is still anchored to a bottom corner over the footer actions (#25):%s", body)
+	}
+	for _, want := range []string{"top:", "left: 50%", "translateX(-50%)"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("src/style.css: .toast-stack is not top-centred (%q missing) (#25):%s", want, body)
+		}
+	}
+	if !regexp.MustCompile(`(?i)pointer-events\s*:\s*none`).MatchString(body) {
+		t.Errorf("src/style.css: .toast-stack must keep pointer-events: none so the gaps between toasts stay clickable (#25)")
+	}
+}
+
 // TestIssue16ToastActionDiesWithDismiss guards the #12 promise that an undo
 // entry disappears with its toast. CSS stops a faded action from receiving
 // pointer events; this checks the code-side guard in showToast's action
