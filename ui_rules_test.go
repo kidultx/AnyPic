@@ -689,3 +689,39 @@ func TestIssue27SelectionTakesNoExtraRow(t *testing.T) {
 		t.Errorf("src/style.css: .selection-bar still draws a row divider — it lives inside the toolbar now (#27):%s", b[1])
 	}
 }
+
+// TestIssue24MustReadCopyIsNotFaint guards #24. --text-faint sits at 3.3–3.7:1
+// on the surfaces it is used on, and the token block says so: it is for quiet
+// labels, while anything a user must read goes one step up. These rules carry
+// explanations — where automatic results are written, what a format does, why
+// a capture did not happen — so they must not paint with the faint step. The
+// background sits deeper in the same rule; inheriting a faint colour is the
+// same failure, so each listed rule must set its own readable colour.
+func TestIssue24MustReadCopyIsNotFaint(t *testing.T) {
+	raw, err := os.ReadFile("src/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := stripBlockComments(string(raw))
+	rules := []string{
+		`.field-note`,
+		`.output-inline`,
+		`.tip-card`,
+		`.shortcut-hint`,
+		`.empty-state p`,
+		`.empty-actions`,
+		`.queue-empty-filter`,
+	}
+	readable := regexp.MustCompile(`color:\s*var\(--(ctl-fg|text-soft|text)\)`)
+	for _, sel := range rules {
+		m := regexp.MustCompile(`(?s)` + regexp.QuoteMeta(sel) + `\s*\{([^{}]*)\}`).FindStringSubmatch(css)
+		if m == nil {
+			t.Errorf("src/style.css: no %s rule — update this list if the rule was renamed (#24)", sel)
+			continue
+		}
+		if !readable.MatchString(m[1]) {
+			t.Errorf("src/style.css: %s paints must-read copy below --ctl-fg (#24):%s", sel, m[1])
+		}
+	}
+}
+
