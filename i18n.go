@@ -7,8 +7,9 @@ package main
 //
 // The language is a setting like any other: "system" follows the desktop,
 // "zh-Hans" and "en" override it. It is resolved once the app is ready (the
-// system languages are not readable before that) and again whenever the
-// preference changes.
+// system languages are not readable before that), again whenever the
+// preference changes, and — while the app follows the system — whenever the
+// desktop's languages do.
 
 import (
 	"context"
@@ -146,7 +147,7 @@ func (a *AnyPic) followDesktopLanguage() {
 }
 
 // setLanguageListener installs the callback main.go uses to relabel the
-// native menus when the preference changes.
+// native menus when the language the app shows changes.
 func (a *AnyPic) setLanguageListener(fn func()) {
 	languageListener = fn
 }
