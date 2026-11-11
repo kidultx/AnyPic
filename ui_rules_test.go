@@ -879,3 +879,65 @@ func TestIssue22PreferencesLiveInADialog(t *testing.T) {
 		t.Errorf("main.go: 偏好设置 has no CmdOrCtrl+, accelerator (#22)")
 	}
 }
+
+// elementBodyByClass returns the inner markup of the first <tag> whose class
+// list contains class, matched by nesting depth.
+func elementBodyByClass(src, tag, class string) (string, bool) {
+	open := regexp.MustCompile(`<` + tag + `[^>]*\bclass="[^"]*\b` + regexp.QuoteMeta(class) + `\b[^"]*"[^>]*>`)
+	loc := open.FindStringIndex(src)
+	if loc == nil {
+		return "", false
+	}
+	tags := regexp.MustCompile(`(?i)<` + tag + `\b|</` + tag + `\s*>`)
+	depth, i := 1, loc[1]
+	for depth > 0 {
+		m := tags.FindStringIndex(src[i:])
+		if m == nil {
+			return "", false
+		}
+		if strings.EqualFold(src[i+m[0]:i+m[0]+len(tag)+1], "<"+tag) {
+			depth++
+		} else {
+			depth--
+		}
+		i += m[1]
+	}
+	return src[loc[1]:i], true
+}
+
+// TestIssue19OnePrimaryAction guards #19: the window used to show up to three
+// solid accent buttons at once (添加, the sidebar's 压缩全部, the footer), and
+// the footer button changed identity between capture, compress and export.
+// There is now one primary action in the shell; it lives in the footer, keeps
+// its position, and 添加 is a secondary button. The empty state keeps its own
+// primary because the footer is hidden when the queue is empty.
+func TestIssue19OnePrimaryAction(t *testing.T) {
+	raw, err := os.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(raw)
+	if strings.Contains(html, `id="compressBtn"`) || strings.Contains(html, `id="sidebarActions"`) {
+		t.Errorf("index.html: the sidebar still owns a large compress button — the footer's is the one primary action (#19)")
+	}
+	add := regexp.MustCompile(`<button[^>]*id="addBtn"[^>]*>`).FindString(html)
+	if add == "" {
+		t.Fatal("index.html: no #addBtn (#19)")
+	}
+	if strings.Contains(add, "primary-btn") {
+		t.Errorf("index.html: 添加 is still a solid primary button next to the footer's — demote it (#19): %s", add)
+	}
+
+	src, err := os.ReadFile("src/main.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _, _, ok := functionBody(stripTSComments(string(src)), "renderStageAction")
+	if !ok {
+		t.Fatal("src/main.ts: no renderStageAction (#19)")
+	}
+	if strings.Contains(body, `"screenshot"`) {
+		t.Errorf("src/main.ts: the footer button still becomes 截图 — capture has its own fixed entry now (#19)")
+	}
+}
+

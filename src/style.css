@@ -1145,16 +1145,6 @@ body.side-drag * {
   font-weight: 500;
 }
 
-.sidebar-actions {
-  display: flex;
-  flex: 0 0 auto;
-  flex-direction: column;
-  justify-content: center;
-  gap: 8px;
-  padding: 8px 10px 10px;
-  background-color: var(--sidebar);
-}
-
 .primary-btn {
   display: flex;
   width: 100%;
@@ -1206,28 +1196,6 @@ body.side-drag * {
   border-color: var(--line);
   background: transparent;
   color: var(--text-disabled);
-}
-
-.primary-btn.loading {
-  opacity: 0.8;
-}
-
-.primary-btn.loading .mod-key {
-  display: none;
-}
-
-.primary-btn .primary-spinner {
-  display: none;
-  width: 20px;
-  height: 20px;
-  border: 2px solid var(--brand-spinner-track);
-  border-top-color: var(--brand-ink);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-
-.primary-btn.loading .primary-spinner {
-  display: block;
 }
 
 .primary-btn.compact {

@@ -764,27 +764,20 @@ function renderFooter() {
   renderStageAction();
 }
 
-/* The footer carries the one action that matches the mode: capturing in the
-   automatic flow, compressing then exporting in the manual one. */
+/* The footer carries the one primary action (#19): compress while anything is
+   waiting or stale, export once every image is done. Capture lives in the
+   toolbar and no longer borrows this button, so its position never moves. */
 function renderStageAction() {
   const button = $<HTMLButtonElement>("#stageActionBtn");
   const label = $("#stageActionLabel");
-  const auto = autoProcessEnabled();
   const done = items.filter((item) => item.status === "done").length;
   const pending = items.some((item) => item.status === "ready" || item.status === "working");
 
-  let action: "screenshot" | "compress" | "export";
-  if (auto) action = "screenshot";
-  else if (!batch.running && done > 0 && !pending && !dirty) action = "export";
-  else action = "compress";
+  const action: "compress" | "export" =
+    !batch.running && done > 0 && !pending && !dirty ? "export" : "compress";
   button.dataset.action = action;
 
-  if (action === "screenshot") {
-    setUseIcon("stageActionIcon", "camera");
-    label.textContent = "截图";
-    button.title = `截取屏幕区域（${formatShortcut(settings.screenshotShortcut)}）`;
-    button.disabled = false;
-  } else if (action === "export") {
+  if (action === "export") {
     setUseIcon("stageActionIcon", "download");
     label.textContent = "导出";
     button.title = `导出 ${done} 张压缩后的图片`;
@@ -799,35 +792,9 @@ function renderStageAction() {
 
 function renderActions() {
   const running = batch.running;
-  const compress = $<HTMLButtonElement>("#compressBtn");
-  compress.disabled = running || items.length === 0;
-  compress.classList.toggle("loading", running);
-  const label = compress.querySelector<HTMLElement>(".primary-label");
-  if (label) {
-    const hasDone = items.some((item) => item.status === "done");
-    const hasPending = items.some((item) => item.status !== "done");
-    label.textContent = running
-      ? "正在压缩…"
-      : items.length === 0
-        ? "开始压缩"
-        : dirty
-          ? "应用新设置"
-          : hasPending
-            ? "压缩全部"
-            : hasDone
-              ? "重新压缩"
-              : "开始压缩";
-  }
-
-  // The automatic flow has no use for a second, large compress button; the
-  // footer owns the action. Hiding the whole block leaves no empty gap.
-  $("#sidebarActions").hidden = autoProcessEnabled();
   $("#cancelBtn").hidden = !running;
   $<HTMLButtonElement>("#clearBtn").disabled = running || items.length === 0;
   $<HTMLButtonElement>("#addBtn").disabled = running;
-  // In the automatic flow the footer owns the capture action, so the toolbar
-  // copy steps aside — except on an empty queue, where the footer is hidden.
-  $<HTMLButtonElement>("#screenshotBtn").hidden = autoProcessEnabled() && items.length > 0;
   $<HTMLButtonElement>("#screenshotBtn").disabled = running;
   $<HTMLButtonElement>("#emptyAddBtn").disabled = running;
   $<HTMLButtonElement>("#resetBtn").disabled = running;
@@ -864,7 +831,6 @@ function bindEvents() {
   $("#addBtn").addEventListener("click", () => void pickFiles());
   $("#emptyAddBtn").addEventListener("click", () => void pickFiles());
   $("#screenshotBtn").addEventListener("click", () => void captureScreenshot());
-  $("#compressBtn").addEventListener("click", () => void compressAll());
   $("#cancelBtn").addEventListener("click", () => void cancelCompression());
   $("#retryFailedBtn").addEventListener("click", () => void retryFailed());
   $("#stageActionBtn").addEventListener("click", () => {
