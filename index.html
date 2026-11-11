@@ -52,16 +52,18 @@
             <img class="logo-dark" src="./src/assets/logo-dark.png" alt="" />
           </span>
           <span class="wordmark">AnyPic</span>
-          <span class="titlebar-sep" aria-hidden="true"></span>
-          <span class="window-subtitle">图片压缩</span>
-        </div>
-
-        <div class="titlebar-note">
-          <svg aria-hidden="true" class="icon"><use href="#i-lock" /></svg>
-          <span>本地处理</span>
         </div>
 
         <div class="titlebar-actions">
+          <button class="secondary-btn small" id="screenshotBtn" type="button" title="截取屏幕区域">
+            <svg aria-hidden="true" class="icon"><use href="#i-camera" /></svg>
+            截图
+          </button>
+          <button class="secondary-btn small" id="addBtn" type="button">
+            <svg aria-hidden="true" class="icon"><use href="#i-add" /></svg>
+            添加
+          </button>
+          <span class="titlebar-sep" aria-hidden="true"></span>
           <button class="icon-btn" id="infoBtn" title="关于 AnyPic" aria-label="关于 AnyPic">
             <svg aria-hidden="true" class="icon"><use href="#i-info" /></svg>
           </button>
@@ -184,30 +186,20 @@
                 <h1>图片</h1>
                 <span class="count-badge" id="countBadge">0</span>
                 <span class="stale-badge" id="staleBadge" role="status" hidden>设置已更改</span>
+                <p class="stage-summary" id="stats" hidden>
+                  <span>原始 <strong id="statOriginal">0 KB</strong></span>
+                  <span class="summary-seg" id="summaryDone">
+                    <svg aria-hidden="true" class="icon summary-arrow"><use href="#i-arrow-right" /></svg>
+                    <span>压缩后 <strong id="statCompressed">暂无</strong></span>
+                  </span>
+                  <span class="summary-seg" id="summarySaved">
+                    <span class="summary-dot" aria-hidden="true"></span>
+                    <span class="summary-saved">节省 <strong id="statSaved">暂无</strong></span>
+                    <span class="summary-foot" id="statSavedFoot"></span>
+                  </span>
+                  <span class="summary-foot" id="summaryPending" hidden></span>
+                </p>
               </div>
-              <p class="stage-summary" id="stats" hidden>
-                <span>原始 <strong id="statOriginal">0 KB</strong></span>
-                <span class="summary-seg" id="summaryDone">
-                  <svg aria-hidden="true" class="icon summary-arrow"><use href="#i-arrow-right" /></svg>
-                  <span>压缩后 <strong id="statCompressed">暂无</strong></span>
-                </span>
-                <span class="summary-seg" id="summarySaved">
-                  <span class="summary-dot" aria-hidden="true"></span>
-                  <span class="summary-saved">节省 <strong id="statSaved">暂无</strong></span>
-                  <span class="summary-foot" id="statSavedFoot"></span>
-                </span>
-                <span class="summary-foot" id="summaryPending" hidden></span>
-              </p>
-            </div>
-            <div class="stage-tools">
-              <button class="secondary-btn small" id="screenshotBtn" type="button" title="截取屏幕区域">
-                <svg aria-hidden="true" class="icon"><use href="#i-camera" /></svg>
-                截图
-              </button>
-              <button class="secondary-btn small" id="addBtn" type="button">
-                <svg aria-hidden="true" class="icon"><use href="#i-add" /></svg>
-                添加
-              </button>
             </div>
           </header>
 

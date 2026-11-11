@@ -456,37 +456,18 @@ html.is-mac .titlebar {
   background-color: var(--line);
 }
 
-.window-subtitle {
-  color: var(--muted);
-  font-size: 12.5px;
-}
-
-.titlebar-note {
-  display: inline-flex;
-  height: 22px;
-  align-items: center;
-  gap: 4px;
-  margin-left: auto;
-  padding: 0 9px;
-  border-radius: 999px;
-  background-color: var(--pill);
-  color: var(--ctl-fg);
-  font-size: 11.5px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.titlebar-note .icon {
-  width: 13px;
-  height: 13px;
-}
-
+/* The titlebar carries the two ways in — capture and add (#28). Its right
+   side is no-drag, so a click there never starts a window drag. */
 .titlebar-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-left: 4px;
+  gap: 6px;
+  margin-left: auto;
   --app-region: no-drag;
+}
+
+.titlebar-actions .secondary-btn {
+  height: 28px;
 }
 
 .icon-btn {
@@ -1249,8 +1230,9 @@ body.side-drag * {
 
 .stage-title-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 1px 8px;
 }
 
 .stage-title h1 {
@@ -1286,18 +1268,6 @@ body.side-drag * {
   color: var(--warning);
   font-size: 12px;
   font-weight: 600;
-}
-
-.stage-tools {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 8px;
-}
-
-.stage-tools .secondary-btn,
-.stage-tools .primary-btn {
-  height: 30px;
 }
 
 .secondary-btn {
@@ -1388,9 +1358,10 @@ body.side-drag * {
 
 .stage-summary {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 14px;
-  margin: 3px 0 0;
+  margin: 0;
   color: var(--text-faint);
   font-size: 12px;
   line-height: 1;
@@ -2894,10 +2865,6 @@ body.side-drag * {
     margin-bottom: 12px;
   }
 
-  .stage-head {
-    min-height: 64px;
-    flex-basis: 64px;
-  }
 }
 
 @media (max-width: 1040px) {

@@ -941,3 +941,37 @@ func TestIssue19OnePrimaryAction(t *testing.T) {
 	}
 }
 
+// TestIssue28TitlebarCarriesTheActions guards #28: 截图 and 添加 moved into the
+// 46px titlebar, so the stage head is a single line (count, summary) instead of
+// a second toolbar. The brand subtitle 图片压缩 and the 本地处理 badge are gone
+// — the badge's promise already lives in the About dialog.
+func TestIssue28TitlebarCarriesTheActions(t *testing.T) {
+	raw, err := os.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(raw)
+	titlebar, ok := elementBodyByClass(html, "header", "titlebar")
+	if !ok {
+		t.Fatal("index.html: no .titlebar header (#28)")
+	}
+	for _, id := range []string{`id="screenshotBtn"`, `id="addBtn"`} {
+		if !strings.Contains(titlebar, id) {
+			t.Errorf("index.html: %s is not in the titlebar — the stage head keeps a whole toolbar row for it (#28)", id)
+		}
+	}
+	head, ok := elementBodyByClass(html, "header", "stage-head")
+	if !ok {
+		t.Fatal("index.html: no .stage-head header (#28)")
+	}
+	for _, id := range []string{`id="screenshotBtn"`, `id="addBtn"`} {
+		if strings.Contains(head, id) {
+			t.Errorf("index.html: %s still sits in the stage head as well (#28)", id)
+		}
+	}
+	for _, gone := range []string{"图片压缩", "本地处理", "window-subtitle", "titlebar-note"} {
+		if strings.Contains(titlebar, gone) {
+			t.Errorf("index.html: the titlebar still carries %q — it earns no row and no room (#28)", gone)
+		}
+	}
+}
