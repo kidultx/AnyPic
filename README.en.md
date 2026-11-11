@@ -4,7 +4,7 @@
 
 AnyPic is a cross-platform image-compression desktop app built with [MyGo](https://github.com/egoist/mygo). Its interface is modeled on clean desktop tools: white cards with hairline borders on a neutral canvas, gray pill-shaped controls, segmented switches with white thumbs, hairline dividers, and a sparing indigo accent. Settings live in the sidebar, and actions sit next to the content. Every image is processed locally.
 
-The app interface is currently in Chinese.
+The interface follows the system language (English when Chinese is not available) and ships in Simplified Chinese and English; Preferences → Appearance → Language pins either one.
 
 Website and 40-second intro video: <https://kidultx.github.io/AnyPic/>
 
@@ -40,6 +40,7 @@ Download the installer for your platform from the [Releases](../../releases) pag
 - **Retry failures**: failed images can be retried in one click; completed images are not re-encoded.
 - **Before / after**: drag a divider in the app to inspect the difference in detail before and after compression. Scroll or pinch to zoom and drag to pan (the two images move together), switch between “Fit” and “100%” with the current ratio shown, and use ←/→ to step through the queue.
 - **Flexible saving**: save next to the original or to a folder you choose, with a custom filename suffix and batch export.
+- **Chinese and English**: the interface follows the system language (English when Chinese is not available) and can be pinned to either under Preferences → Appearance → Language; the sidebar, menus, dialogs, error messages and aria labels switch together. The copy lives in on-device catalogs under `locales/`, so a new language needs no UI code changes.
 - **A clean desktop interface**: a neutral background, white cards with hairline borders and clear tables, with a hideable title bar, native menus, keyboard shortcuts, drag and drop, light / dark themes, and window-state memory.
 - **Privacy first**: no image uploads, no accounts, no telemetry; image processing happens entirely on your machine. The app's only network activity is checking for updates and downloading installers (only when you act, and only from GitHub Releases). Temporary files are cleaned up when the app quits (unsaved compression results are lost).
 
@@ -133,8 +134,12 @@ decorate.go        screenshot beautification: corner radius, border, shadow and 
 updater.go         in-app updates: check for new versions, download installers, quit and open them when installing
 compressor_test.go backend tests
 screenshot_test.go screenshot and settings-normalization tests
+i18n.go            language resolution, the Go-side tr() and the stable error codes the page matches
+locales/           Chinese and English message catalogs (zh-Hans.json / en.json) and the generated Go accessors
 index.html         app UI markup
 src/main.ts        state management, rendering and interaction
+src/i18n.ts        page language choice, data-i18n markup filling and error codes
+src/locales.ts     typed message accessors generated from locales/*.json
 src/style.css      design system and responsive layout
 src/mygo.ts        MyGo-generated type-safe IPC client
 mygo.config.ts     app name, identifier, version and build config

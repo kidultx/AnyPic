@@ -161,7 +161,7 @@ func selectReleaseAsset(assets []releaseAsset) (releaseAsset, error) {
 			}
 		}
 	}
-	return releaseAsset{}, errors.New("发布里没有适用于本平台的安装包")
+	return releaseAsset{}, errors.New(tr().GoErrNoReleaseAsset())
 }
 
 // CheckForUpdate asks GitHub for the latest release and compares it with the
@@ -181,15 +181,15 @@ func checkForUpdate() (UpdateInfo, error) {
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(releaseAPIBase + "/repos/kidultx/AnyPic/releases/latest")
 	if err != nil {
-		return UpdateInfo{}, fmt.Errorf("无法连接更新服务：%w", err)
+		return UpdateInfo{}, fmt.Errorf("%s: %w", tr().GoErrUpdateConnect(), err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return UpdateInfo{}, fmt.Errorf("更新服务返回 %s", resp.Status)
+		return UpdateInfo{}, errors.New(tr().GoErrUpdateStatus(resp.Status))
 	}
 	var rel release
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&rel); err != nil {
-		return UpdateInfo{}, fmt.Errorf("无法解析更新信息：%w", err)
+		return UpdateInfo{}, fmt.Errorf("%s: %w", tr().GoErrUpdateParse(), err)
 	}
 	info := UpdateInfo{
 		Current: mygo.App.Version(),
@@ -217,7 +217,7 @@ func checkForUpdate() (UpdateInfo, error) {
 // time.
 func (a *AnyPic) DownloadUpdate() (UpdateDownload, error) {
 	if !a.downloading.CompareAndSwap(false, true) {
-		return UpdateDownload{}, errors.New("已经在下载中")
+		return UpdateDownload{}, errors.New(tr().GoErrUpdateDownloading())
 	}
 	defer a.downloading.Store(false)
 
@@ -228,24 +228,24 @@ func (a *AnyPic) DownloadUpdate() (UpdateDownload, error) {
 	a.pendingInstaller = ""
 	a.mu.Unlock()
 	if info == nil || !info.HasUpdate || info.AssetURL == "" {
-		return UpdateDownload{}, errors.New("请先检查更新")
+		return UpdateDownload{}, errors.New(tr().GoErrCheckFirst())
 	}
 	// The asset URL comes from the api.github.com response over HTTPS; only
 	// https is trusted. Loopback http stays allowed for the tests.
 	u, err := url.Parse(info.AssetURL)
 	if err != nil || (u.Scheme != "https" && u.Hostname() != "127.0.0.1" && u.Hostname() != "localhost") {
-		return UpdateDownload{}, errors.New("下载地址不可信，已取消")
+		return UpdateDownload{}, errors.New(tr().GoErrUntrustedURL())
 	}
 
 	destDir, err := mygo.App.Path(mygo.PathDownloads)
 	if err != nil || destDir == "" {
 		destDir, err = mygo.App.Path(mygo.PathCache)
 		if err != nil {
-			return UpdateDownload{}, fmt.Errorf("无法确定下载目录：%w", err)
+			return UpdateDownload{}, fmt.Errorf("%s: %w", tr().GoErrDownloadDir(), err)
 		}
 	}
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		return UpdateDownload{}, fmt.Errorf("无法准备下载目录：%w", err)
+		return UpdateDownload{}, fmt.Errorf("%s: %w", tr().GoErrPrepareDownloads(), err)
 	}
 	dest := uniquePath(filepath.Join(destDir, info.AssetName))
 	part := dest + ".part"
@@ -253,11 +253,11 @@ func (a *AnyPic) DownloadUpdate() (UpdateDownload, error) {
 	client := &http.Client{Timeout: 30 * time.Minute}
 	resp, err := client.Get(info.AssetURL)
 	if err != nil {
-		return UpdateDownload{}, fmt.Errorf("下载失败：%w", err)
+		return UpdateDownload{}, fmt.Errorf("%s: %w", tr().GoErrDownload(), err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return UpdateDownload{}, fmt.Errorf("下载失败：更新服务返回 %s", resp.Status)
+		return UpdateDownload{}, errors.New(tr().GoErrDownloadStatus(resp.Status))
 	}
 
 	total := info.AssetSize
@@ -266,7 +266,7 @@ func (a *AnyPic) DownloadUpdate() (UpdateDownload, error) {
 	}
 	out, err := os.Create(part)
 	if err != nil {
-		return UpdateDownload{}, fmt.Errorf("无法写入下载文件：%w", err)
+		return UpdateDownload{}, fmt.Errorf("%s: %w", tr().GoErrWriteDownload(), err)
 	}
 	var received int64
 	lastEmit := time.Now()
@@ -278,12 +278,12 @@ func (a *AnyPic) DownloadUpdate() (UpdateDownload, error) {
 			if received > downloadSizeCap {
 				out.Close()
 				_ = os.Remove(part)
-				return UpdateDownload{}, errors.New("安装包超过大小上限，已取消下载")
+				return UpdateDownload{}, errors.New(tr().GoErrDownloadTooLarge())
 			}
 			if _, werr := out.Write(buf[:n]); werr != nil {
 				out.Close()
 				_ = os.Remove(part)
-				return UpdateDownload{}, fmt.Errorf("无法写入下载文件：%w", werr)
+				return UpdateDownload{}, fmt.Errorf("%s: %w", tr().GoErrWriteDownload(), werr)
 			}
 			if time.Since(lastEmit) >= 200*time.Millisecond {
 				lastEmit = time.Now()
@@ -296,17 +296,17 @@ func (a *AnyPic) DownloadUpdate() (UpdateDownload, error) {
 		if readErr != nil {
 			out.Close()
 			_ = os.Remove(part)
-			return UpdateDownload{}, fmt.Errorf("下载中断：%w", readErr)
+			return UpdateDownload{}, fmt.Errorf("%s: %w", tr().GoErrDownloadInterrupted(), readErr)
 		}
 	}
 	if err := out.Close(); err != nil {
 		_ = os.Remove(part)
-		return UpdateDownload{}, fmt.Errorf("无法写入下载文件：%w", err)
+		return UpdateDownload{}, fmt.Errorf("%s: %w", tr().GoErrWriteDownload(), err)
 	}
 	_ = DownloadProgressChanged.Broadcast(DownloadProgress{Received: received, Total: received})
 	if err := os.Rename(part, dest); err != nil {
 		_ = os.Remove(part)
-		return UpdateDownload{}, fmt.Errorf("无法完成下载：%w", err)
+		return UpdateDownload{}, fmt.Errorf("%s: %w", tr().GoErrDownloadFinish(), err)
 	}
 	download := UpdateDownload{Path: dest}
 	if installerRequiresQuit(installerPlatform) {
@@ -317,7 +317,7 @@ func (a *AnyPic) DownloadUpdate() (UpdateDownload, error) {
 		return download, nil
 	}
 	if err := openInstaller(dest); err != nil {
-		return download, fmt.Errorf("已下载到 %s，但无法打开：%w", dest, err)
+		return download, fmt.Errorf("%s: %w", tr().GoErrDownloadOpened(dest), err)
 	}
 	return download, nil
 }
@@ -332,13 +332,13 @@ func (a *AnyPic) InstallUpdate(path string) error {
 	pending := a.pendingInstaller
 	a.mu.Unlock()
 	if pending == "" || path != pending {
-		return errors.New("请先下载更新")
+		return errors.New(tr().GoErrDownloadFirst())
 	}
 	if _, err := os.Stat(pending); err != nil {
-		return fmt.Errorf("安装包已不存在，AnyPic 仍在运行：%w", err)
+		return fmt.Errorf("%s: %w", tr().GoErrInstallerGone(), err)
 	}
 	if err := openInstaller(pending); err != nil {
-		return fmt.Errorf("无法打开安装包，AnyPic 仍在运行：%w", err)
+		return fmt.Errorf("%s: %w", tr().GoErrOpenInstaller(), err)
 	}
 	a.mu.Lock()
 	if a.pendingInstaller == pending {
@@ -356,7 +356,7 @@ func (a *AnyPic) OpenReleasePage() error {
 	info := a.updateInfo
 	a.mu.Unlock()
 	if info == nil || info.PageURL == "" {
-		return errors.New("请先检查更新")
+		return errors.New(tr().GoErrCheckFirst())
 	}
 	return mygo.Shell.OpenExternal(info.PageURL)
 }

@@ -11,6 +11,10 @@ export default defineConfig(({ command }) => ({
   buildCommand: "bun run build:web",
   frontendDist: "dist",
   bindings: "src/mygo.ts",
+  // The interface is written in Simplified Chinese first and translated to
+  // English (#32). `mygo generate` checks these catalogs and writes the typed
+  // accessors: locales/catalog_gen.go for Go and src/locales.ts for the page.
+  i18n: { dir: "locales", source: "zh-Hans" },
   out: "build",
   // File associations feed App.OnOpenFile (#6): the system lists AnyPic for
   // these types, and opening one hands the path to the running app. The app

@@ -21,8 +21,10 @@ TypeScript 前端）。产品定位、功能与下载见 [README.md](README.md)�
 4. **只写自己的文件，默认不盖用户值。** 设置只进
    `mygo.App.Path(PathUserData)/settings.json`，截图只进用户图片目录的
    `AnyPic/`，退出时清理临时目录；默认值只在用户没设置过时生效。
-5. **`src/mygo.ts` 是生成物**（文件头 `Code generated ... DO NOT EDIT`）。
-   改 IPC 接口 = 改 Go 侧定义 + `bun run generate`，绝不手改。
+5. **生成物绝不手改。** `src/mygo.ts`（文件头 `Code generated ... DO NOT
+   EDIT`）、`src/locales.ts` 与 `locales/catalog_gen.go` 都由
+   `bun run generate` 写出。改 IPC 接口 = 改 Go 侧定义 + generate；改文案 =
+   改 `locales/*.json` + generate。
 
 改动一条不变量 = 破坏性变更：先开 issue 说明理由，获准后再动，并同步本文件。
 
@@ -32,6 +34,7 @@ TypeScript 前端）。产品定位、功能与下载见 [README.md](README.md)�
 | --- | --- |
 | 支持的格式、上限、各平台注意事项 | [README.md](README.md)「支持格式与限制」 |
 | 各文件的职责边界 | [README.md](README.md)「项目结构」 |
+| 文案、语言与错误码 | [docs/subsystems/i18n.md](docs/subsystems/i18n.md) |
 | 打包、签名与发版流程 | [README.md](README.md)「验证与打包」「发布与 CI」 |
 | [LESSONS.md](LESSONS.md) | 改代码前扫一眼（目前为空，出现教训后必读） |
 

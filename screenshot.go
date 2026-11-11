@@ -21,14 +21,8 @@ import (
 const DefaultScreenshotShortcut = "CmdOrCtrl+Alt+S"
 
 var (
-	errCaptureCanceled = errors.New("已取消截图")
-	errCaptureBusy     = errors.New("正在截图中")
-	// errScreenCapturePermission is matched by its text in src/main.ts, which
-	// then offers the system settings dialog instead of a generic error. Keep
-	// the Go error and the page check in sync (TestIssue17Page... guards it).
-	errScreenCapturePermission = errors.New("需要屏幕录制权限")
-	captureBusy                atomic.Bool
-	shortcutMu                 sync.Mutex
+	captureBusy atomic.Bool
+	shortcutMu  sync.Mutex
 )
 
 // Seams for tests: the platform check, the two TCC calls, the capture plan,
@@ -122,11 +116,11 @@ func (a *AnyPic) CaptureScreenshot(ctx context.Context) (result AddResult, err e
 
 	path, err := writeScreenshot(data)
 	if err != nil {
-		return AddResult{}, fmt.Errorf("截图已生成，但无法保存：%w", err)
+		return AddResult{}, fmt.Errorf("%s: %w", tr().GoErrCaptureSave(), err)
 	}
 	result, err = a.AddPaths([]string{path})
 	if err != nil {
-		return AddResult{}, fmt.Errorf("截图已保存到 %s，但无法加入队列：%w", path, err)
+		return AddResult{}, fmt.Errorf("%s: %w", tr().GoErrCaptureQueue(path), err)
 	}
 	result.Copied = copied
 
@@ -217,7 +211,7 @@ func screenshotPlan() (screenshotCommand, error) {
 	if hasCommands("grim", "slurp", "wl-copy") {
 		return screenshotCommand{"sh", []string{"-c", `grim -g "$(slurp)" - | wl-copy`}, false, true}, nil
 	}
-	return screenshotCommand{}, errors.New("没有找到可用的截图工具，可安装 gnome-screenshot、spectacle 或 grim + slurp + wl-copy")
+	return screenshotCommand{}, errors.New(tr().GoErrNoCaptureTool())
 }
 
 func hasCommands(names ...string) bool {
@@ -262,7 +256,7 @@ func captureRegion(ctx context.Context) ([]byte, bool, error) {
 	}
 
 	if err := startCaptureCommand(cmd); err != nil {
-		return nil, false, fmt.Errorf("无法启动截图工具：%w", err)
+		return nil, false, fmt.Errorf("%s: %w", tr().GoErrCaptureStart(), err)
 	}
 	go func() { _ = cmd.Wait() }()
 	// These tools return as soon as their overlay opens, so the wait has to
@@ -280,11 +274,11 @@ func captureRegion(ctx context.Context) ([]byte, bool, error) {
 func captureToFile(cmd *exec.Cmd, plan screenshotCommand) ([]byte, error) {
 	if plan.name != "/usr/sbin/screencapture" {
 		// Generic fallback: watch the default screenshot folder for a new file.
-		return nil, fmt.Errorf("截图工具 %s 不支持输出到文件", plan.name)
+		return nil, errors.New(tr().GoErrCaptureFileUnsupported(plan.name))
 	}
 	dir, err := os.MkdirTemp("", "anypic-shot-")
 	if err != nil {
-		return nil, fmt.Errorf("无法创建临时目录：%w", err)
+		return nil, fmt.Errorf("%s: %w", tr().GoErrTempDir(), err)
 	}
 	defer os.RemoveAll(dir)
 
@@ -342,12 +336,12 @@ func writeScreenshot(data []byte) (string, error) {
 	}
 
 	stamp := time.Now().Format("2006-01-02 15.04.05")
-	path := filepath.Join(dir, "截图 "+stamp+".png")
+	path := filepath.Join(dir, tr().GoScreenshotName(stamp)+".png")
 	for n := 2; ; n++ {
 		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 			break
 		}
-		path = filepath.Join(dir, fmt.Sprintf("截图 %s (%d).png", stamp, n))
+		path = filepath.Join(dir, tr().GoScreenshotNameDuplicate(n, stamp)+".png")
 	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return "", err

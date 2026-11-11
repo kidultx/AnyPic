@@ -2726,7 +2726,8 @@ body.side-drag * {
   margin-bottom: 0;
 }
 
-.prefs-theme {
+.prefs-theme,
+.prefs-language {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
