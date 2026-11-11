@@ -2,6 +2,7 @@ import { AnyPic, events, type Batch, type Item, type Preview, type Settings, typ
 import { isMyGo, onFileDrop, runtime } from "mygo-runtime";
 import { $, $$, closeModal, esc, formatBytes, formatDimensions, icon, openModal, pct, showError, shortenPath, showToast } from "./ui";
 import { bindPreview, closePreview, initPreview, invalidatePreview, openPreview, previewSelectedId } from "./preview";
+import { DEFAULT_SHORTCUT, acceleratorFromEvent, formatShortcut, isReservedShortcut, setShortcutPlatform } from "./shortcuts";
 
 function signature(settings: Settings): string {
   return JSON.stringify([settings.format, settings.quality, settings.maxDimension, settings.suffix]);
@@ -14,7 +15,6 @@ function setUseIcon(useId: string, name: string) {
   if (el) el.setAttribute("href", `#i-${name}`);
 }
 
-const DEFAULT_SHORTCUT = "CmdOrCtrl+Alt+S";
 
 /* ------------------------------------------------------------------ */
 /* state                                                               */
@@ -137,6 +137,7 @@ function detectPlatform() {
   } catch {
     /* the dev server opened in a browser has no runtime */
   }
+  setShortcutPlatform(isMac);
   document.documentElement.classList.toggle("is-mac", isMac);
   $("#screenPermissionBtn").hidden = !(isMac && isMyGo());
   $("#windowSettings").hidden = !isMac;
@@ -440,20 +441,24 @@ function renderStage() {
 }
 
 function renderStats() {
-  const totalOriginal = items.reduce((sum, item) => sum + item.originalSize, 0);
   const done = items.filter((item) => item.status === "done");
   const doneOriginal = done.reduce((sum, item) => sum + item.originalSize, 0);
   const doneCompressed = done.reduce((sum, item) => sum + item.compressedSize, 0);
   const saved = Math.max(0, doneOriginal - doneCompressed);
   const savedPercent = doneOriginal > 0 ? (saved / doneOriginal) * 100 : 0;
+  const pending = items.length - done.length;
 
-  $("#statOriginal").textContent = formatBytes(totalOriginal);
+  // All three numbers describe the finished images; mixing in the originals
+  // still queued made the row's own arithmetic wrong (#31).
+  $("#statOriginal").textContent = done.length > 0 ? formatBytes(doneOriginal) : "暂无";
   $("#statCompressed").textContent = done.length > 0 ? formatBytes(doneCompressed) : "暂无";
   $("#statSaved").textContent = done.length > 0 ? `${Math.round(savedPercent)}%` : "暂无";
   $("#statSavedFoot").textContent =
     done.length === 0 ? "" : saved > 0 ? `（共 ${formatBytes(saved)}）` : "（无需压缩）";
   $("#summaryDone").style.display = done.length === 0 ? "none" : "";
   $("#summarySaved").style.display = done.length === 0 ? "none" : "";
+  $("#summaryPending").hidden = pending === 0;
+  $("#summaryPending").textContent = `另有 ${pending} 张未完成`;
 }
 
 function renderQueue() {
@@ -520,7 +525,11 @@ function allVisibleSelected(): boolean {
 }
 
 function syncSelectionBar() {
-  $("#selectionBar").hidden = selected.size === 0 || batch.running;
+  const showing = selected.size > 0 && !batch.running;
+  $("#selectionBar").hidden = !showing;
+  // Selection takes the toolbar over in place (#27): an extra row would push
+  // every image down at the moment the first box is ticked.
+  $("#queueTabs").hidden = showing;
   $("#selectionCount").textContent = String(selected.size);
   $<HTMLButtonElement>("#removeSelectedBtn").disabled = batch.running;
 }
@@ -885,29 +894,31 @@ function bindEvents() {
     if (recordingShortcut) stopShortcutRecording();
     else startShortcutRecording();
   });
-  $("#clipboardToggle").addEventListener("change", (event) => {
-    const on = (event.target as HTMLInputElement).checked;
-    void setSettings({ screenshotClipboard: on ? "on" : "off" });
-    showToast(on ? "截图后将复制到剪贴板" : "截图后不再复制到剪贴板", "info");
-  });
-  $("#autoProcessToggle").addEventListener("change", (event) => {
-    const on = (event.target as HTMLInputElement).checked;
-    void setSettings({ autoProcess: on ? "on" : "off" });
-    showToast(on ? "添加后自动压缩并保存" : "已改为手动压缩和导出", "info");
-  });
-  $("#dockToggle").addEventListener("change", (event) => {
-    const on = (event.target as HTMLInputElement).checked;
-    void setSettings({ hideDockWhenTray: on ? "on" : "off" });
-    showToast(on ? "关闭窗口后将隐藏 Dock 图标" : "关闭窗口后保留 Dock 图标", "info");
-  });
-  $("#openAtLoginToggle").addEventListener("change", (event) => {
-    const on = (event.target as HTMLInputElement).checked;
-    void setSettings({ openAtLogin: on ? "on" : "off" }, (next) => {
-      // The backend may refuse the login item; the toggle follows the truth.
-      const input = event.target as HTMLInputElement;
-      input.checked = next.openAtLogin === "on";
+  function bindToggle(id: string, key: "screenshotClipboard" | "autoProcess" | "hideDockWhenTray", failure: string) {
+    $(id).addEventListener("change", (event) => {
+      const on = (event.target as HTMLInputElement).checked;
+      void setSettings({ [key]: on ? "on" : "off" } as Partial<Settings>, undefined, (error) => showError(error, failure));
     });
-    showToast(on ? "AnyPic 将在登录时启动" : "AnyPic 不再随登录启动", on ? "success" : "info");
+  }
+  bindToggle("#clipboardToggle", "screenshotClipboard", "无法保存截图剪贴板设置");
+  bindToggle("#autoProcessToggle", "autoProcess", "无法保存自动处理设置");
+  bindToggle("#dockToggle", "hideDockWhenTray", "无法保存 Dock 图标设置");
+  $("#openAtLoginToggle").addEventListener("change", (event) => {
+    const input = event.target as HTMLInputElement;
+    const on = input.checked;
+    void setSettings(
+      { openAtLogin: on ? "on" : "off" },
+      (next) => {
+        // The backend may refuse the login item; the toggle follows the truth.
+        input.checked = next.openAtLogin === "on";
+        if (input.checked !== on) showToast("系统拒绝了这次更改，开关已恢复原状", "error");
+      },
+      (error) => {
+        input.checked = !on;
+        settings = { ...settings, openAtLogin: on ? "off" : "on" };
+        showError(error, "无法更改「开机时启动」");
+      },
+    );
   });
   $("#screenPermissionBtn").addEventListener("click", () => {
     if (demoMode) return;
@@ -1573,101 +1584,6 @@ async function exportOne(id: number) {
 /* settings                                                            */
 /* ------------------------------------------------------------------ */
 
-function formatShortcut(accelerator: string): string {
-  const value = (accelerator || DEFAULT_SHORTCUT).trim();
-  const parts = value.split("+").map((part) => part.trim()).filter(Boolean);
-  const key = parts.pop() ?? "";
-  const mods = parts.map((part) => {
-    switch (part.toLowerCase()) {
-      case "cmdorctrl":
-      case "commandorcontrol":
-        return isMac ? "⌘" : "Ctrl";
-      case "cmd":
-      case "command":
-      case "super":
-      case "meta":
-      case "win":
-        return isMac ? "⌘" : "Win";
-      case "ctrl":
-      case "control":
-        return isMac ? "⌃" : "Ctrl";
-      case "alt":
-      case "option":
-      case "altgr":
-        return isMac ? "⌥" : "Alt";
-      case "shift":
-        return isMac ? "⇧" : "Shift";
-      default:
-        return part;
-    }
-  });
-  const label = shortcutKeyLabel(key);
-  return isMac ? [...mods, label].join("") : [...mods, label].join("+");
-}
-
-function shortcutKeyLabel(key: string): string {
-  const named: Record<string, string> = isMac
-    ? { Space: "Space", Enter: "↩", Tab: "⇥", Backspace: "⌫", Delete: "⌦", Up: "↑", Down: "↓", Left: "←", Right: "→", Escape: "⎋", PrintScreen: "PrtSc" }
-    : { Space: "Space", Enter: "Enter", Tab: "Tab", Backspace: "Backspace", Delete: "Delete", Up: "Up", Down: "Down", Left: "Left", Right: "Right", Escape: "Esc", PrintScreen: "PrtSc" };
-  return named[key] ?? (key.length === 1 ? key.toUpperCase() : key);
-}
-
-function acceleratorFromEvent(event: KeyboardEvent): string | null {
-  const mods: string[] = [];
-  if (event.metaKey) mods.push("Cmd");
-  if (event.ctrlKey) mods.push("Ctrl");
-  if (event.altKey) mods.push("Alt");
-  if (event.shiftKey) mods.push("Shift");
-  if (mods.length === 0) return null;
-  const key = acceleratorKey(event);
-  if (!key) return null;
-  return [...mods, key].join("+");
-}
-
-function acceleratorKey(event: KeyboardEvent): string | null {
-  const code = event.code;
-  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
-  if (/^Digit[0-9]$/.test(code)) return code.slice(5);
-  if (/^F([1-9]|1[0-9]|2[0-4])$/.test(code)) return code;
-  const named: Record<string, string> = {
-    Space: "Space",
-    Enter: "Enter",
-    NumpadEnter: "Enter",
-    Tab: "Tab",
-    Backspace: "Backspace",
-    Delete: "Delete",
-    Insert: "Insert",
-    ArrowUp: "Up",
-    ArrowDown: "Down",
-    ArrowLeft: "Left",
-    ArrowRight: "Right",
-    Home: "Home",
-    End: "End",
-    PageUp: "PageUp",
-    PageDown: "PageDown",
-    PrintScreen: "PrintScreen",
-    Minus: "-",
-    Equal: "=",
-    BracketLeft: "[",
-    BracketRight: "]",
-    Backslash: "\\",
-    Semicolon: ";",
-    Quote: "'",
-    Comma: ",",
-    Period: ".",
-    Slash: "/",
-    Backquote: "`",
-  };
-  return named[code] ?? null;
-}
-
-function isReservedShortcut(accelerator: string): boolean {
-  const reserved = isMac
-    ? ["Cmd+Q", "Cmd+W", "Cmd+Tab", "Cmd+Space", "Cmd+H", "Cmd+M", "Cmd+Shift+3", "Cmd+Shift+4", "Cmd+Shift+5"]
-    : ["Ctrl+Alt+Delete"];
-  return reserved.includes(accelerator);
-}
-
 function startShortcutRecording() {
   if (demoMode) {
     showToast("浏览器预览模式无法修改全局快捷键", "info");
@@ -1704,21 +1620,23 @@ async function applyShortcut(accelerator: string) {
   }
 }
 
-async function setSettings(patch: Partial<Settings>, then?: (next: Settings) => void) {
+async function setSettings(patch: Partial<Settings>, then?: (next: Settings) => void, onError?: (error: unknown) => void) {
   settings = { ...settings, ...patch };
   if (patch.theme) applyTheme(settings.theme);
   markDirty();
   syncSettingsToUI();
   renderAll();
   queueSave();
-  if (then && !demoMode) {
+  if (!demoMode && (then || onError)) {
     try {
       const next = await AnyPic.saveSettings(settings);
       settings = { ...defaultSettings(), ...next };
       syncSettingsToUI();
-      then(settings);
-    } catch {
-      /* keep the optimistic UI; the save retried on the next change */
+      then?.(settings);
+    } catch (error) {
+      // Keep the optimistic UI; the caller decides whether the failure needs
+      // a message (toggles report it, silent preference changes do not).
+      onError?.(error);
     }
   }
 }

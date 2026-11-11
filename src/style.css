@@ -37,7 +37,10 @@
      quiet text — chosen to stay 4.5:1 or better on every surface it sits on
      (5.3 on pill, 5.4 canvas, 5.7 surface-alt). --muted and --text-faint
      3.3-3.7:1 quiet labels only: anything a user must read goes one step
-     up. --text-disabled 2:1, a state you are not meant to read. */
+     up. --text-disabled 2:1, a state you are not meant to read. Explanatory
+   copy (notes, hints, empty states) uses --ctl-fg for the same reason: it is
+   read, so it measures 4.5:1 or better, and it is checked by
+   TestIssue24MustReadCopyIsNotFaint (#24). */
   --text: #1c1c21;
   --text-soft: #4b4b53;
   --ctl-fg: #63636b;
@@ -590,8 +593,6 @@ body.side-drag * {
   font-family: var(--font-ui);
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
   line-height: 1.4;
 }
 
@@ -781,7 +782,7 @@ body.side-drag * {
   display: block;
   margin-top: 6px;
   padding: 0;
-  color: var(--text-faint);
+  color: var(--ctl-fg);
   font-size: 11px;
   font-weight: 500;
   text-align: left;
@@ -798,7 +799,7 @@ body.side-drag * {
 
 .field-note {
   margin: 5px 0 0;
-  color: var(--text-faint);
+  color: var(--ctl-fg);
   font-size: 11px;
   line-height: 1.45;
 }
@@ -821,9 +822,7 @@ body.side-drag * {
   color: var(--muted);
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.05em;
   line-height: 1.4;
-  text-transform: uppercase;
   cursor: pointer;
   list-style: none;
   user-select: none;
@@ -956,7 +955,7 @@ body.side-drag * {
   margin-top: 12px;
   padding-top: 10px;
   border-top: 1px solid var(--line-2);
-  color: var(--text-faint);
+  color: var(--ctl-fg);
   font-size: 11.5px;
   line-height: 1.45;
 }
@@ -1079,7 +1078,7 @@ body.side-drag * {
 
 .shortcut-hint {
   margin: 8px 0 0;
-  color: var(--text-faint);
+  color: var(--ctl-fg);
   font-size: 11.5px;
   line-height: 1.45;
 }
@@ -1557,7 +1556,7 @@ body.side-drag * {
 
 .empty-state p {
   margin: 4px 0 0;
-  color: var(--text-faint);
+  color: var(--ctl-fg);
   font-size: 12px;
 }
 
@@ -1566,7 +1565,7 @@ body.side-drag * {
   align-items: center;
   gap: 12px;
   margin-top: 20px;
-  color: var(--text-faint);
+  color: var(--ctl-fg);
   font-size: 12px;
 }
 
@@ -1671,7 +1670,7 @@ body.side-drag * {
   display: grid;
   height: 32px;
   flex: 0 0 32px;
-  grid-template-columns: 20px 36px minmax(0, 1fr) 208px 88px;
+  grid-template-columns: 20px 36px minmax(0, 1fr) 208px 118px;
   align-items: center;
   gap: 12px;
   padding: 0 14px;
@@ -1699,7 +1698,7 @@ body.side-drag * {
 
 .queue-item {
   display: grid;
-  grid-template-columns: 20px 36px minmax(0, 1fr) 208px 88px;
+  grid-template-columns: 20px 36px minmax(0, 1fr) 208px 118px;
   min-height: 52px;
   align-items: center;
   gap: 12px;
@@ -1953,7 +1952,7 @@ body.side-drag * {
 
 .queue-empty-filter {
   padding: 40px 16px;
-  color: var(--text-faint);
+  color: var(--ctl-fg);
   font-size: 12px;
   text-align: center;
 }
@@ -2780,16 +2779,19 @@ body.side-drag * {
 
 /* ---------- toasts ---------- */
 
+/* Top centre over the titlebar's quiet middle: a toast must never sit on the
+   footer's primary action (issue #25). */
 .toast-stack {
   position: fixed;
   z-index: 90;
-  right: 20px;
-  bottom: 20px;
+  top: 8px;
+  left: 50%;
   display: flex;
   max-width: min(400px, calc(100vw - 40px));
   flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
   gap: 8px;
+  transform: translateX(-50%);
   pointer-events: none;
 }
 
@@ -2814,10 +2816,9 @@ body.side-drag * {
   opacity: 0;
   transform: translateY(3px);
   transition: opacity 0.14s ease, transform 0.14s ease;
-  /* A fading toast must stop eating clicks: the stack sits over the footer
-     actions, and .toast re-enables pointer events for its live state. Without
-     this an invisible toast (and its undo action) stays a click target until
-     removal (issue #16). */
+  /* A fading toast must stop eating clicks: .toast re-enables pointer events
+     for its live state, and without this an invisible toast (and its undo
+     action) stays a click target until removal (issue #16). */
   pointer-events: none;
 }
 
@@ -2934,11 +2935,11 @@ body.side-drag * {
   }
 
   .queue-item {
-    grid-template-columns: 20px 36px minmax(0, 1fr) 208px 84px;
+    grid-template-columns: 20px 36px minmax(0, 1fr) 208px 118px;
   }
 
   .queue-columns {
-    grid-template-columns: 20px 36px minmax(0, 1fr) 208px 84px;
+    grid-template-columns: 20px 36px minmax(0, 1fr) 208px 118px;
   }
 
   .summary-foot {
@@ -3012,14 +3013,16 @@ body.side-drag * {
   background-color: var(--card);
 }
 
+/* Selection replaces the status tabs inside the toolbar's fixed 46px row
+   (#27): the list must not move when the first box is ticked. */
 .selection-bar {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 14px;
-  padding: 7px 14px;
-  border-bottom: 1px solid var(--line-2);
   font-size: 13px;
   color: var(--text-soft);
+  white-space: nowrap;
 }
 
 .selection-bar b {

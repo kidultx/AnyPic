@@ -105,12 +105,16 @@ func TestNoNewNativeSelects(t *testing.T) {
 // its unsaved-results warning, and the "later" toast that names the
 // installer. Each budget is current + ~2% headroom. Over budget: move the
 // code to its own module, or raise the budget here and say what the growth
-// was for.
+// was for. The 2026-11 walk-through's first fixes crossed main.ts's line;
+// its shortcut notation (labels, accelerators, reserved keys) moved to
+// src/shortcuts.ts instead, budgeted here so the split is a move with a
+// ledger entry, not a second hiding place.
 var uiBudgets = []struct {
 	file   string
 	budget int
 }{
 	{"src/main.ts", 80_200},
+	{"src/shortcuts.ts", 4_200},
 	{"src/style.css", 58_400},
 	{"index.html", 31_000},
 }
@@ -469,6 +473,120 @@ func TestIssue16ExitRemovalHasTimerFallback(t *testing.T) {
 	}
 }
 
+// TestIssue31SummarySamePopulation guards #31: the three header numbers must
+// describe the same images — the finished ones — and anything still pending is
+// stated separately. The old rule mixed all queue originals with the finished
+// output, so "20.3 MB → 2.3 MB · 74%" did not add up.
+func TestIssue31SummarySamePopulation(t *testing.T) {
+	stats, _, _, ok := functionBody(ruleSources(t)["src/main.ts"], "renderStats")
+	if !ok {
+		t.Fatalf("src/main.ts: no renderStats function (#31)")
+	}
+	if strings.Contains(stats, "totalOriginal") || strings.Contains(stats, "formatBytes(totalOriginal)") {
+		t.Errorf("src/main.ts: renderStats still feeds the all-items original total into the header; original, compressed and saved must share the finished set (#31)")
+	}
+	if !strings.Contains(stats, "formatBytes(doneOriginal)") {
+		t.Errorf("src/main.ts: the header's original total is not computed from the finished images (#31)")
+	}
+	if !strings.Contains(stats, "summaryPending") {
+		t.Errorf("src/main.ts: renderStats never fills #summaryPending; unprocessed images need a separate note (#31)")
+	}
+
+	html, err := os.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(html), `id="summaryPending"`) {
+		t.Errorf("index.html: no #summaryPending element for the images still waiting (#31)")
+	}
+}
+
+// listenerBody returns the arrow-function body of the change listener opened
+// by decl, e.g. `$("#dockToggle").addEventListener("change"`.
+func listenerBody(t *testing.T, src, decl string) string {
+	t.Helper()
+	i := strings.Index(src, decl)
+	if i < 0 {
+		t.Fatalf("src/main.ts: no change listener %q", decl)
+	}
+	open := strings.Index(src[i:], "{")
+	if open < 0 {
+		t.Fatalf("src/main.ts: listener %q has no body", decl)
+	}
+	body, _, ok := braceBodyAt(src, i+open)
+	if !ok {
+		t.Fatalf("src/main.ts: cannot read the body of %q", decl)
+	}
+	return body
+}
+
+// TestIssue26ToggleToastsOnlyOnFailure guards #26: a toggle's own state is the
+// feedback, so flipping one succeeds silently. A toast appears only when the
+// backend refuses the change, and only after its answer. The old handlers
+// announced every toggle with an info/success toast, and "开机时启动" claimed
+// success before SaveSettings had answered.
+func TestIssue26ToggleToastsOnlyOnFailure(t *testing.T) {
+	src := ruleSources(t)["src/main.ts"]
+
+	for _, id := range []string{"clipboardToggle", "autoProcessToggle", "dockToggle"} {
+		if !strings.Contains(src, `bindToggle("#`+id+`"`) {
+			t.Errorf("src/main.ts: #%s is not bound through the failure-only helper (#26)", id)
+		}
+	}
+
+	bind, _, _, ok := functionBody(src, "bindToggle")
+	if !ok {
+		t.Errorf("src/main.ts: no bindToggle helper; every toggle needs one failure-only path (#26)")
+	} else {
+		if !strings.Contains(bind, "showError") {
+			t.Errorf("src/main.ts: bindToggle never reports a failed save (#26)")
+		}
+		if strings.Contains(bind, `"success"`) || strings.Contains(bind, `"info"`) {
+			t.Errorf("src/main.ts: bindToggle still reports success/info — only failures deserve a toast (#26)")
+		}
+		if at, backendAt := strings.Index(bind, "showError"), strings.Index(bind, "setSettings("); at >= 0 && backendAt >= 0 && at < backendAt {
+			t.Errorf("src/main.ts: bindToggle reports failure before the backend answers (#26)")
+		}
+	}
+
+	open := listenerBody(t, src, `$("#openAtLoginToggle").addEventListener("change"`)
+	if !strings.Contains(open, `"error"`) {
+		t.Errorf("src/main.ts: the 开机时启动 toggle has no failure message for a refused login item (#26)")
+	}
+	if at, backendAt := strings.Index(open, "showToast("), strings.Index(open, "setSettings("); at >= 0 && backendAt >= 0 && at < backendAt {
+		t.Errorf("src/main.ts: 开机时启动 claims a result before SaveSettings returns (#26)")
+	}
+}
+
+// TestIssue25ToastsClearTheFooterButton guards #25: the toast stack used to
+// sit at right: 20px / bottom: 20px, exactly over the footer's primary action.
+// It now lives at the top centre, over the titlebar's non-interactive middle,
+// so a live toast covers no clickable control at the minimum 940×640 window.
+func TestIssue25ToastsClearTheFooterButton(t *testing.T) {
+	raw, err := os.ReadFile("src/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := stripBlockComments(string(raw))
+	ruleRE := regexp.MustCompile(`(?s)\.toast-stack\s*\{([^{}]*)\}`)
+	m := ruleRE.FindStringSubmatch(css)
+	if m == nil {
+		t.Fatalf("src/style.css: no .toast-stack rule (#25)")
+	}
+	body := m[1]
+	if regexp.MustCompile(`\b(right|bottom)\s*:`).MatchString(body) {
+		t.Errorf("src/style.css: .toast-stack is still anchored to a bottom corner over the footer actions (#25):%s", body)
+	}
+	for _, want := range []string{"top:", "left: 50%", "translateX(-50%)"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("src/style.css: .toast-stack is not top-centred (%q missing) (#25):%s", want, body)
+		}
+	}
+	if !regexp.MustCompile(`(?i)pointer-events\s*:\s*none`).MatchString(body) {
+		t.Errorf("src/style.css: .toast-stack must keep pointer-events: none so the gaps between toasts stay clickable (#25)")
+	}
+}
+
 // TestIssue16ToastActionDiesWithDismiss guards the #12 promise that an undo
 // entry disappears with its toast. CSS stops a faded action from receiving
 // pointer events; this checks the code-side guard in showToast's action
@@ -503,3 +621,205 @@ func TestIssue16ToastActionDiesWithDismiss(t *testing.T) {
 		t.Errorf("src/ui.ts:%d: action.onClick() runs without an earlier `if (dismissed) return` — an action must die with its toast (issue #16)", line)
 	}
 }
+
+// divBodyByClass returns the inner markup of the first <div> whose class list
+// contains class, matched by nesting rather than by a closing-tag regex, so a
+// nested toolbar inside the queue cannot end the block early.
+func divBodyByClass(src, class string) (string, bool) {
+	open := regexp.MustCompile(`<div[^>]*\bclass="[^"]*\b` + regexp.QuoteMeta(class) + `\b[^"]*"[^>]*>`)
+	loc := open.FindStringIndex(src)
+	if loc == nil {
+		return "", false
+	}
+	tag := regexp.MustCompile(`(?i)<div\b|</div\s*>`)
+	depth, i := 1, loc[1]
+	for depth > 0 {
+		m := tag.FindStringIndex(src[i:])
+		if m == nil {
+			return "", false
+		}
+		if strings.EqualFold(src[i+m[0]:i+m[0]+4], "<div") {
+			depth++
+		} else {
+			depth--
+		}
+		i += m[1]
+	}
+	return src[loc[1]:i], true
+}
+
+// TestIssue27SelectionTakesNoExtraRow guards #27: the selection bar used to be
+// a sibling row under the queue toolbar, so ticking the first checkbox pushed
+// every row down by the bar's height and moved the row under the cursor. It
+// now replaces the status tabs inside the toolbar's fixed-height row; the
+// toolbar keeps 46px so surrounding content still cannot move. List and grid
+// share this toolbar, so one structural check covers both.
+func TestIssue27SelectionTakesNoExtraRow(t *testing.T) {
+	raw, err := os.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, ok := divBodyByClass(string(raw), "queue-toolbar")
+	if !ok {
+		t.Fatal("index.html: no .queue-toolbar element (#27)")
+	}
+	if !strings.Contains(body, `id="selectionBar"`) {
+		t.Errorf("index.html: #selectionBar sits outside .queue-toolbar — selecting a row adds a row and shifts the list (#27)")
+	}
+
+	cssRaw, err := os.ReadFile("src/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rule := regexp.MustCompile(`(?s)\.queue-toolbar\s*\{([^{}]*)\}`)
+	m := rule.FindStringSubmatch(stripBlockComments(string(cssRaw)))
+	if m == nil {
+		t.Fatalf("src/style.css: no .queue-toolbar rule (#27)")
+	}
+	if !regexp.MustCompile(`(?m)flex:\s*0 0 \d+px`).MatchString(m[1]) {
+		t.Errorf("src/style.css: .queue-toolbar lost its fixed height, so selection can still move the list (#27):%s", m[1])
+	}
+
+	bar := regexp.MustCompile(`(?s)\.selection-bar\s*\{([^{}]*)\}`)
+	b := bar.FindStringSubmatch(stripBlockComments(string(cssRaw)))
+	if b == nil {
+		t.Fatalf("src/style.css: no .selection-bar rule (#27)")
+	}
+	if regexp.MustCompile(`(?m)border-bottom\s*:`).MatchString(b[1]) {
+		t.Errorf("src/style.css: .selection-bar still draws a row divider — it lives inside the toolbar now (#27):%s", b[1])
+	}
+}
+
+// TestIssue24MustReadCopyIsNotFaint guards #24. --text-faint sits at 3.3–3.7:1
+// on the surfaces it is used on, and the token block says so: it is for quiet
+// labels, while anything a user must read goes one step up. These rules carry
+// explanations — where automatic results are written, what a format does, why
+// a capture did not happen — so they must not paint with the faint step. The
+// background sits deeper in the same rule; inheriting a faint colour is the
+// same failure, so each listed rule must set its own readable colour.
+func TestIssue24MustReadCopyIsNotFaint(t *testing.T) {
+	raw, err := os.ReadFile("src/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := stripBlockComments(string(raw))
+	rules := []string{
+		`.field-note`,
+		`.output-inline`,
+		`.tip-card`,
+		`.shortcut-hint`,
+		`.empty-state p`,
+		`.empty-actions`,
+		`.queue-empty-filter`,
+	}
+	readable := regexp.MustCompile(`color:\s*var\(--(ctl-fg|text-soft|text)\)`)
+	for _, sel := range rules {
+		m := regexp.MustCompile(`(?s)` + regexp.QuoteMeta(sel) + `\s*\{([^{}]*)\}`).FindStringSubmatch(css)
+		if m == nil {
+			t.Errorf("src/style.css: no %s rule — update this list if the rule was renamed (#24)", sel)
+			continue
+		}
+		if !readable.MatchString(m[1]) {
+			t.Errorf("src/style.css: %s paints must-read copy below --ctl-fg (#24):%s", sel, m[1])
+		}
+	}
+}
+
+
+// TestIssue29HeadingsAreNotShouted guards #29: the section heads borrow an
+// English pattern — uppercase plus 0.05em tracking — that does nothing to
+// Chinese (there are no capitals) and only stretches the characters apart.
+// Weight and colour already carry the hierarchy, so the rules must not set
+// either property; per-language treatment belongs to the i18n pass (#32).
+func TestIssue29HeadingsAreNotShouted(t *testing.T) {
+	raw, err := os.ReadFile("src/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := stripBlockComments(string(raw))
+	for _, sel := range []string{`.block-head h2`, `.more-settings-summary`} {
+		m := regexp.MustCompile(`(?s)` + regexp.QuoteMeta(sel) + `\s*\{([^{}]*)\}`).FindStringSubmatch(css)
+		if m == nil {
+			t.Errorf("src/style.css: no %s rule — update this list if the rule was renamed (#29)", sel)
+			continue
+		}
+		if regexp.MustCompile(`text-transform\s*:`).MatchString(m[1]) {
+			t.Errorf("src/style.css: %s still sets text-transform, which does nothing to Chinese (#29):%s", sel, m[1])
+		}
+		if regexp.MustCompile(`letter-spacing\s*:`).MatchString(m[1]) {
+			t.Errorf("src/style.css: %s still sets letter-spacing, which only stretches Chinese (#29):%s", sel, m[1])
+		}
+	}
+}
+
+// TestIssue30ActionsColumnFitsTheButtons guards #30. The walk-through feared
+// the hover actions overflowed onto the saving pill; measurement in the page
+// showed the opposite — the flex row shrank the four 28px buttons to 21px
+// instead, below the hit target every other icon button in the app keeps.
+// So the check is the column's arithmetic: every list grid's last track must
+// hold the buttons at full size, and the count comes from the row template,
+// so a fifth action added later fails here until the column grows with it.
+func TestIssue30ActionsColumnFitsTheButtons(t *testing.T) {
+	src, err := os.ReadFile("src/main.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := stripTSComments(string(src))
+	inner := regexp.MustCompile(`(?s)<div class="item-actions">(.*?)</div>`).FindStringSubmatch(ts)
+	if inner == nil {
+		t.Fatal("src/main.ts: no .item-actions block in the row template (#30)")
+	}
+	buttons := strings.Count(inner[1], `data-action="`)
+	if buttons == 0 {
+		t.Fatal("src/main.ts: .item-actions has no data-action buttons (#30)")
+	}
+
+	cssRaw, err := os.ReadFile("src/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := stripBlockComments(string(cssRaw))
+	px := func(rule, prop string) int {
+		m := regexp.MustCompile(`(?s)` + rule + `\s*\{([^{}]*)\}`).FindStringSubmatch(css)
+		if m == nil {
+			t.Fatalf("src/style.css: no %s rule (#30)", rule)
+		}
+		v := regexp.MustCompile(`(?m)(?:^|[;\s])` + prop + `\s*:\s*(\d+)px`).FindStringSubmatch(m[1])
+		if v == nil {
+			t.Fatalf("src/style.css: %s has no px %s (#30):%s", rule, prop, m[1])
+		}
+		n := 0
+		for _, c := range v[1] {
+			n = n*10 + int(c-'0')
+		}
+		return n
+	}
+	size := px(`\.item-actions \.icon-btn`, "width")
+	gap := px(`\.item-actions`, "gap")
+	need := buttons*size + (buttons-1)*gap
+
+	grids := regexp.MustCompile(`(?s)\.queue-(?:item|columns)\s*\{([^{}]*)\}`).FindAllStringSubmatch(css, -1)
+	if len(grids) == 0 {
+		t.Fatal("src/style.css: no queue list grid rule (#30)")
+	}
+	for _, g := range grids {
+		tpl := regexp.MustCompile(`(?m)grid-template-columns\s*:\s*([^;]+);`).FindStringSubmatch(g[1])
+		if tpl == nil {
+			continue
+		}
+		tracks := strings.Fields(tpl[1])
+		last := tracks[len(tracks)-1]
+		v := regexp.MustCompile(`^(\d+)px$`).FindStringSubmatch(last)
+		if v == nil {
+			continue
+		}
+		width := 0
+		for _, c := range v[1] {
+			width = width*10 + int(c-'0')
+		}
+		if width < need {
+			t.Errorf("src/style.css: actions column is %dpx but the row holds %d × %dpx buttons + %d of gap = %dpx, so they shrink below their size (#30)", width, buttons, size, (buttons-1)*gap, need)
+		}
+	}
+}
+
