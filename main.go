@@ -46,6 +46,12 @@ func main() {
 		}
 	})
 
+	// A second launch that carries no image of its own — the user started
+	// AnyPic again from the shortcut while it sat in the tray — reaches the
+	// app here and nowhere else (#14): bring the running window back instead
+	// of doing nothing.
+	app.OnSecondInstance(secondLaunchHandler(&showWindow))
+
 	app.WhenReady(func() {
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:                "AnyPic",
@@ -150,6 +156,20 @@ func main() {
 
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
+	}
+}
+
+// secondLaunchHandler is what the running AnyPic does when it is started
+// again (#14): bring its window back. The second process gives up at the
+// single-instance lock and exits; on Windows and Linux this callback is the
+// only thing the user's launch reaches unless it carries files, so without
+// it starting AnyPic again while it sits in the tray did nothing at all.
+// show points at main's showWindow, which is nil until the window exists.
+func secondLaunchHandler(show *func()) func(args []string, workingDir string) {
+	return func([]string, string) {
+		if *show != nil {
+			(*show)()
+		}
 	}
 }
 
