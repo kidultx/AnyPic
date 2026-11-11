@@ -906,7 +906,7 @@ func (a *AnyPic) compressItem(ctx context.Context, id int64, s Settings) {
 	}
 	if err != nil {
 		item.Status = statusError
-		item.Error = err.Error()
+		item.Error = errorText(err)
 	} else {
 		a.removeTemp(item)
 		item.Status = statusDone

@@ -3432,6 +3432,16 @@ func (msgs Messages) GoErrBusy() string {
 	return Catalog.Format(msgs.locale, "goErrBusy", nil)
 }
 
+// GoErrCanceled says "已取消"
+// in the language the app shows.
+func GoErrCanceled() string { return In(i18n.Locale()).GoErrCanceled() }
+
+// GoErrCanceled says "已取消"
+// in the language of msgs.
+func (msgs Messages) GoErrCanceled() string {
+	return Catalog.Format(msgs.locale, "goErrCanceled", nil)
+}
+
 // GoErrShortcutTaken says "无法使用 {shortcut}：可能已被其他应用占用"
 // in the language the app shows.
 func GoErrShortcutTaken(shortcut string) string {

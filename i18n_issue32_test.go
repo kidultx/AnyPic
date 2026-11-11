@@ -9,6 +9,7 @@ package main
 // string is a catalog entry, never a literal in a component.
 
 import (
+	"context"
 	"encoding/json"
 	"go/ast"
 	"go/parser"
@@ -689,6 +690,40 @@ func TestIssue32TheFooterSaysItsSummaryInTheCurrentLanguage(t *testing.T) {
 		catalog := readCatalog(t, path)
 		if _, ok := catalog["savedAlongside"]; !ok {
 			t.Errorf("%s: no savedAlongside — the footer has no sentence for results saved beside the originals (#32)", path)
+		}
+	}
+}
+
+// TestIssue32ACanceledImageSaysSoInWords: canceling a pass stops the images
+// that were being encoded with Go's own sentinel, whose text is "context
+// canceled" whatever the language — and that is what the queue row and the
+// toast showed. The catalog says it instead.
+func TestIssue32ACanceledImageSaysSoInWords(t *testing.T) {
+	original := uiLanguage()
+	defer setUILanguage(original)
+
+	service := newTestService(t)
+	src := filepath.Join(t.TempDir(), "photo.png")
+	writePNG(t, src, gradientImage(64, 64, false))
+	added, err := service.AddPaths([]string{src})
+	if err != nil {
+		t.Fatalf("AddPaths: %v", err)
+	}
+	if len(added.Snapshot.Items) != 1 {
+		t.Fatalf("added %d items, want 1", len(added.Snapshot.Items))
+	}
+	id := added.Snapshot.Items[0].ID
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for _, c := range []struct{ language, want string }{{"en", "Canceled"}, {"zh-Hans", "已取消"}} {
+		setUILanguage(c.language)
+		service.compressItem(ctx, id, service.settings)
+		service.mu.Lock()
+		got := service.byID[id].Error
+		service.mu.Unlock()
+		if got != c.want {
+			t.Errorf("in %s an image canceled mid-pass says %q, want %q (#32)", c.language, got, c.want)
 		}
 	}
 }

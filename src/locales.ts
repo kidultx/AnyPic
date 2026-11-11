@@ -1352,6 +1352,10 @@ export interface Messages {
    */
   goErrBusy(): string;
   /**
+   * `已取消`
+   */
+  goErrCanceled(): string;
+  /**
    * `无法使用 {shortcut}：可能已被其他应用占用`
    */
   goErrShortcutTaken(shortcut: string): string;
@@ -1918,6 +1922,7 @@ const catalog = createCatalog<Messages>({
     "goErrBusyRemove": [],
     "goErrBusyClear": [],
     "goErrBusy": [],
+    "goErrCanceled": [],
     "goErrShortcutTaken": ["shortcut"],
     "goErrNoItem": [],
     "goErrAnimatedBeautify": [],
@@ -2313,6 +2318,7 @@ const catalog = createCatalog<Messages>({
       "goErrBusyRemove": "正在压缩，暂时不能移除图片",
       "goErrBusyClear": "正在压缩，请先取消",
       "goErrBusy": "正在压缩，请稍后再试",
+      "goErrCanceled": "已取消",
       "goErrShortcutTaken": "无法使用 {shortcut}：可能已被其他应用占用",
       "goErrNoItem": "图片不存在",
       "goErrAnimatedBeautify": "动图暂不支持美化",
@@ -2707,6 +2713,7 @@ const catalog = createCatalog<Messages>({
       "goErrBusyRemove": "Compression is running; images cannot be removed yet",
       "goErrBusyClear": "Compression is running; cancel it first",
       "goErrBusy": "Compression is running; try again shortly",
+      "goErrCanceled": "Canceled",
       "goErrShortcutTaken": "Could not use {shortcut}; another app may already use it",
       "goErrNoItem": "The image is no longer in the queue",
       "goErrAnimatedBeautify": "Animated images cannot be beautified",
