@@ -213,6 +213,7 @@ var CommandRequested = mygo.NewEvent[string]("anypic:command")
 
 // NewAnyPic creates the service and loads persisted settings.
 func NewAnyPic() *AnyPic {
+	cleanupStaleShotDirs()
 	a := &AnyPic{
 		byID:     map[int64]*Item{},
 		settings: defaultSettings(),
