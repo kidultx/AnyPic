@@ -6,6 +6,7 @@
 
 | 子系统 | 参考 |
 | --- | --- |
+| 应用外壳：单实例、窗口、托盘与退出 | [app-shell.md](app-shell.md) |
 | 界面外壳：register、约束、预算 | [Interface shell](ui.md) |
 | 压缩管线：输出格式与诚实结果标记 | [compressor.md](compressor.md) |
 | 截图链路（快捷键、美化工作台、归档） | [screenshot.md](screenshot.md) |
