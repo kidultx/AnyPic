@@ -975,3 +975,28 @@ func TestIssue28TitlebarCarriesTheActions(t *testing.T) {
 		}
 	}
 }
+
+// TestIssue31PendingNoteSurvivesNarrowWindows guards a hole in #31's fix: the
+// pending note borrowed .summary-foot, which the ≤1040px rule hides, so at the
+// app's 940px minimum the header stopped saying that images were still
+// unfinished — exactly where honesty matters most, next to a savings figure.
+func TestIssue31PendingNoteSurvivesNarrowWindows(t *testing.T) {
+	raw, err := os.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tag := regexp.MustCompile(`<span[^>]*id="summaryPending"[^>]*>`).FindString(string(raw))
+	if tag == "" {
+		t.Fatal("index.html: no #summaryPending (#31)")
+	}
+	if strings.Contains(tag, "summary-foot") {
+		t.Errorf("index.html: #summaryPending still uses .summary-foot, which narrow windows hide (#31): %s", tag)
+	}
+	css, err := os.ReadFile("src/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`(?m)^\.summary-pending\s*\{`).MatchString(stripBlockComments(string(css))) {
+		t.Errorf("src/style.css: no .summary-pending rule for the note (#31)")
+	}
+}

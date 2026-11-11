@@ -1404,6 +1404,14 @@ body.side-drag * {
   font-weight: 400;
 }
 
+/* The pending count is not a footnote: it is the honesty clause next to a
+   savings figure, so it survives the narrow-window rule that hides .summary-foot
+   (#31). */
+.summary-pending {
+  color: var(--ctl-fg);
+  font-weight: 400;
+}
+
 .stage-body {
   display: flex;
   flex: 1;
