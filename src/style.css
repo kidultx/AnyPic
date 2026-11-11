@@ -3017,8 +3017,75 @@ body.side-drag * {
   cursor: default;
 }
 
+/* Rows are one tab stop reached with the arrow keys (#20); the ring sits
+   inside the row so it is not clipped by the scroll container. */
+.queue-item:focus-visible {
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+
 .queue-item.is-selected {
   background-color: var(--row-selected);
+}
+
+/* The queue's right-click menu (#20): the same floating surface as dialogs,
+   small enough to sit beside the pointer. */
+.context-menu {
+  position: fixed;
+  z-index: 70;
+  display: flex;
+  min-width: 188px;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background-color: var(--card);
+  box-shadow: var(--shadow-float);
+}
+
+.context-menu[hidden] {
+  display: none;
+}
+
+.context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+}
+
+.context-menu button:hover:not(:disabled),
+.context-menu button:focus-visible {
+  background-color: var(--pill);
+}
+
+.context-menu button:disabled {
+  color: var(--text-disabled);
+}
+
+.context-menu .icon {
+  width: 15px;
+  height: 15px;
+  color: var(--text-faint);
+}
+
+.context-menu button.danger {
+  color: var(--danger);
+}
+
+.context-menu button.danger .icon {
+  color: var(--danger);
+}
+
+.context-sep {
+  height: 1px;
+  margin: 4px 2px;
+  background-color: var(--line);
 }
 
 .queue-list.grid .queue-item {

@@ -250,7 +250,7 @@
                 <span></span>
               </div>
               <div class="queue-scroll" id="queueScroll">
-                <div class="queue-list" id="queueList"></div>
+                <div class="queue-list" id="queueList" role="listbox" aria-multiselectable="true" aria-label="图片队列"></div>
                 <div class="queue-empty-filter" id="queueEmptyFilter" hidden>没有符合筛选条件的图片</div>
               </div>
             </div>
@@ -530,6 +530,16 @@
           <button class="secondary-btn" id="prefsDone" type="button">完成</button>
         </footer>
       </article>
+    </div>
+
+    <div class="context-menu" id="queueMenu" role="menu" aria-label="图片操作" hidden>
+      <button type="button" role="menuitem" data-menu="preview"><svg aria-hidden="true" class="icon"><use href="#i-eye" /></svg>对比预览</button>
+      <button type="button" role="menuitem" data-menu="decorate"><svg aria-hidden="true" class="icon"><use href="#i-sparkle" /></svg>按当前设置美化</button>
+      <button type="button" role="menuitem" data-menu="export"><svg aria-hidden="true" class="icon"><use href="#i-download" /></svg>导出</button>
+      <span class="context-sep" role="separator"></span>
+      <button type="button" role="menuitem" data-menu="reveal"><svg aria-hidden="true" class="icon"><use href="#i-folder" /></svg>在文件夹中显示</button>
+      <span class="context-sep" role="separator"></span>
+      <button type="button" role="menuitem" data-menu="remove" class="danger"><svg aria-hidden="true" class="icon"><use href="#i-trash" /></svg><span id="queueMenuRemoveLabel">移除</span></button>
     </div>
 
     <div class="toast-stack" id="toasts" aria-live="polite"></div>
