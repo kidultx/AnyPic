@@ -1356,6 +1356,14 @@ export interface Messages {
    */
   goErrCanceled(): string;
   /**
+   * `无法保存设置`
+   */
+  goErrSaveSettings(): string;
+  /**
+   * `无法更改「开机时启动」`
+   */
+  goErrLoginItem(): string;
+  /**
    * `无法使用 {shortcut}：可能已被其他应用占用`
    */
   goErrShortcutTaken(shortcut: string): string;
@@ -1923,6 +1931,8 @@ const catalog = createCatalog<Messages>({
     "goErrBusyClear": [],
     "goErrBusy": [],
     "goErrCanceled": [],
+    "goErrSaveSettings": [],
+    "goErrLoginItem": [],
     "goErrShortcutTaken": ["shortcut"],
     "goErrNoItem": [],
     "goErrAnimatedBeautify": [],
@@ -2319,6 +2329,8 @@ const catalog = createCatalog<Messages>({
       "goErrBusyClear": "正在压缩，请先取消",
       "goErrBusy": "正在压缩，请稍后再试",
       "goErrCanceled": "已取消",
+      "goErrSaveSettings": "无法保存设置",
+      "goErrLoginItem": "无法更改「开机时启动」",
       "goErrShortcutTaken": "无法使用 {shortcut}：可能已被其他应用占用",
       "goErrNoItem": "图片不存在",
       "goErrAnimatedBeautify": "动图暂不支持美化",
@@ -2714,6 +2726,8 @@ const catalog = createCatalog<Messages>({
       "goErrBusyClear": "Compression is running; cancel it first",
       "goErrBusy": "Compression is running; try again shortly",
       "goErrCanceled": "Canceled",
+      "goErrSaveSettings": "Could not save the settings",
+      "goErrLoginItem": "Could not change “Launch at login”",
       "goErrShortcutTaken": "Could not use {shortcut}; another app may already use it",
       "goErrNoItem": "The image is no longer in the queue",
       "goErrAnimatedBeautify": "Animated images cannot be beautified",

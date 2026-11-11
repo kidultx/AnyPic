@@ -499,6 +499,10 @@ func (a *AnyPic) Clear() (Snapshot, error) {
 	return a.snapshotLocked(), nil
 }
 
+// setOpenAtLogin mirrors the preference to the system's login items. A
+// variable so tests can refuse it without touching the real ones.
+var setOpenAtLogin = func(on bool) error { return mygo.App.SetOpenAtLogin(on) }
+
 // SaveSettings validates and persists settings.
 func (a *AnyPic) SaveSettings(s Settings) (Settings, error) {
 	s = normalizeSettings(s)
@@ -519,7 +523,7 @@ func (a *AnyPic) SaveSettings(s Settings) (Settings, error) {
 	// Mirror the preference to the system login item before persisting; if
 	// the system refuses, the stored value follows what the system has.
 	if changed {
-		if err := mygo.App.SetOpenAtLogin(openAtLogin); err != nil {
+		if err := setOpenAtLogin(openAtLogin); err != nil {
 			a.mu.Lock()
 			a.settings.OpenAtLogin = "off"
 			a.mu.Unlock()
@@ -527,7 +531,9 @@ func (a *AnyPic) SaveSettings(s Settings) (Settings, error) {
 				s.OpenAtLogin = "off"
 			}
 			_ = a.persistSettings()
-			return s, err
+			// The system's reason follows our own words (#32): on its own it
+			// is the framework's English, whatever the app shows.
+			return s, fmt.Errorf("%s: %w", tr().GoErrLoginItem(), err)
 		}
 	}
 	if err := a.persistSettings(); err != nil {
@@ -1300,7 +1306,8 @@ func (a *AnyPic) ExportOne(ctx context.Context, id int64) (ExportResult, error) 
 		src = copyItem.Path
 	}
 	if err := copyFile(src, dest); err != nil {
-		return ExportResult{}, err
+		// As exporting every image says it (ExportAll).
+		return ExportResult{}, fmt.Errorf("%s: %w", tr().GoErrExportItem(copyItem.Name), err)
 	}
 	a.markResultsSaved([]int64{id})
 	return ExportResult{Count: 1, Folder: filepath.Dir(dest), Paths: []string{dest}}, nil
@@ -1406,16 +1413,20 @@ func (a *AnyPic) persistSettings() error {
 	a.mu.Lock()
 	data, err := json.MarshalIndent(a.settings, "", "  ")
 	a.mu.Unlock()
-	if err != nil {
-		return err
-	}
-	if a.statePath == "" {
+	if err == nil && a.statePath == "" {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(a.statePath), 0o755); err != nil {
-		return err
+	if err == nil {
+		err = os.MkdirAll(filepath.Dir(a.statePath), 0o755)
 	}
-	return os.WriteFile(a.statePath, data, 0o644)
+	if err == nil {
+		err = os.WriteFile(a.statePath, data, 0o644)
+	}
+	if err != nil {
+		// The system's reason follows our own words (#32).
+		return fmt.Errorf("%s: %w", tr().GoErrSaveSettings(), err)
+	}
+	return nil
 }
 
 // decodeImage decodes an image, falling back to the JPEG-strip TIFF reader

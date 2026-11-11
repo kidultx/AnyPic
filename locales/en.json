@@ -338,6 +338,8 @@
   "goErrBusyClear": "Compression is running; cancel it first",
   "goErrBusy": "Compression is running; try again shortly",
   "goErrCanceled": "Canceled",
+  "goErrSaveSettings": "Could not save the settings",
+  "goErrLoginItem": "Could not change “Launch at login”",
   "goErrShortcutTaken": "Could not use {shortcut}; another app may already use it",
   "goErrNoItem": "The image is no longer in the queue",
   "goErrAnimatedBeautify": "Animated images cannot be beautified",

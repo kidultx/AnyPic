@@ -345,6 +345,8 @@
   "goErrBusyClear": "正在压缩，请先取消",
   "goErrBusy": "正在压缩，请稍后再试",
   "goErrCanceled": "已取消",
+  "goErrSaveSettings": "无法保存设置",
+  "goErrLoginItem": "无法更改「开机时启动」",
   "goErrShortcutTaken": "无法使用 {shortcut}：可能已被其他应用占用",
   "goErrNoItem": "图片不存在",
   "goErrAnimatedBeautify": "动图暂不支持美化",

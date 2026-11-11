@@ -3442,6 +3442,26 @@ func (msgs Messages) GoErrCanceled() string {
 	return Catalog.Format(msgs.locale, "goErrCanceled", nil)
 }
 
+// GoErrSaveSettings says "无法保存设置"
+// in the language the app shows.
+func GoErrSaveSettings() string { return In(i18n.Locale()).GoErrSaveSettings() }
+
+// GoErrSaveSettings says "无法保存设置"
+// in the language of msgs.
+func (msgs Messages) GoErrSaveSettings() string {
+	return Catalog.Format(msgs.locale, "goErrSaveSettings", nil)
+}
+
+// GoErrLoginItem says "无法更改「开机时启动」"
+// in the language the app shows.
+func GoErrLoginItem() string { return In(i18n.Locale()).GoErrLoginItem() }
+
+// GoErrLoginItem says "无法更改「开机时启动」"
+// in the language of msgs.
+func (msgs Messages) GoErrLoginItem() string {
+	return Catalog.Format(msgs.locale, "goErrLoginItem", nil)
+}
+
 // GoErrShortcutTaken says "无法使用 {shortcut}：可能已被其他应用占用"
 // in the language the app shows.
 func GoErrShortcutTaken(shortcut string) string {

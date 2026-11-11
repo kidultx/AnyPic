@@ -11,6 +11,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -23,6 +24,7 @@ import (
 	"testing"
 	"unicode"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/i18n"
 )
 
@@ -724,6 +726,65 @@ func TestIssue32ACanceledImageSaysSoInWords(t *testing.T) {
 		service.mu.Unlock()
 		if got != c.want {
 			t.Errorf("in %s an image canceled mid-pass says %q, want %q (#32)", c.language, got, c.want)
+		}
+	}
+}
+
+// TestIssue32FailuresLeadWithWordsOfOurs: an error the system or the
+// framework hands back says its piece in its own words — "permission
+// denied", "mygo: allow AnyPic to open at login in System Settings…" — and
+// three failures a user can run into reached the toast as nothing but that:
+// saving the settings, switching the login item, and exporting one image
+// (exporting all of them already said 「导出 … 失败」 first). Each now leads
+// with the catalog's words and keeps the cause after them.
+func TestIssue32FailuresLeadWithWordsOfOurs(t *testing.T) {
+	original := uiLanguage()
+	defer setUILanguage(original)
+
+	leads := func(err error, lead string) bool {
+		return err != nil && strings.HasPrefix(err.Error(), lead+": ")
+	}
+	for _, language := range []string{"en", "zh-Hans"} {
+		setUILanguage(language)
+
+		// settings.json cannot be written: its folder is a file.
+		blocked := filepath.Join(t.TempDir(), "not-a-folder")
+		if err := os.WriteFile(blocked, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		service := newTestService(t)
+		service.statePath = filepath.Join(blocked, "settings.json")
+		next := service.settings
+		next.Quality = 60
+		if _, err := service.SaveSettings(next); !leads(err, tr().GoErrSaveSettings()) {
+			t.Errorf("%s: a settings file that cannot be written says %q, want it to start with %q (#32)", language, err, tr().GoErrSaveSettings())
+		}
+
+		// The system refuses the login item.
+		refusal := "mygo: allow AnyPic to open at login in System Settings > General > Login Items"
+		oldLogin := setOpenAtLogin
+		setOpenAtLogin = func(bool) error { return errors.New(refusal) }
+		service = newTestService(t)
+		next = service.settings
+		next.OpenAtLogin = "on"
+		_, err := service.SaveSettings(next)
+		setOpenAtLogin = oldLogin
+		if !leads(err, tr().GoErrLoginItem()) || !strings.Contains(err.Error(), refusal) {
+			t.Errorf("%s: a refused login item says %q, want %q first and the system's reason after it (#32)", language, err, tr().GoErrLoginItem())
+		}
+
+		// One image exported to a place that cannot hold it: its folder is a
+		// file.
+		service = newTestService(t)
+		compressOneForUnsavedTest(t, service)
+		dest := filepath.Join(blocked, "chosen.webp")
+		oldSave := saveDialog
+		saveDialog = func(mygo.SaveDialogOptions) (string, error) { return dest, nil }
+		item := service.State().Items[0]
+		_, err = service.ExportOne(context.Background(), item.ID)
+		saveDialog = oldSave
+		if !leads(err, tr().GoErrExportItem(item.Name)) {
+			t.Errorf("%s: one image that cannot be exported says %q, want it to start with %q (#32)", language, err, tr().GoErrExportItem(item.Name))
 		}
 	}
 }
