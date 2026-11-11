@@ -115,7 +115,12 @@ func TestNoNewNativeSelects(t *testing.T) {
 // focus ring and the right-click menu's surface; its behaviour moved to
 // src/queue-keys.ts rather than pushing main.ts past its line. #23 replaced
 // every literal font-size and px radius with a token, so style.css carries the
-// longer names (63,599): the ladder is the point, not a hidden growth.
+// longer names (63,599): the ladder is the point, not a hidden growth. #32
+// moved every word into the catalogs: index.html grew to 34,065 because each
+// text node and label now also names its key, and the preferences gained the
+// language control; the message tables themselves live in src/locales.ts
+// (generated) and src/i18n.ts, budgeted here so the lookup layer cannot grow
+// unnoticed. main.ts stayed under its line.
 var uiBudgets = []struct {
 	file   string
 	budget int
@@ -123,8 +128,9 @@ var uiBudgets = []struct {
 	{"src/main.ts", 80_200},
 	{"src/shortcuts.ts", 4_200},
 	{"src/queue-keys.ts", 12_300},
+	{"src/i18n.ts", 5_200},
 	{"src/style.css", 64_800},
-	{"index.html", 32_900},
+	{"index.html", 34_800},
 }
 
 // TestScriptAndStyleBudgets guards them. Sizes are counted with LF line
@@ -733,7 +739,6 @@ func TestIssue24MustReadCopyIsNotFaint(t *testing.T) {
 	}
 }
 
-
 // TestIssue29HeadingsAreNotShouted guards #29: the section heads borrow an
 // English pattern — uppercase plus 0.05em tracking — that does nothing to
 // Chinese (there are no capitals) and only stretches the characters apart.
@@ -830,7 +835,6 @@ func TestIssue30ActionsColumnFitsTheButtons(t *testing.T) {
 		}
 	}
 }
-
 
 // TestIssue22PreferencesLiveInADialog guards #22: the sidebar answers "how
 // should this batch come out" — quality, output format, where it lands. The
@@ -1122,10 +1126,13 @@ func TestIssue20QueueIsAKeyboardList(t *testing.T) {
 	if !regexp.MustCompile(`role="menu"`).MatchString(markup) {
 		t.Errorf("index.html: the queue menu has no role=\"menu\" (#20)")
 	}
-	for _, label := range []string{"对比预览", "导出", "在文件夹中显示", "移除"} {
-		if !strings.Contains(menu, label) {
-			t.Errorf("index.html: the queue menu is missing %q (#20)", label)
+	for _, key := range []string{"comparePreview", "exportLabel", "showInFolder"} {
+		if !strings.Contains(menu, `data-i18n="`+key+`"`) {
+			t.Errorf("index.html: the queue menu is missing the catalog key %q (#20, #32)", key)
 		}
+	}
+	if !strings.Contains(menu, `id="queueMenuRemoveLabel"`) {
+		t.Errorf("index.html: the queue menu has no #queueMenuRemoveLabel — the remove item cannot say how many (#20)")
 	}
 
 	ts, err := os.ReadFile("src/queue-keys.ts")

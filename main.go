@@ -103,49 +103,70 @@ func main() {
 		}
 
 		if err := service.RegisterScreenshotShortcut(); err != nil {
-			log.Printf("AnyPic: 截图快捷键注册失败: %v", err)
+			log.Printf("AnyPic: could not register the screenshot shortcut: %v", err)
 		}
 
-		if _, err := mygo.NewTray(mygo.TrayOptions{
+		// The menus say their labels in the language the app shows (#32);
+		// resolveLanguageNow reads the desktop's languages now that the app is
+		// ready. A later change from the preferences rebuilds both menus.
+		service.resolveLanguageNow()
+		t := tr()
+
+		tray, trayErr := mygo.NewTray(mygo.TrayOptions{
 			ID:             "anypic",
 			Icon:           trayIcon,
 			IconIsTemplate: true,
-			ToolTip:        "AnyPic · 图片压缩",
+			ToolTip:        t.GoTrayTooltip(),
 			Menu: mygo.NewMenu([]*mygo.MenuItem{
-				{Label: "打开 AnyPic", Click: func(*mygo.MenuItem, *mygo.Window) { showWindow() }},
-				{Label: "截取屏幕区域", Click: command("screenshot")},
+				{Label: t.GoMenuOpenApp(), Click: func(*mygo.MenuItem, *mygo.Window) { showWindow() }},
+				{Label: t.GoMenuCapture(), Click: command("screenshot")},
 				mygo.Separator(),
 				{Role: mygo.RoleQuit},
 			}),
-		}); err != nil {
-			log.Printf("AnyPic: 无法创建托盘图标: %v", err)
+		})
+		if trayErr != nil {
+			log.Printf("AnyPic: could not create the tray icon: %v", trayErr)
 		} else {
 			trayReady = true
 		}
 
-		app.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
-			{Role: mygo.RoleAppMenu},
-			{Label: "文件", Submenu: []*mygo.MenuItem{
-				{Label: "打开图片…", Accelerator: "CmdOrCtrl+O", Click: command("open")},
-				{Label: "截取屏幕区域…", Click: command("screenshot")},
-				{Label: "开始压缩", Accelerator: "CmdOrCtrl+Return", Click: command("compress")},
-				{Label: "导出全部…", Accelerator: "CmdOrCtrl+E", Click: command("export")},
-				mygo.Separator(),
-				{Label: "清空列表", Accelerator: "CmdOrCtrl+Backspace", Click: command("clear")},
-				mygo.Separator(),
-				{Role: mygo.RoleClose},
-			}},
-			{Role: mygo.RoleEditMenu},
-			{Label: "视图", Submenu: []*mygo.MenuItem{
-				{Label: "偏好设置…", Accelerator: "CmdOrCtrl+,", Click: command("prefs")},
-				mygo.Separator(),
-				{Label: "切换主题", Accelerator: "CmdOrCtrl+Shift+L", Click: command("theme")},
-				mygo.Separator(),
-				{Role: mygo.RoleToggleFullScreen},
-			}},
-			{Role: mygo.RoleWindowMenu},
-			{Role: mygo.RoleHelp},
-		}))
+		buildMenus := func() {
+			t := tr()
+			app.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
+				{Role: mygo.RoleAppMenu},
+				{Label: t.GoMenuFile(), Submenu: []*mygo.MenuItem{
+					{Label: t.GoMenuOpenImages(), Accelerator: "CmdOrCtrl+O", Click: command("open")},
+					{Label: t.GoMenuCaptureEllipsis(), Click: command("screenshot")},
+					{Label: t.GoMenuStartCompression(), Accelerator: "CmdOrCtrl+Return", Click: command("compress")},
+					{Label: t.GoMenuExportAll(), Accelerator: "CmdOrCtrl+E", Click: command("export")},
+					mygo.Separator(),
+					{Label: t.GoMenuClearList(), Accelerator: "CmdOrCtrl+Backspace", Click: command("clear")},
+					mygo.Separator(),
+					{Role: mygo.RoleClose},
+				}},
+				{Role: mygo.RoleEditMenu},
+				{Label: t.GoMenuView(), Submenu: []*mygo.MenuItem{
+					{Label: t.GoMenuPreferences(), Accelerator: "CmdOrCtrl+,", Click: command("prefs")},
+					mygo.Separator(),
+					{Label: t.GoMenuToggleTheme(), Accelerator: "CmdOrCtrl+Shift+L", Click: command("theme")},
+					mygo.Separator(),
+					{Role: mygo.RoleToggleFullScreen},
+				}},
+				{Role: mygo.RoleWindowMenu},
+				{Role: mygo.RoleHelp},
+			}))
+			if tray != nil {
+				tray.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
+					{Label: t.GoMenuOpenApp(), Click: func(*mygo.MenuItem, *mygo.Window) { showWindow() }},
+					{Label: t.GoMenuCapture(), Click: command("screenshot")},
+					mygo.Separator(),
+					{Role: mygo.RoleQuit},
+				}))
+				tray.SetToolTip(t.GoTrayTooltip())
+			}
+		}
+		buildMenus()
+		service.setLanguageListener(buildMenus)
 	})
 
 	if err := app.Run(); err != nil {

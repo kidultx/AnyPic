@@ -92,6 +92,9 @@ type Settings struct {
 	OutputFolder string `json:"outputFolder"`
 	Suffix       string `json:"suffix"`
 	Theme        string `json:"theme"`
+	// Language is the language the interface shows: "system", "zh-Hans" or
+	// "en" (#32).
+	Language string `json:"language"`
 	// AutoProcess compresses additions — files, folders and captures —
 	// without the extra compress/export clicks: "on" or "off".
 	AutoProcess string `json:"autoProcess"`
@@ -233,6 +236,7 @@ func defaultSettings() Settings {
 		OutputMode:          "alongside",
 		Suffix:              "-anypic",
 		Theme:               "system",
+		Language:            "system",
 		AutoProcess:         "on",
 		ScreenshotShortcut:  DefaultScreenshotShortcut,
 		ScreenshotClipboard: "on",
@@ -251,6 +255,11 @@ func (a *AnyPic) loadSettings() {
 		return
 	}
 	a.settings = normalizeSettings(s)
+	// An explicit choice is known before the app is ready; "system" waits for
+	// the desktop's languages (resolveLanguageNow, called at ready).
+	if a.settings.Language != "system" {
+		uiLang.Store(a.settings.Language)
+	}
 }
 
 // State returns a snapshot of the queue.
@@ -281,22 +290,22 @@ func (a *AnyPic) AddPaths(paths []string) (AddResult, error) {
 func (a *AnyPic) PasteImage() (AddResult, error) {
 	data := mygo.Clipboard.ReadImage()
 	if len(data) == 0 {
-		return AddResult{}, errors.New("剪贴板里没有图片")
+		return AddResult{}, errNoClipboardImage
 	}
 	base, err := mygo.App.Path(mygo.PathPictures)
 	if err != nil || base == "" {
 		base, err = mygo.App.Path(mygo.PathUserData)
 		if err != nil {
-			return AddResult{}, errors.New("无法确定保存位置")
+			return AddResult{}, errors.New(tr().GoErrNoSaveLocation())
 		}
 	}
 	path, err := savePastedImage(data, base, time.Now().Format("2006-01-02 15.04.05"))
 	if err != nil {
-		return AddResult{}, fmt.Errorf("无法保存粘贴的图片：%w", err)
+		return AddResult{}, fmt.Errorf("%s: %w", tr().GoErrSavePaste(), err)
 	}
 	result, err := a.AddPaths([]string{path})
 	if err != nil {
-		return AddResult{}, fmt.Errorf("粘贴的图片已保存到 %s，但无法加入队列：%w", path, err)
+		return AddResult{}, fmt.Errorf("%s: %w", tr().GoErrPastedNotQueued(path), err)
 	}
 	return result, nil
 }
@@ -306,13 +315,13 @@ func (a *AnyPic) PasteImage() (AddResult, error) {
 // user's pictures folder.
 func savePastedImage(data []byte, base, stamp string) (string, error) {
 	if len(data) == 0 {
-		return "", errors.New("剪贴板里没有图片")
+		return "", errNoClipboardImage
 	}
 	dir := filepath.Join(base, "AnyPic")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	path := uniquePath(filepath.Join(dir, "粘贴 "+stamp+".png"))
+	path := uniquePath(filepath.Join(dir, tr().GoPastedName(stamp)+".png"))
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return "", err
 	}
@@ -349,12 +358,12 @@ func (a *AnyPic) TakePendingOpen() []string {
 func (a *AnyPic) PickFiles(ctx context.Context) (AddResult, error) {
 	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
 		Parent:      mygo.CallerWindow(ctx),
-		Title:       "选择图片",
-		ButtonLabel: "添加",
-		Message:     "选择要压缩的图片或文件夹",
+		Title:       tr().GoDialogPickTitle(),
+		ButtonLabel: tr().GoDialogAddButton(),
+		Message:     tr().GoDialogPickMessage(),
 		Multiple:    true,
 		Filters: []mygo.FileFilter{
-			{Name: "图片", Extensions: []string{"jpg", "jpeg", "png", "webp", "gif", "bmp", "tif", "tiff"}},
+			{Name: tr().GoDialogImagesFilter(), Extensions: []string{"jpg", "jpeg", "png", "webp", "gif", "bmp", "tif", "tiff"}},
 		},
 	})
 	if err != nil {
@@ -384,16 +393,16 @@ func (a *AnyPic) addPaths(paths []string) (AddResult, error) {
 	var newItems []*Item
 	for _, path := range candidates {
 		if len(newItems) >= maxBatchSize {
-			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: "一次最多添加 500 张图片"})
+			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: tr().GoSkippedTooMany()})
 			break
 		}
 		info, err := os.Stat(path)
 		if err != nil {
-			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: "无法读取文件"})
+			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: tr().GoSkippedUnreadable()})
 			continue
 		}
 		if info.Size() > maxFileSize {
-			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: "文件超过 250 MB"})
+			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: tr().GoSkippedTooLarge()})
 			continue
 		}
 		if existing[path] {
@@ -402,19 +411,19 @@ func (a *AnyPic) addPaths(paths []string) (AddResult, error) {
 
 		frames, err := animationFrameCount(path)
 		if err != nil {
-			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: "无法读取文件"})
+			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: tr().GoSkippedUnreadable()})
 			continue
 		}
 
 		f, err := os.Open(path)
 		if err != nil {
-			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: "无法读取文件"})
+			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: tr().GoSkippedUnreadable()})
 			continue
 		}
 		cfg, format, err := image.DecodeConfig(f)
 		f.Close()
 		if err != nil {
-			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: "不支持的图片格式"})
+			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: tr().GoSkippedUnsupported()})
 			continue
 		}
 		item := &Item{
@@ -454,7 +463,7 @@ func (a *AnyPic) Remove(ids []int64) (Snapshot, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.running {
-		return Snapshot{}, errors.New("正在压缩，暂时不能移除图片")
+		return Snapshot{}, errors.New(tr().GoErrBusyRemove())
 	}
 	drop := make(map[int64]bool, len(ids))
 	for _, id := range ids {
@@ -478,7 +487,7 @@ func (a *AnyPic) Clear() (Snapshot, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.running {
-		return Snapshot{}, errors.New("正在压缩，请先取消")
+		return Snapshot{}, errors.New(tr().GoErrBusyClear())
 	}
 	for _, item := range a.items {
 		a.removeTemp(item)
@@ -499,8 +508,14 @@ func (a *AnyPic) SaveSettings(s Settings) (Settings, error) {
 	s.ScreenshotShortcut = a.settings.ScreenshotShortcut
 	openAtLogin := s.OpenAtLogin == "on"
 	changed := s.OpenAtLogin != a.settings.OpenAtLogin
+	languageChanged := s.Language != a.settings.Language
 	a.settings = s
 	a.mu.Unlock()
+	// Menus, dialogs and later errors take the new language at once (#32).
+	if languageChanged {
+		setUILanguage(s.Language)
+		notifyLanguageChanged()
+	}
 	// Mirror the preference to the system login item before persisting; if
 	// the system refuses, the stored value follows what the system has.
 	if changed {
@@ -549,7 +564,7 @@ func (a *AnyPic) SetScreenshotShortcut(acc string) (Settings, error) {
 		return a.State().Settings, nil
 	}
 	if err := replaceScreenshotShortcut(prev, acc); err != nil {
-		return a.State().Settings, fmt.Errorf("无法使用 %s：可能已被其他应用占用", acc)
+		return a.State().Settings, fmt.Errorf("%s", tr().GoErrShortcutTaken(acc))
 	}
 	a.mu.Lock()
 	a.settings.ScreenshotShortcut = acc
@@ -597,42 +612,42 @@ func (a *AnyPic) DecorateItem(id int64, style FrameStyle) (Snapshot, error) {
 	a.mu.Lock()
 	if a.running {
 		a.mu.Unlock()
-		return Snapshot{}, errors.New("正在压缩，请稍后再试")
+		return Snapshot{}, errors.New(tr().GoErrBusy())
 	}
 	item := a.byID[id]
 	if item == nil {
 		a.mu.Unlock()
-		return Snapshot{}, errors.New("图片不存在")
+		return Snapshot{}, errors.New(tr().GoErrNoItem())
 	}
 	if item.Animated {
 		// Beautify re-renders the source as a still PNG; an animation would
 		// silently lose its frames.
 		a.mu.Unlock()
-		return Snapshot{}, errors.New("动图暂不支持美化")
+		return Snapshot{}, errors.New(tr().GoErrAnimatedBeautify())
 	}
 	path, dir, name := item.Path, item.Dir, item.Name
 	a.mu.Unlock()
 
 	f, err := os.Open(path)
 	if err != nil {
-		return Snapshot{}, errors.New("无法读取图片")
+		return Snapshot{}, errors.New(tr().GoErrReadImage())
 	}
 	img, err := decodeImage(f, true)
 	f.Close()
 	if err != nil {
-		return Snapshot{}, errors.New("图片解码失败")
+		return Snapshot{}, errors.New(tr().GoErrDecodeImage())
 	}
 
 	out := decorateScreenshot(img, style)
 	var buf bytes.Buffer
 	enc := png.Encoder{CompressionLevel: png.DefaultCompression}
 	if err := enc.Encode(&buf, out); err != nil {
-		return Snapshot{}, errors.New("无法写入美化结果")
+		return Snapshot{}, errors.New(tr().GoErrEncodeBeautify())
 	}
 
-	dest := uniquePath(filepath.Join(dir, outputFilename(name, "-美化", "png")))
+	dest := uniquePath(filepath.Join(dir, outputFilename(name, tr().GoDecoratedSuffix(), "png")))
 	if err := os.WriteFile(dest, buf.Bytes(), 0o644); err != nil {
-		return Snapshot{}, errors.New("无法保存美化结果")
+		return Snapshot{}, errors.New(tr().GoErrSaveBeautify())
 	}
 
 	a.mu.Lock()
@@ -641,14 +656,14 @@ func (a *AnyPic) DecorateItem(id int64, style FrameStyle) (Snapshot, error) {
 		// batch owns the item's status, so step aside and clean up.
 		a.mu.Unlock()
 		_ = os.Remove(dest)
-		return Snapshot{}, errors.New("正在压缩，请稍后再试")
+		return Snapshot{}, errors.New(tr().GoErrBusy())
 	}
 	item = a.byID[id]
 	if item == nil {
 		// The item was removed while the image was being decorated.
 		a.mu.Unlock()
 		_ = os.Remove(dest)
-		return Snapshot{}, errors.New("图片不存在")
+		return Snapshot{}, errors.New(tr().GoErrNoItem())
 	}
 	a.removeTemp(item)
 	item.Path = dest
@@ -682,23 +697,23 @@ func (a *AnyPic) PreviewDecorated(id int64, style FrameStyle) (string, error) {
 	item := a.byID[id]
 	if item == nil {
 		a.mu.Unlock()
-		return "", errors.New("图片不存在")
+		return "", errors.New(tr().GoErrNoItem())
 	}
 	if item.Animated {
 		a.mu.Unlock()
-		return "", errors.New("动图暂不支持美化")
+		return "", errors.New(tr().GoErrAnimatedBeautify())
 	}
 	path := item.Path
 	a.mu.Unlock()
 
 	f, err := os.Open(path)
 	if err != nil {
-		return "", errors.New("无法读取图片")
+		return "", errors.New(tr().GoErrReadImage())
 	}
 	img, err := decodeImage(f, true)
 	f.Close()
 	if err != nil {
-		return "", errors.New("图片解码失败")
+		return "", errors.New(tr().GoErrDecodeImage())
 	}
 
 	out := decorateScreenshot(img, style)
@@ -711,8 +726,8 @@ func (a *AnyPic) PreviewDecorated(id int64, style FrameStyle) (string, error) {
 func (a *AnyPic) ChooseOutputFolder(ctx context.Context) (Settings, error) {
 	folder, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
 		Parent:      mygo.CallerWindow(ctx),
-		Title:       "选择导出文件夹",
-		ButtonLabel: "选择",
+		Title:       tr().GoDialogExportFolderTitle(),
+		ButtonLabel: tr().GoDialogChooseButton(),
 		Directory:   true,
 	})
 	if err != nil || len(folder) == 0 {
@@ -751,7 +766,7 @@ func (a *AnyPic) CompressFailed(s Settings) error {
 	a.mu.Lock()
 	if a.running {
 		a.mu.Unlock()
-		return errors.New("已经有一轮压缩正在进行")
+		return errors.New(tr().GoErrAlreadyRunning())
 	}
 	found := false
 	for _, item := range a.items {
@@ -763,7 +778,7 @@ func (a *AnyPic) CompressFailed(s Settings) error {
 	}
 	a.mu.Unlock()
 	if !found {
-		return errors.New("没有失败的图片")
+		return errors.New(tr().GoErrNoFailed())
 	}
 	return a.startCompression(s, true)
 }
@@ -774,7 +789,7 @@ func (a *AnyPic) startCompression(s Settings, onlyReady bool) error {
 	a.mu.Lock()
 	if a.running {
 		a.mu.Unlock()
-		return errors.New("已经有一轮压缩正在进行")
+		return errors.New(tr().GoErrAlreadyRunning())
 	}
 	ids := make([]int64, 0, len(a.items))
 	for _, item := range a.items {
@@ -793,7 +808,7 @@ func (a *AnyPic) startCompression(s Settings, onlyReady bool) error {
 			// Nothing to do is not an error for an automatic pass.
 			return nil
 		}
-		return errors.New("请先添加图片")
+		return errors.New(tr().GoErrAddFirst())
 	}
 	a.settings = s
 	a.running = true
@@ -947,12 +962,12 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 
 	f, err := os.Open(path)
 	if err != nil {
-		return compressResult{}, errors.New("无法读取原图")
+		return compressResult{}, errors.New(tr().GoErrReadOriginal())
 	}
 	img, err := decodeImage(f, true)
 	f.Close()
 	if err != nil {
-		return compressResult{}, errors.New("图片解码失败，可能已损坏")
+		return compressResult{}, errors.New(tr().GoErrDecodeCorrupt())
 	}
 
 	resized := false
@@ -975,20 +990,20 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 	switch outFormat {
 	case "JPEG":
 		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: s.Quality}); err != nil {
-			return compressResult{}, errors.New("JPEG 编码失败")
+			return compressResult{}, errors.New(tr().GoErrEncodeJPEG())
 		}
 	case "PNG":
 		enc := png.Encoder{CompressionLevel: pngCompressionLevel(img.Bounds().Dx() * img.Bounds().Dy())}
 		if err := enc.Encode(&buf, img); err != nil {
-			return compressResult{}, errors.New("PNG 编码失败")
+			return compressResult{}, errors.New(tr().GoErrEncodePNG())
 		}
 	case "WEBP":
 		opts := webp.Options{Quality: s.Quality, Method: 4}
 		if err := webp.Encode(&buf, img, opts); err != nil {
-			return compressResult{}, errors.New("WebP 编码失败")
+			return compressResult{}, errors.New(tr().GoErrEncodeWebP())
 		}
 	default:
-		return compressResult{}, errors.New("不支持的输出格式")
+		return compressResult{}, errors.New(tr().GoErrUnsupportedOutput())
 	}
 
 	if err := ctx.Err(); err != nil {
@@ -997,7 +1012,7 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 
 	info, err := os.Stat(path)
 	if err != nil {
-		return compressResult{}, errors.New("无法读取原图")
+		return compressResult{}, errors.New(tr().GoErrReadOriginal())
 	}
 	b := img.Bounds()
 
@@ -1019,18 +1034,18 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 
 	dir, err := a.ensureTempDir()
 	if err != nil {
-		return compressResult{}, errors.New("无法创建临时文件")
+		return compressResult{}, errors.New(tr().GoErrCreateTemp())
 	}
 	ext := extForFormat(outFormat)
 	tmp, err := os.CreateTemp(dir, fmt.Sprintf("%d-*.%s", id, ext))
 	if err != nil {
-		return compressResult{}, errors.New("无法创建临时文件")
+		return compressResult{}, errors.New(tr().GoErrCreateTemp())
 	}
 	outPath := tmp.Name()
 	tmp.Close()
 	if err := os.WriteFile(outPath, buf.Bytes(), 0o600); err != nil {
 		_ = os.Remove(outPath)
-		return compressResult{}, errors.New("无法写入压缩结果")
+		return compressResult{}, errors.New(tr().GoErrWriteResult())
 	}
 
 	return compressResult{
@@ -1051,11 +1066,11 @@ func (a *AnyPic) Preview(id int64) (Preview, error) {
 	item := a.byID[id]
 	if item == nil {
 		a.mu.Unlock()
-		return Preview{}, errors.New("图片不存在")
+		return Preview{}, errors.New(tr().GoErrNoItem())
 	}
 	if item.Status != statusDone {
 		a.mu.Unlock()
-		return Preview{}, errors.New("请先压缩这张图片")
+		return Preview{}, errors.New(tr().GoErrCompressFirst())
 	}
 	src := item.Path
 	out := item.compressedPath
@@ -1063,11 +1078,11 @@ func (a *AnyPic) Preview(id int64) (Preview, error) {
 
 	before, beforeW, beforeH, err := previewImage(src)
 	if err != nil {
-		return Preview{}, errors.New("无法生成原图预览")
+		return Preview{}, errors.New(tr().GoErrPreviewOriginal())
 	}
 	after, afterW, afterH, err := previewImage(out)
 	if err != nil {
-		return Preview{}, errors.New("无法生成压缩图预览")
+		return Preview{}, errors.New(tr().GoErrPreviewCompressed())
 	}
 	w, h := beforeW, beforeH
 	if w < 1 || h < 1 {
@@ -1085,7 +1100,7 @@ func (a *AnyPic) ExportAll(ctx context.Context) (ExportResult, error) {
 	a.mu.Lock()
 	if a.running {
 		a.mu.Unlock()
-		return ExportResult{}, errors.New("请等待压缩完成")
+		return ExportResult{}, errors.New(tr().GoErrWaitCompression())
 	}
 	done := make([]Item, 0, len(a.items))
 	for _, item := range a.items {
@@ -1098,13 +1113,13 @@ func (a *AnyPic) ExportAll(ctx context.Context) (ExportResult, error) {
 	a.mu.Unlock()
 
 	if len(done) == 0 {
-		return ExportResult{}, errors.New("还没有可导出的图片")
+		return ExportResult{}, errors.New(tr().GoErrNothingToExport())
 	}
 	if mode != "folder" || folder == "" {
 		chosen, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
 			Parent:      mygo.CallerWindow(ctx),
-			Title:       "选择导出文件夹",
-			ButtonLabel: "导出到这里",
+			Title:       tr().GoDialogExportFolderTitle(),
+			ButtonLabel: tr().GoDialogExportHereButton(),
 			Directory:   true,
 		})
 		if err != nil {
@@ -1121,7 +1136,7 @@ func (a *AnyPic) ExportAll(ctx context.Context) (ExportResult, error) {
 		_ = a.persistSettings()
 	}
 	if err := os.MkdirAll(folder, 0o755); err != nil {
-		return ExportResult{}, errors.New("无法创建导出文件夹")
+		return ExportResult{}, errors.New(tr().GoErrCreateExportFolder())
 	}
 
 	result := ExportResult{Folder: folder}
@@ -1134,7 +1149,7 @@ func (a *AnyPic) ExportAll(ctx context.Context) (ExportResult, error) {
 		dest := uniquePath(filepath.Join(folder, item.OutputName))
 		if err := copyFile(src, dest); err != nil {
 			a.markResultsSaved(saved)
-			return result, fmt.Errorf("导出 %s 失败: %w", item.Name, err)
+			return result, fmt.Errorf("%s: %w", tr().GoErrExportItem(item.Name), err)
 		}
 		result.Paths = append(result.Paths, dest)
 		result.Count++
@@ -1151,7 +1166,7 @@ func (a *AnyPic) ExportProcessed(ids []int64) (ExportResult, error) {
 	a.mu.Lock()
 	if a.running {
 		a.mu.Unlock()
-		return ExportResult{}, errors.New("请等待压缩完成")
+		return ExportResult{}, errors.New(tr().GoErrWaitCompression())
 	}
 	want := make(map[int64]bool, len(ids))
 	for _, id := range ids {
@@ -1168,7 +1183,7 @@ func (a *AnyPic) ExportProcessed(ids []int64) (ExportResult, error) {
 	a.mu.Unlock()
 
 	if len(done) == 0 {
-		return ExportResult{}, errors.New("还没有可导出的图片")
+		return ExportResult{}, errors.New(tr().GoErrNothingToExport())
 	}
 
 	result := ExportResult{}
@@ -1186,7 +1201,7 @@ func (a *AnyPic) ExportProcessed(ids []int64) (ExportResult, error) {
 		dest := uniquePath(filepath.Join(destDir, item.OutputName))
 		if err := copyFile(src, dest); err != nil {
 			a.markResultsSaved(saved)
-			return result, fmt.Errorf("保存 %s 失败: %w", item.Name, err)
+			return result, fmt.Errorf("%s: %w", tr().GoErrSaveItem(item.Name), err)
 		}
 		result.Paths = append(result.Paths, dest)
 		result.Count++
@@ -1215,7 +1230,7 @@ func (a *AnyPic) CopyItemToClipboard(id int64) error {
 	item := a.byID[id]
 	if item == nil {
 		a.mu.Unlock()
-		return errors.New("图片不存在")
+		return errors.New(tr().GoErrNoItem())
 	}
 	src := item.Path
 	if item.Status == statusDone && item.compressedPath != "" && !item.PassedThrough {
@@ -1225,21 +1240,21 @@ func (a *AnyPic) CopyItemToClipboard(id int64) error {
 
 	data, err := os.ReadFile(src)
 	if err != nil {
-		return errors.New("无法读取图片")
+		return errors.New(tr().GoErrReadImage())
 	}
 	if !bytes.HasPrefix(data, pngSignature) {
 		img, err := imaging.Decode(bytes.NewReader(data), imaging.AutoOrientation(true))
 		if err != nil {
-			return errors.New("无法复制图片")
+			return errors.New(tr().GoErrCopyImage())
 		}
 		var buf bytes.Buffer
 		if err := png.Encode(&buf, img); err != nil {
-			return errors.New("无法复制图片")
+			return errors.New(tr().GoErrCopyImage())
 		}
 		data = buf.Bytes()
 	}
 	if err := mygo.Clipboard.WriteImage(data); err != nil {
-		return errors.New("无法写入剪贴板")
+		return errors.New(tr().GoErrWriteClipboard())
 	}
 	return nil
 }
@@ -1254,11 +1269,11 @@ func (a *AnyPic) ExportOne(ctx context.Context, id int64) (ExportResult, error) 
 	item := a.byID[id]
 	if item == nil {
 		a.mu.Unlock()
-		return ExportResult{}, errors.New("图片不存在")
+		return ExportResult{}, errors.New(tr().GoErrNoItem())
 	}
 	if item.Status != statusDone {
 		a.mu.Unlock()
-		return ExportResult{}, errors.New("请先压缩这张图片")
+		return ExportResult{}, errors.New(tr().GoErrCompressFirst())
 	}
 	copyItem := *item
 	folder := a.settings.OutputFolder
@@ -1270,9 +1285,9 @@ func (a *AnyPic) ExportOne(ctx context.Context, id int64) (ExportResult, error) 
 	}
 	dest, err := saveDialog(mygo.SaveDialogOptions{
 		Parent:      mygo.CallerWindow(ctx),
-		Title:       "导出压缩图片",
+		Title:       tr().GoDialogExportImageTitle(),
 		DefaultPath: defaultPath,
-		ButtonLabel: "导出",
+		ButtonLabel: tr().GoDialogExportButton(),
 	})
 	if err != nil {
 		return ExportResult{}, err
@@ -1526,7 +1541,7 @@ func collectImages(paths []string) ([]string, []SkippedFile) {
 		}
 		ext := strings.ToLower(filepath.Ext(path))
 		if !supportedExtensions[ext] {
-			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: "不支持的格式"})
+			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: tr().GoSkippedUnsupportedShort()})
 			return
 		}
 		seen[path] = true
@@ -1536,7 +1551,7 @@ func collectImages(paths []string) ([]string, []SkippedFile) {
 	for _, path := range paths {
 		info, err := os.Stat(path)
 		if err != nil {
-			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: "无法读取"})
+			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: tr().GoSkippedUnreadableShort()})
 			continue
 		}
 		if !info.IsDir() {
@@ -1560,7 +1575,7 @@ func collectImages(paths []string) ([]string, []SkippedFile) {
 			return nil
 		})
 		if err != nil {
-			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: "无法读取文件夹"})
+			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: tr().GoSkippedFolderUnreadable()})
 		}
 	}
 	return out, skipped
@@ -1604,6 +1619,11 @@ func normalizeSettings(s Settings) Settings {
 	case "system", "light", "dark":
 	default:
 		s.Theme = "system"
+	}
+	switch s.Language {
+	case "system", "zh-Hans", "en":
+	default:
+		s.Language = "system"
 	}
 	// Auto-process is the default: older settings files have no preference,
 	// and turning the one-step flow on is the friendlier reading of that.

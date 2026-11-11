@@ -10,6 +10,7 @@
 | 压缩管线：输出格式与诚实结果标记 | [compressor.md](compressor.md) |
 | 截图链路（快捷键、美化工作台、归档） | [screenshot.md](screenshot.md) |
 | 更新器（检查、下载、代开安装） | [updater.md](updater.md) |
+| 文案与语言（目录、生成物、错误码） | [i18n.md](i18n.md) |
 
 （一个子系统的契约第一次「跨文件」或「不那么显然」时，才为它写一页并在此
 加一行。目前的候选块：截图链路 `screenshot.go`、UI 状态与渲染

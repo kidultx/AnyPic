@@ -1,6 +1,7 @@
 import { AnyPic, events, type Batch, type Item, type Preview, type Settings, type Snapshot, type UpdateInfo } from "./mygo";
 import { isMyGo, onFileDrop, runtime } from "mygo-runtime";
 import { $, $$, closeModal, esc, formatBytes, formatDimensions, icon, openModal, pct, showError, shortenPath, showToast } from "./ui";
+import { errorCodes, onSystemLanguageChange, setLanguage, t } from "./i18n";
 import { bindPreview, closePreview, initPreview, invalidatePreview, openPreview, previewSelectedId } from "./preview";
 import { ensureQueueFocus, initQueueKeys, queueFocusAfterRemoval, queueRowFocus, queueRowKeys, queueRowTabIndex } from "./queue-keys";
 import { DEFAULT_SHORTCUT, acceleratorFromEvent, formatShortcut, isReservedShortcut, setShortcutPlatform } from "./shortcuts";
@@ -47,6 +48,10 @@ let compressStarting = false;
 /* Where the last automatic pass saved its results, for the footer summary.
    percent is signed: negative when the pass produced larger files. */
 let lastSaved: { count: number; target: string; percent: number; path: string } | null = null;
+/* The About dialog's version line, kept as data so it can be said again in a
+   new language (#32). demoVersion picks the browser-preview wording. */
+let aboutVersion: { version: string; platform: string; arch: string } | null = null;
+let demoVersion = false;
 
 const rowCache = new Map<number, HTMLElement>();
 let confirmResolve: ((value: boolean) => void) | null = null;
@@ -60,6 +65,7 @@ function defaultSettings(): Settings {
     outputFolder: "",
     suffix: "-anypic",
     theme: "system",
+    language: "system",
     autoProcess: "on",
     screenshotShortcut: DEFAULT_SHORTCUT,
     screenshotClipboard: "on",
@@ -81,6 +87,7 @@ function upsertItem(item: Item) {
 
 async function init() {
   detectPlatform();
+  setLanguage(settings.language);
   initPreview({
     items: () => items,
     visibleIds: () => visibleItems().map((item) => item.id),
@@ -127,9 +134,10 @@ async function init() {
       onFileDrop(({ paths }) => void addPaths(paths));
       void AnyPic.info()
         .then((info) => {
-          $("#aboutVersion").textContent = `${info.version}，${info.platform}/${info.arch}，MyGo`;
+          aboutVersion = { version: info.version, platform: info.platform, arch: info.arch };
+          renderAboutVersion();
           if (!info.screenshotActive) {
-            showToast(`截图快捷键 ${formatShortcut(info.screenshotShortcut)} 未生效，可能已被其他应用占用`, "error");
+            showToast(t.screenshotShortcutInactive(formatShortcut(info.screenshotShortcut)), "error");
           }
         })
         .catch(() => {});
@@ -137,13 +145,19 @@ async function init() {
       // quiet, and a newer release earns a single toast with a shortcut.
       void checkForUpdate(true);
     } catch (error) {
-      showError(error, "无法连接压缩引擎");
+      showError(error, t.engineUnavailable());
       applyDemoState();
     }
   } else {
     applyDemoState();
   }
 
+  // Following the system keeps following it: a language change on the
+  // desktop re-fills the page without a relaunch (#32).
+  onSystemLanguageChange(() => {
+    syncSettingsToUI();
+    renderAll();
+  });
   renderAll();
 }
 
@@ -308,8 +322,10 @@ function applyDemoState() {
   compressedSignature = signature(settings);
   syncSettingsToUI();
   applyTheme("system");
-  $("#aboutVersion").textContent = "0.1.0，浏览器预览";
-  window.setTimeout(() => showToast("浏览器预览模式。请在 MyGo 桌面应用中启用全部功能", "info"), 700);
+  aboutVersion = { version: "0.1.0", platform: "", arch: "" };
+  demoVersion = true;
+  renderAboutVersion();
+  window.setTimeout(() => showToast(t.demoToast(), "info"), 700);
 }
 
 function demoThumb(index: number, palette: readonly string[]): string {
@@ -383,18 +399,17 @@ function renderSettings() {
     button.setAttribute("aria-pressed", String(active));
     button.disabled = format === "png" || batch.running;
   });
+  $("#qualityState").textContent = t.custom();
   $("#qualityState").hidden = !customQuality;
 
   const autoToggle = $<HTMLInputElement>("#autoProcessToggle");
   if (document.activeElement !== autoToggle) autoToggle.checked = autoProcessEnabled();
-  $("#autoProcessNote").textContent = autoProcessEnabled()
-    ? "添加或截图后自动压缩并保存，只需粘贴。"
-    : "关闭后需手动点「压缩全部」，再点「导出」。";
-  $("#emptyTitle").textContent = autoProcessEnabled() ? "拖入图片，自动压缩保存" : "拖入图片开始压缩";
+  $("#autoProcessNote").textContent = autoProcessEnabled() ? t.autoProcessNoteOn() : t.autoProcessNoteOff();
+  $("#emptyTitle").textContent = autoProcessEnabled() ? t.emptyTitleAuto() : t.emptyTitleManual();
   $("#emptyShotKey").textContent = formatShortcut(settings.screenshotShortcut);
   $("#outputInlineLabel").textContent =
-    settings.outputMode === "folder" && settings.outputFolder ? shortenPath(settings.outputFolder) : "原图旁边";
-  $("#outputInlineBtn").title = settings.outputMode === "folder" && settings.outputFolder ? settings.outputFolder : "原图旁边";
+    settings.outputMode === "folder" && settings.outputFolder ? shortenPath(settings.outputFolder) : t.alongsideOriginal();
+  $("#outputInlineBtn").title = settings.outputMode === "folder" && settings.outputFolder ? settings.outputFolder : t.alongsideOriginal();
 
   const qualityField = quality.closest(".quality-field");
   qualityField?.classList.toggle("disabled", format === "png");
@@ -407,18 +422,18 @@ function renderSettings() {
   if (document.activeElement !== suffix) suffix.value = settings.suffix;
 
   if (!recordingShortcut) $("#shortcutValue").textContent = formatShortcut(settings.screenshotShortcut);
-  $("#screenshotBtn").title = `截取屏幕区域（${formatShortcut(settings.screenshotShortcut)}）`;
+  $("#screenshotBtn").title = t.screenshotTitleWithShortcut(formatShortcut(settings.screenshotShortcut));
 
   $("#formatHint").textContent =
-    format === "auto" ? "保持原格式" : format === "jpeg" ? "有损" : format === "png" ? "无损" : "有损";
+    format === "auto" ? t.keepOriginalFormat() : format === "png" ? t.formatLossless() : t.formatLossy();
 
   $("#resetLocation").hidden = !(settings.outputMode === "folder" && settings.outputFolder);
 
   const tips: Record<string, [string, string]> = {
-    auto: ["保持原格式", "原格式保留；其他格式转为 JPG 或 PNG。"],
-    webp: ["WebP", "体积更小，支持透明。"],
-    jpeg: ["JPG", "兼容性最好，适合照片；透明图片存为 PNG。"],
-    png: ["PNG", "无损压缩，质量设置不适用。"],
+    auto: [t.keepOriginalFormat(), t.keepFormatTipText()],
+    webp: ["WebP", t.webpTipText()],
+    jpeg: ["JPG", t.jpegTipText()],
+    png: ["PNG", t.pngTipText()],
   };
   const [tipTitle, tipText] = tips[format] ?? tips.auto!;
   $("#tipTitle").textContent = tipTitle;
@@ -426,11 +441,11 @@ function renderSettings() {
 }
 
 function qualityLabel(quality: number): string {
-  if (quality >= 92) return "几乎无损";
-  if (quality >= 78) return "平衡";
-  if (quality >= 60) return "更小体积";
-  if (quality >= 45) return "强力压缩";
-  return "极限压缩";
+  if (quality >= 92) return t.qualityNearlyLossless();
+  if (quality >= 78) return t.balanced();
+  if (quality >= 60) return t.qualitySmallerFiles();
+  if (quality >= 45) return t.qualityStrong();
+  return t.qualityExtreme();
 }
 
 function autoProcessEnabled(): boolean {
@@ -458,15 +473,15 @@ function renderStats() {
 
   // All three numbers describe the finished images; mixing in the originals
   // still queued made the row's own arithmetic wrong (#31).
-  $("#statOriginal").textContent = done.length > 0 ? formatBytes(doneOriginal) : "暂无";
-  $("#statCompressed").textContent = done.length > 0 ? formatBytes(doneCompressed) : "暂无";
-  $("#statSaved").textContent = done.length > 0 ? `${Math.round(savedPercent)}%` : "暂无";
+  $("#statOriginal").textContent = done.length > 0 ? formatBytes(doneOriginal) : t.none();
+  $("#statCompressed").textContent = done.length > 0 ? formatBytes(doneCompressed) : t.none();
+  $("#statSaved").textContent = done.length > 0 ? `${Math.round(savedPercent)}%` : t.none();
   $("#statSavedFoot").textContent =
-    done.length === 0 ? "" : saved > 0 ? `（共 ${formatBytes(saved)}）` : "（无需压缩）";
+    done.length === 0 ? "" : saved > 0 ? t.savedTotal(formatBytes(saved)) : t.noCompressionNeeded();
   $("#summaryDone").style.display = done.length === 0 ? "none" : "";
   $("#summarySaved").style.display = done.length === 0 ? "none" : "";
   $("#summaryPending").hidden = pending === 0;
-  $("#summaryPending").textContent = `另有 ${pending} 张未完成`;
+  $("#summaryPending").textContent = t.pendingCount(pending);
 }
 
 function renderQueue() {
@@ -539,14 +554,14 @@ function syncSelectionBar() {
   // Selection takes the toolbar over in place (#27): an extra row would push
   // every image down at the moment the first box is ticked.
   $("#queueTabs").hidden = showing;
-  $("#selectionCount").textContent = String(selected.size);
+  $("#selectionCount").textContent = t.selectionCount(selected.size);
   $<HTMLButtonElement>("#removeSelectedBtn").disabled = batch.running;
 }
 
 function syncSelectAll() {
   const button = $<HTMLButtonElement>("#selectAllBtn");
   const all = allVisibleSelected();
-  button.textContent = all ? "取消全选" : "全选";
+  button.textContent = all ? t.deselectAll() : t.selectAll();
   button.setAttribute("aria-pressed", String(all));
   button.disabled = visibleItems().length === 0 || batch.running;
 }
@@ -577,10 +592,10 @@ function revealItem(id: number) {
   const item = items.find((entry) => entry.id === id);
   if (!item?.path) return;
   if (demoMode) {
-    showToast("浏览器预览模式无法打开文件夹，请在 MyGo 桌面应用中使用", "info");
+    showToast(t.demoOpenFolder(), "info");
     return;
   }
-  AnyPic.revealPath(item.path).catch((error) => showError(error, "无法打开文件夹"));
+  AnyPic.revealPath(item.path).catch((error) => showError(error, t.unableOpenFolder()));
 }
 
 function createRow(id: number): HTMLElement {
@@ -589,7 +604,7 @@ function createRow(id: number): HTMLElement {
   row.dataset.id = String(id);
   row.innerHTML = `
     <label class="item-select">
-      <input type="checkbox" data-select aria-label="选择这张图片" />
+      <input type="checkbox" data-select aria-label="${esc(t.selectThisImage())}" />
     </label>
     <div class="thumb">
       <div class="thumb-placeholder">${icon("image")}</div>
@@ -605,10 +620,10 @@ function createRow(id: number): HTMLElement {
       <span class="saving-pill"></span>
     </div>
     <div class="item-actions">
-      <button class="icon-btn" data-action="preview" title="对比预览" aria-label="对比预览">${icon("eye")}</button>
-      <button class="icon-btn" data-action="decorate" title="按当前设置美化" aria-label="美化">${icon("sparkle")}</button>
-      <button class="icon-btn" data-action="export" title="导出这张" aria-label="导出这张">${icon("download")}</button>
-      <button class="icon-btn" data-action="remove" title="移除" aria-label="移除">${icon("x")}</button>
+      <button class="icon-btn" data-action="preview" title="${esc(t.comparePreview())}" aria-label="${esc(t.comparePreview())}">${icon("eye")}</button>
+      <button class="icon-btn" data-action="decorate" title="${esc(t.beautifyWithCurrent())}" aria-label="${esc(t.beautify())}">${icon("sparkle")}</button>
+      <button class="icon-btn" data-action="export" title="${esc(t.exportThis())}" aria-label="${esc(t.exportThis())}">${icon("download")}</button>
+      <button class="icon-btn" data-action="remove" title="${esc(t.remove())}" aria-label="${esc(t.remove())}">${icon("x")}</button>
     </div>`;
 
   const checkbox = row.querySelector<HTMLInputElement>("input[data-select]")!;
@@ -694,14 +709,14 @@ function updateRow(row: HTMLElement, item: Item) {
 
   const name = row.querySelector<HTMLElement>(".item-name")!;
   name.innerHTML =
-    item.status === "ready" ? `${esc(item.name)}<span class="item-state">待处理</span>` : esc(item.name);
+    item.status === "ready" ? `${esc(item.name)}<span class="item-state">${esc(t.itemWaiting())}</span>` : esc(item.name);
 
   const meta = row.querySelector<HTMLElement>(".item-meta")!;
   const formatClass = item.format.toLowerCase();
-  const animated = item.animated ? `<span class="animated-badge">动图</span>` : "";
+  const animated = item.animated ? `<span class="animated-badge">${esc(t.animatedBadge())}</span>` : "";
   const output = item.status === "done" && item.outputFormat
     ? item.transparencyKept
-      ? `<span class="output-format" title="JPG 不支持透明，已改存为 PNG（无损，质量设置不适用）">→ PNG · 保留透明</span>`
+      ? `<span class="output-format" title="${esc(t.transparencyKeptTitle())}">${esc(t.transparencyKeptOutput())}</span>`
       : `<span class="output-format">→ ${esc(item.outputFormat)}</span>`
     : "";
   meta.innerHTML = `<span class="format-chip ${esc(formatClass)}">${esc(item.format || "IMG")}</span><span>${formatDimensions(
@@ -724,9 +739,9 @@ function updateRow(row: HTMLElement, item: Item) {
 
   if (item.status === "done") {
     if (item.passedThrough) {
-      sizes.innerHTML = `<strong>${formatBytes(item.originalSize)}</strong><span>原图</span>`;
+      sizes.innerHTML = `<strong>${formatBytes(item.originalSize)}</strong><span>${esc(t.originalWord())}</span>`;
       pill.classList.add("neutral");
-      pill.textContent = "已是最优";
+      pill.textContent = t.bestAlready();
     } else {
       const saved = item.originalSize - item.compressedSize;
       const savedPct = item.originalSize > 0 ? (saved / item.originalSize) * 100 : 0;
@@ -741,13 +756,13 @@ function updateRow(row: HTMLElement, item: Item) {
       }
     }
   } else if (item.status === "working") {
-    sizes.innerHTML = `<span>正在优化…</span>`;
+    sizes.innerHTML = `<span>${esc(t.optimizing())}</span>`;
     pill.classList.add("working");
-    pill.innerHTML = `${icon("loader")} 压缩中`;
+    pill.innerHTML = `${icon("loader")} ${esc(t.compressingState())}`;
   } else if (item.status === "error") {
-    sizes.innerHTML = `<span>未能压缩</span>`;
+    sizes.innerHTML = `<span>${esc(t.cannotCompress())}</span>`;
     pill.classList.add("error");
-    pill.textContent = "失败";
+    pill.textContent = t.failed();
   } else {
     // A waiting image has no result yet; the faint "待处理" beside its name
     // says so without looking like a result.
@@ -761,7 +776,7 @@ function updateRow(row: HTMLElement, item: Item) {
   const removeButton = row.querySelector<HTMLButtonElement>('[data-action="remove"]')!;
   previewButton.disabled = item.status !== "done";
   decorateButton.disabled = batch.running || item.animated || (item.status !== "done" && item.status !== "ready");
-  decorateButton.title = item.animated ? "动图暂不支持美化" : "按当前设置美化";
+  decorateButton.title = item.animated ? t.animatedNoBeautify() : t.beautifyWithCurrent();
   exportButton.disabled = item.status !== "done" || batch.running;
   removeButton.disabled = batch.running;
 }
@@ -776,35 +791,35 @@ function renderFooter() {
   const completed = done.length + failed.length;
   const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
 
-  let status = "准备就绪";
+  let status = t.ready();
   let showOpen = false;
   if (batch.running) {
     // Overall queue progress: an auto pass runs a smaller batch on top of
     // already-finished items, so batch.total is not the queue size and the
     // bar above uses the same completed/total pair.
-    status = `正在压缩，${completed} / ${total}`;
+    status = t.compressingProgress(completed, total);
   } else if (auto && lastSaved) {
     const savings = lastSaved.percent >= 0
-      ? `省 ${lastSaved.percent}%`
-      : `增大 ${-lastSaved.percent}%`;
-    status = `已保存 ${lastSaved.count} 张到 ${lastSaved.target} · ${savings}`;
+      ? t.savedPercent(String(lastSaved.percent))
+      : t.grewPercent(String(-lastSaved.percent));
+    status = t.savedTo(lastSaved.count, lastSaved.target, savings);
     showOpen = lastSaved.path !== "";
   } else if (batch.canceled) {
-    status = "压缩已取消";
+    status = t.compressionCanceled();
   } else if (auto) {
-    status = done.length > 0 && pending.length === 0 ? "压缩完成" : "准备就绪";
+    status = done.length > 0 && pending.length === 0 ? t.compressionComplete() : t.ready();
   } else if (done.length === total) {
-    status = "压缩完成";
+    status = t.compressionComplete();
   } else if (failed.length > 0 && completed === total) {
-    status = "部分图片未能压缩";
+    status = t.someFailed();
   } else if (done.length > 0) {
-    status = `${done.length} 张已完成，${total - completed} 张待处理`;
+    status = t.donePending(done.length, total - completed);
   }
 
   $("#batchStatus").textContent = status;
   $("#openSavedBtn").hidden = !showOpen;
   $("#retryFailedBtn").hidden = batch.running || failed.length === 0;
-  $("#retryFailedBtn").textContent = failed.length > 0 ? `重试失败项（${failed.length}）` : "重试失败项";
+  $("#retryFailedBtn").textContent = failed.length > 0 ? t.retryFailedCount(failed.length) : t.retryFailed();
   $("#batchPercent").textContent = `${percent}%`;
   $("#progressFill").style.transform = `scaleX(${percent / 100})`;
   renderStageAction();
@@ -825,13 +840,13 @@ function renderStageAction() {
 
   if (action === "export") {
     setUseIcon("stageActionIcon", "download");
-    label.textContent = "导出";
-    button.title = `导出 ${done} 张压缩后的图片`;
+    label.textContent = t.exportLabel();
+    button.title = t.exportCount(done);
     button.disabled = false;
   } else {
     setUseIcon("stageActionIcon", "refresh");
-    label.textContent = batch.running ? "压缩中…" : dirty ? "重新压缩" : "压缩全部";
-    button.title = batch.running ? "正在压缩" : "压缩队列中的图片";
+    label.textContent = batch.running ? t.compressing() : dirty ? t.recompress() : t.compressAll();
+    button.title = batch.running ? t.compressingTitle() : t.compressQueuedTitle();
     button.disabled = batch.running || items.length === 0;
   }
 }
@@ -895,6 +910,13 @@ function bindEvents() {
   $("#prefsClose").addEventListener("click", closePrefs);
   $("#prefsDone").addEventListener("click", closePrefs);
   $$<HTMLElement>("[data-close-prefs]").forEach((el) => el.addEventListener("click", closePrefs));
+  $("#languageSeg").addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-language]");
+    if (!button) return;
+    const value = button.dataset.language;
+    if (value !== "system" && value !== "zh-Hans" && value !== "en") return;
+    void setSettings({ language: value });
+  });
   $("#themeSeg").addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-theme]");
     if (!button) return;
@@ -910,9 +932,9 @@ function bindEvents() {
       void setSettings({ [key]: on ? "on" : "off" } as Partial<Settings>, undefined, (error) => showError(error, failure));
     });
   }
-  bindToggle("#clipboardToggle", "screenshotClipboard", "无法保存截图剪贴板设置");
-  bindToggle("#autoProcessToggle", "autoProcess", "无法保存自动处理设置");
-  bindToggle("#dockToggle", "hideDockWhenTray", "无法保存 Dock 图标设置");
+  bindToggle("#clipboardToggle", "screenshotClipboard", t.clipboardSettingsFailed());
+  bindToggle("#autoProcessToggle", "autoProcess", t.autoProcessSettingsFailed());
+  bindToggle("#dockToggle", "hideDockWhenTray", t.dockSettingsFailed());
   $("#openAtLoginToggle").addEventListener("change", (event) => {
     const input = event.target as HTMLInputElement;
     const on = input.checked;
@@ -921,19 +943,19 @@ function bindEvents() {
       (next) => {
         // The backend may refuse the login item; the toggle follows the truth.
         input.checked = next.openAtLogin === "on";
-        if (input.checked !== on) showToast("系统拒绝了这次更改，开关已恢复原状", "error");
+        if (input.checked !== on) showToast(t.systemRefused(), "error");
       },
       (error) => {
         input.checked = !on;
         settings = { ...settings, openAtLogin: on ? "off" : "on" };
-        showError(error, "无法更改「开机时启动」");
+        showError(error, t.loginItemFailed());
       },
     );
   });
   $("#screenPermissionBtn").addEventListener("click", () => {
     if (demoMode) return;
     void AnyPic.openScreenRecordingSettings().catch(() => {
-      showToast("请手动打开「系统设置 → 隐私与安全性 → 屏幕与系统录音」", "info");
+      showToast(t.permissionManual(), "info");
     });
   });
   document.addEventListener(
@@ -949,7 +971,7 @@ function bindEvents() {
       const accelerator = acceleratorFromEvent(event);
       if (!accelerator) return;
       if (isReservedShortcut(accelerator)) {
-        showToast("这个组合键被系统占用，请换一个", "error");
+        showToast(t.shortcutInUse(), "error");
         return;
       }
       void applyShortcut(accelerator);
@@ -971,7 +993,7 @@ function bindEvents() {
   $("#updateCheckBtn").addEventListener("click", () => void checkForUpdate(false));
   $("#updateDownloadBtn").addEventListener("click", () => void downloadUpdate());
   $("#updatePageBtn").addEventListener("click", () => {
-    void AnyPic.openReleasePage().catch((error) => showError(error, "无法打开发布页"));
+    void AnyPic.openReleasePage().catch((error) => showError(error, t.openReleaseFailed()));
   });
 
   $("#resetBtn").addEventListener("click", () => {
@@ -983,7 +1005,7 @@ function bindEvents() {
       suffix: "-anypic",
     };
     void setSettings(next);
-    showToast("已恢复推荐压缩设置", "success");
+    showToast(t.resetDone(), "success");
   });
 
   $("#formatSeg").addEventListener("click", (event) => {
@@ -1187,7 +1209,7 @@ function bindEvents() {
     $("#dropOverlay").classList.remove("visible");
     if (!isMyGo()) {
       event.preventDefault();
-      showToast("浏览器预览无法读取本地路径，请在 MyGo 桌面应用中拖入图片", "info");
+      showToast(t.demoNoDrop(), "info");
     }
   });
 }
@@ -1198,20 +1220,20 @@ function bindEvents() {
 
 async function pickFiles() {
   if (demoMode) {
-    showToast("浏览器预览模式：请在 MyGo 桌面应用中选择图片", "info");
+    showToast(t.demoSelectImages(), "info");
     return;
   }
   try {
     const result = await AnyPic.pickFiles();
     applyAddResult(result);
   } catch (error) {
-    showError(error, "添加图片失败");
+    showError(error, t.addFailed());
   }
 }
 
 async function captureScreenshot() {
   if (demoMode) {
-    showToast("浏览器预览模式无法截屏，请在 MyGo 桌面应用中使用", "info");
+    showToast(t.demoNoScreenshot(), "info");
     return;
   }
   try {
@@ -1223,7 +1245,7 @@ async function captureScreenshot() {
     // A fresh capture is "ready", so a done/error filter would hide it.
     if (result.added > 0) filter = "all";
     applyAddResult(result, "clipboard");
-    if (result.copied) showToast("截图已复制到剪贴板", "info");
+    if (result.copied) showToast(t.captureCopied(), "info");
   } catch (error) {
     // Canceling the region selection, or a second press while the first
     // capture is still open, is not an error the user needs to see.
@@ -1234,36 +1256,36 @@ async function captureScreenshot() {
       await showScreenCapturePermission();
       return;
     }
-    showError(error, "截图失败");
+    showError(error, t.screenshotFailed());
   }
 }
 
 function isCaptureNotice(error: unknown) {
   const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
-  return message.includes("已取消截图") || message.includes("正在截图中");
+  return message.includes(errorCodes.captureCanceled) || message.includes(errorCodes.captureBusy);
 }
 
 function isScreenCapturePermission(error: unknown) {
   const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
-  return message.includes("需要屏幕录制权限");
+  return message.includes(errorCodes.screenPermission);
 }
 
 async function showScreenCapturePermission() {
   const openSettings = await askConfirm(
-    "AnyPic 需要屏幕录制权限",
-    "去「系统设置 → 隐私与安全性 → 屏幕与系统录音」允许 AnyPic（旧系统叫「屏幕录制」）。如果 AnyPic 的开关已经打开，却还是出现这个提示，先选中它点「−」删掉，再回来截图、重新允许。允许后要退出并重新打开 AnyPic。",
-    "打开系统设置",
-    "稍后",
+    t.permissionTitle(),
+    t.permissionBody(),
+    t.openSystemSettings(),
+    t.later(),
   );
   if (!openSettings) return;
   await AnyPic.openScreenRecordingSettings().catch(() => {
-    showToast("请手动打开「系统设置 → 隐私与安全性 → 屏幕与系统录音」", "info");
+    showToast(t.permissionManual(), "info");
   });
 }
 
 async function pasteImage() {
   if (demoMode) {
-    showToast("浏览器预览模式无法读取剪贴板，请在 MyGo 桌面应用中使用", "info");
+    showToast(t.demoNoClipboard(), "info");
     return;
   }
   try {
@@ -1274,11 +1296,11 @@ async function pasteImage() {
     // Pasting while the clipboard holds text is not an error worth a red
     // toast; the app simply has nothing to add.
     const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
-    if (message.includes("剪贴板里没有图片")) {
-      showToast("剪贴板里没有图片", "info");
+    if (message.includes(errorCodes.noClipboardImage)) {
+      showToast(t.pasteNoImage(), "info");
       return;
     }
-    showError(error, "粘贴失败");
+    showError(error, t.pasteFailed());
   }
 }
 
@@ -1290,7 +1312,7 @@ async function addPaths(paths: string[]) {
     const result = await AnyPic.addPaths(paths);
     applyAddResult(result);
   } catch (error) {
-    showError(error, "添加图片失败");
+    showError(error, t.addFailed());
   }
 }
 
@@ -1324,18 +1346,21 @@ function applyAddResult(
     // The automatic flow folds the addition into one merged completion
     // toast; a separate "added" toast on top would just be noise.
     if (!auto) {
-      showToast(`已添加 ${result.added} 张图片${result.skipped.length ? `，跳过 ${result.skipped.length} 个文件` : ""}`, "success");
+      showToast(
+        result.skipped.length ? t.addedWithSkipped(result.added, result.skipped.length) : t.added(result.added),
+        "success",
+      );
     }
     if (result.skipped.length > 0) {
       const first = result.skipped[0]!;
-      showToast(`${first.name}：${first.reason}`, "info");
+      showToast(t.skippedFile(first.name, first.reason), "info");
     }
     if (!auto) {
       setTimeout(() => $("#queueScroll").scrollTo({ top: $("#queueScroll").scrollHeight, behavior: "smooth" }), 100);
     }
   } else if (result.skipped.length > 0) {
     const first = result.skipped[0]!;
-    showToast(`${first.name}：${first.reason}`, "error");
+    showToast(t.skippedFile(first.name, first.reason), "error");
   }
 
   renderAll();
@@ -1406,7 +1431,7 @@ async function compressAll(auto = false) {
   } catch (error) {
     batch = { ...batch, running: false };
     autoRun = null;
-    showError(error, auto ? "自动处理失败" : "无法开始压缩");
+    showError(error, auto ? t.autoFailed() : t.startFailed());
     renderAll();
   } finally {
     compressStarting = false;
@@ -1422,7 +1447,7 @@ async function cancelCompression() {
   try {
     await AnyPic.cancel();
   } catch (error) {
-    showError(error, "取消失败");
+    showError(error, t.cancelFailed());
   }
 }
 
@@ -1431,7 +1456,7 @@ async function retryFailed() {
   const failed = items.filter((item) => item.status === "error");
   if (failed.length === 0) return;
   if (demoMode) {
-    showToast("浏览器预览模式无法重试，请在 MyGo 桌面应用中使用", "info");
+    showToast(t.demoNoRetry(), "info");
     return;
   }
   await flushSave();
@@ -1445,7 +1470,7 @@ async function retryFailed() {
     await AnyPic.compressFailed(settings);
   } catch (error) {
     autoRun = null;
-    showError(error, "重试失败");
+    showError(error, t.retryFailedAction());
   } finally {
     compressStarting = false;
   }
@@ -1458,7 +1483,7 @@ async function removeSelected() {
   // Remembered before the confirmation steals focus: after the rows go,
   // focus belongs back in the queue, not on the disappearing dialog (#20).
   const focusInQueue = !!document.activeElement?.closest?.("#queueList");
-  const ok = await askConfirm(`移除所选 ${ids.length} 张图片？`, "原始图片不会被删除。", "移除");
+  const ok = await askConfirm(t.removeTitle(ids.length), t.removeBody(), t.remove());
   if (!ok) return;
   queueFocusAfterRemoval(new Set(ids));
   if (demoMode) {
@@ -1477,12 +1502,12 @@ async function removeSelected() {
     if (focusInQueue) queueRowFocus();
     // Selection can be undone the same way a single removal is: the files
     // were never touched, so re-adding their paths restores the entries.
-    showToast(`已移除 ${ids.length} 张图片`, "info", {
-      label: "撤销",
+    showToast(t.removedMany(ids.length), "info", {
+      label: t.undo(),
       onClick: () => void addPaths(removed.map((item) => item.path)),
     });
   } catch (error) {
-    showError(error, "移除失败");
+    showError(error, t.removeFailed());
   }
 }
 
@@ -1496,8 +1521,8 @@ async function removeItem(id: number) {
     invalidatePreview(id);
     scheduleRender();
     if (item) {
-      showToast(`已移除 ${item.name}`, "info", {
-        label: "撤销",
+      showToast(t.removedOne(item.name), "info", {
+        label: t.undo(),
         onClick: () => {
           items.push(item);
           scheduleRender();
@@ -1514,19 +1539,19 @@ async function removeItem(id: number) {
     if (item) {
       // The original file was never touched, so re-adding it restores the
       // entry; the automatic flow picks it up like a fresh addition.
-      showToast(`已移除 ${item.name}`, "info", {
-        label: "撤销",
+      showToast(t.removedOne(item.name), "info", {
+        label: t.undo(),
         onClick: () => void addPaths([item.path]),
       });
     }
   } catch (error) {
-    showError(error, "移除失败");
+    showError(error, t.removeFailed());
   }
 }
 
 async function clearQueue() {
   if (batch.running || items.length === 0) return;
-  const ok = await askConfirm("清空图片队列？", "已压缩的结果会从队列移除，原始图片不会被删除。", "清空队列");
+  const ok = await askConfirm(t.clearTitle(), t.clearBody(), t.clearConfirm());
   if (!ok) return;
   if (demoMode) {
     items = [];
@@ -1545,23 +1570,23 @@ async function clearQueue() {
     lastSaved = null;
     selected.clear();
     renderAll();
-    showToast("队列已清空", "success");
+    showToast(t.queueCleared(), "success");
   } catch (error) {
-    showError(error, "清空失败");
+    showError(error, t.clearFailed());
   }
 }
 
 async function chooseOutputFolder() {
   if (batch.running) return;
   if (demoMode) {
-    showToast("浏览器预览模式：导出时会选择保存位置", "info");
+    showToast(t.demoExportLocation(), "info");
     return;
   }
   try {
     const next = await AnyPic.chooseOutputFolder();
     applySettingsFromBackend(next);
   } catch (error) {
-    showError(error, "无法选择文件夹");
+    showError(error, t.selectFolderFailed());
   }
 }
 
@@ -1570,18 +1595,18 @@ async function exportAll() {
   if (batch.running || done.length === 0) return;
   await flushSave();
   if (demoMode) {
-    showToast(`预览模式：已模拟导出 ${done.length} 张图片`, "success");
+    showToast(t.demoExported(done.length), "success");
     return;
   }
   try {
     const result = await AnyPic.exportAll();
     if (result.canceled) return;
-    showToast(`已导出 ${result.count} 张图片`, "success", {
-      label: "在文件夹中显示",
+    showToast(t.exported(result.count), "success", {
+      label: t.showInFolder(),
       onClick: () => void AnyPic.revealPath(result.folder),
     });
   } catch (error) {
-    showError(error, "导出失败");
+    showError(error, t.exportFailed());
   }
 }
 
@@ -1590,18 +1615,18 @@ async function exportOne(id: number) {
   if (!item || item.status !== "done" || batch.running) return;
   await flushSave();
   if (demoMode) {
-    showToast(`预览模式：将导出 ${item.outputName || item.name}`, "success");
+    showToast(t.demoExportOne(item.outputName || item.name), "success");
     return;
   }
   try {
     const result = await AnyPic.exportOne(id);
     if (result.canceled) return;
     const path = result.paths[0];
-    showToast(`已导出 ${item.outputName || item.name}`, "success", path
-      ? { label: "在文件夹中显示", onClick: () => void AnyPic.revealPath(path) }
+    showToast(t.exportedOne(item.outputName || item.name), "success", path
+      ? { label: t.showInFolder(), onClick: () => void AnyPic.revealPath(path) }
       : undefined);
   } catch (error) {
-    showError(error, "导出失败");
+    showError(error, t.exportFailed());
   }
 }
 
@@ -1611,13 +1636,13 @@ async function exportOne(id: number) {
 
 function startShortcutRecording() {
   if (demoMode) {
-    showToast("浏览器预览模式无法修改全局快捷键", "info");
+    showToast(t.demoNoShortcut(), "info");
     return;
   }
   recordingShortcut = true;
   void AnyPic.setShortcutRecording(true).catch(() => {});
   $("#shortcutBtn").classList.add("recording");
-  $("#shortcutValue").textContent = "按组合键";
+  $("#shortcutValue").textContent = t.shortcutRecording();
   $("#shortcutEdit").toggleAttribute("hidden", true);
   $("#shortcutHint").hidden = false;
 }
@@ -1638,10 +1663,10 @@ async function applyShortcut(accelerator: string) {
     const next = await AnyPic.setScreenshotShortcut(accelerator);
     settings = { ...settings, ...next };
     stopShortcutRecording();
-    showToast(`截图快捷键已设为 ${formatShortcut(settings.screenshotShortcut)}`, "success");
+    showToast(t.shortcutSet(formatShortcut(settings.screenshotShortcut)), "success");
   } catch (error) {
     stopShortcutRecording();
-    showError(error, "无法设置快捷键");
+    showError(error, t.shortcutFailed());
   }
 }
 
@@ -1675,6 +1700,16 @@ function applySettingsFromBackend(next: Settings) {
 }
 
 function syncSettingsToUI() {
+  // The stored choice is the source of truth for the page too: an explicit
+  // change, a saved language from another launch, or "system" all land here
+  // (#32).
+  setLanguage(settings.language);
+  renderAboutVersion();
+  $$<HTMLButtonElement>("#languageSeg button").forEach((button) => {
+    const active = button.dataset.language === settings.language;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
   const autoToggle = $<HTMLInputElement>("#autoProcessToggle");
   if (autoToggle) autoToggle.checked = autoProcessEnabled();
   const clipboardToggle = $<HTMLInputElement>("#clipboardToggle");
@@ -1733,7 +1768,7 @@ function handleBatch(next: Batch) {
     if (autoRun) {
       if (next.canceled) {
         autoRun = null;
-        showToast("压缩已取消", "info");
+        showToast(t.compressionCanceled(), "info");
       } else if (autoProcessEnabled() && items.some((item) => item.status === "ready")) {
         // Images arrived while the pass ran; fold them into the same
         // automatic run and save everything once it settles.
@@ -1780,17 +1815,17 @@ function showBatchResult(next: Batch) {
   const done = items.filter((item) => item.status === "done");
   const failed = items.filter((item) => item.status === "error").length;
   if (next.canceled) {
-    showToast("压缩已取消", "info");
+    showToast(t.compressionCanceled(), "info");
     return;
   }
   if (failed > 0) {
-    showToast(`压缩完成：${done.length} 张成功，${failed} 张失败`, "error");
+    showToast(t.batchFailed(done.length, failed), "error");
     return;
   }
   const original = done.reduce((sum, item) => sum + item.originalSize, 0);
   const compressed = done.reduce((sum, item) => sum + item.compressedSize, 0);
   const saved = Math.max(0, original - compressed);
-  showToast(`压缩完成，共省下 ${formatBytes(saved)}`, "success");
+  showToast(t.batchSaved(formatBytes(saved)), "success");
 }
 
 /* Ends an automatic run: copies the capture (when there was one), saves the
@@ -1815,12 +1850,12 @@ async function finishAutoRun() {
       await AnyPic.copyItemToClipboard(run.copyIDs[run.copyIDs.length - 1]!);
       copied = true;
     } catch (error) {
-      showError(error, "无法复制到剪贴板");
+      showError(error, t.copyFailed());
     }
   }
 
   if (done.length === 0) {
-    if (failed.length > 0) showToast(`${failed.length} 张图片未能处理`, "error");
+    if (failed.length > 0) showToast(t.notProcessed(failed.length), "error");
     return;
   }
 
@@ -1836,20 +1871,20 @@ async function finishAutoRun() {
     const first = result.paths[0] ?? "";
     lastSaved = {
       count: result.paths.length || done.length,
-      target: result.folder ? shortenPath(result.folder) : "原图旁边",
+      target: result.folder ? shortenPath(result.folder) : t.alongsideOriginal(),
       percent,
       path: result.folder || first,
     };
     if (failed.length > 0) {
-      showToast(`${failed.length} 张图片未能处理`, "error");
+      showToast(t.notProcessed(failed.length), "error");
     } else if (copied) {
       // The footer already reports the save; the copy still earns a nudge.
-      showToast("已复制到剪贴板", "info");
+      showToast(t.copied(), "info");
     }
     scheduleRender();
   } catch (error) {
     lastSaved = null;
-    showError(error, "自动保存失败");
+    showError(error, t.autoSaveFailed());
   }
 }
 
@@ -1861,9 +1896,16 @@ function cycleTheme() {
   const next = settings.theme === "system" ? "dark" : settings.theme === "dark" ? "light" : "system";
   void setSettings({ theme: next });
   showToast(
-    next === "system" ? "主题：跟随系统" : next === "dark" ? "主题：深色" : "主题：浅色",
+    next === "system" ? t.themeSystem() : next === "dark" ? t.themeDark() : t.themeLight(),
     "info",
   );
+}
+
+function renderAboutVersion() {
+  if (!aboutVersion) return;
+  $("#aboutVersion").textContent = demoVersion
+    ? t.aboutVersionDemo(aboutVersion.version)
+    : t.aboutVersionApp(aboutVersion.version, aboutVersion.platform, aboutVersion.arch);
 }
 
 function applyTheme(mode: string) {
@@ -1887,7 +1929,7 @@ function applyTheme(mode: string) {
 /* modals                                                              */
 /* ------------------------------------------------------------------ */
 
-function askConfirm(title: string, body: string, confirmLabel: string, cancelLabel = "取消"): Promise<boolean> {
+function askConfirm(title: string, body: string, confirmLabel: string, cancelLabel = t.cancel()): Promise<boolean> {
   if (confirmResolve) resolveConfirm(false);
   $("#confirmTitle").textContent = title;
   $("#confirmBody").textContent = body;
@@ -1937,20 +1979,19 @@ function renderUpdateStatus(checking = false) {
   const status = $("#aboutUpdateStatus");
   const download = $<HTMLButtonElement>("#updateDownloadBtn");
   const page = $<HTMLButtonElement>("#updatePageBtn");
+  $("#updateDownloadLabel").textContent = t.downloadAndInstall();
   $<HTMLButtonElement>("#updateCheckBtn").disabled = updateBusy;
   if (checking) {
-    status.textContent = "正在检查更新…";
+    status.textContent = t.checkingUpdate();
     return;
   }
   if (updateInfo?.hasUpdate) {
-    status.innerHTML = `新版本 <strong>v${esc(updateInfo.latest)}</strong> 可用（当前 v${esc(updateInfo.current)}）`;
+    status.textContent = t.updateAvailable(updateInfo.latest, updateInfo.current);
     download.hidden = false;
     page.hidden = false;
     return;
   }
-  if (updateInfo) {
-    status.textContent = `已是最新版本（v${esc(updateInfo.current)}）`;
-  }
+  status.textContent = updateInfo ? t.upToDate(updateInfo.current) : t.checkUpdate();
   download.hidden = true;
   page.hidden = true;
 }
@@ -1959,7 +2000,7 @@ function renderUpdateStatus(checking = false) {
    a newer release exists; the About dialog's button always reports. */
 async function checkForUpdate(silent = false) {
   if (demoMode) {
-    if (!silent) showToast("浏览器预览模式无法检查更新，请在 MyGo 桌面应用中使用", "info");
+    if (!silent) showToast(t.demoNoUpdate(), "info");
     return;
   }
   if (updateBusy) return;
@@ -1969,7 +2010,7 @@ async function checkForUpdate(silent = false) {
     updateInfo = await AnyPic.checkForUpdate();
   } catch (error) {
     updateInfo = null;
-    if (!silent) showError(error, "无法检查更新");
+    if (!silent) showError(error, t.checkUpdateFailed());
     renderUpdateStatus();
     return;
   } finally {
@@ -1977,8 +2018,8 @@ async function checkForUpdate(silent = false) {
   }
   renderUpdateStatus();
   if (silent && updateInfo.hasUpdate) {
-    showToast(`新版本 v${updateInfo.latest} 可用，在「关于」里可以更新`, "info", {
-      label: "查看更新",
+    showToast(t.updateAvailableToast(updateInfo.latest), "info", {
+      label: t.viewUpdate(),
       onClick: () => openAbout(),
     });
   }
@@ -1986,7 +2027,7 @@ async function checkForUpdate(silent = false) {
 
 async function downloadUpdate() {
   if (demoMode) {
-    showToast("浏览器预览模式无法下载更新，请在 MyGo 桌面应用中使用", "info");
+    showToast(t.demoNoDownload(), "info");
     return;
   }
   if (!updateInfo?.hasUpdate || updateBusy) return;
@@ -1995,13 +2036,13 @@ async function downloadUpdate() {
   const label = $("#updateDownloadLabel");
   const stopProgress = events.anypicDownload.on((progress) => {
     label.textContent = progress.total > 0
-      ? `下载中 ${Math.round((progress.received / progress.total) * 100)}%`
-      : `下载中 ${formatBytes(progress.received)}`;
+      ? t.downloadingPercent(Math.round((progress.received / progress.total) * 100))
+      : t.downloadingSize(formatBytes(progress.received));
   });
   try {
     const download = await AnyPic.downloadUpdate();
     if (!download.needsQuit) {
-      showToast(`安装包已下载并打开：${shortenPath(download.path)}`, "success");
+      showToast(t.updateDownloadedOpened(shortenPath(download.path)), "success");
       return;
     }
     // The installer replaces the running app (NSIS cannot overwrite
@@ -2013,21 +2054,21 @@ async function downloadUpdate() {
     try {
       const unsaved = await AnyPic.unsavedResults();
       if (unsaved > 0) {
-        unsavedNote = `队列里还有 ${unsaved} 张已压缩但未保存的图片，退出后会丢失。`;
+        unsavedNote = t.unsavedResults(unsaved);
       }
     } catch {
-      unsavedNote = "如果队列里还有未保存的压缩结果，退出后会丢失。";
+      unsavedNote = t.unsavedUnknown();
     }
     const install = await askConfirm(
-      "安装新版本需要先退出 AnyPic",
-      unsavedNote ? `AnyPic 会退出并打开安装程序。${unsavedNote}` : "AnyPic 会退出并打开安装程序。",
-      "退出并安装",
-      "稍后",
+      t.installTitle(),
+      unsavedNote ? t.installBodyUnsaved(unsavedNote) : t.installBody(),
+      t.quitAndInstall(),
+      t.later(),
     );
     if (!install) {
       void AnyPic.revealPath(download.path);
-      showToast(`安装包已下载到 ${download.path}。安装前请先从托盘退出 AnyPic，再运行安装包。`, "info", {
-        label: "在文件夹中显示",
+      showToast(t.installerDownloaded(download.path), "info", {
+        label: t.showInFolder(),
         onClick: () => void AnyPic.revealPath(download.path),
       });
       return;
@@ -2035,14 +2076,14 @@ async function downloadUpdate() {
     try {
       await AnyPic.installUpdate(download.path);
     } catch (error) {
-      showError(error, "无法安装更新");
+      showError(error, t.installFailed());
     }
   } catch (error) {
-    showError(error, "下载失败");
+    showError(error, t.downloadFailed());
   } finally {
     updateBusy = false;
     stopProgress();
-    label.textContent = "下载并安装";
+    label.textContent = t.downloadAndInstall();
     renderUpdateStatus();
   }
 }
@@ -2085,8 +2126,8 @@ async function demoCompress() {
   batch = { ...batch, running: false, canceled: demoCanceled };
   compressedSignature = signature(settings);
   markDirty();
-  if (demoCanceled) showToast("压缩已取消", "info");
-  else showToast("预览模式：压缩完成", "success");
+  if (demoCanceled) showToast(t.compressionCanceled(), "info");
+  else showToast(t.demoCompressDone(), "success");
   renderAll();
 }
 

@@ -248,33 +248,33 @@ func (a *AnyPic) compressAnimated(ctx context.Context, id int64, path, srcFormat
 	case "GIF":
 		f, err := os.Open(path)
 		if err != nil {
-			return compressResult{}, errors.New("无法读取原图")
+			return compressResult{}, errors.New(tr().GoErrReadOriginal())
 		}
 		anim, err := gif.DecodeAll(f)
 		f.Close()
 		if err != nil {
-			return compressResult{}, errors.New("图片解码失败，可能已损坏")
+			return compressResult{}, errors.New(tr().GoErrDecodeCorrupt())
 		}
 		frames, delays = compositeGIF(anim)
 		loop = webpLoopCount(anim.LoopCount)
 	case "WEBP":
 		f, err := os.Open(path)
 		if err != nil {
-			return compressResult{}, errors.New("无法读取原图")
+			return compressResult{}, errors.New(tr().GoErrReadOriginal())
 		}
 		anim, err := webp.DecodeAll(f)
 		f.Close()
 		if err != nil {
-			return compressResult{}, errors.New("图片解码失败，可能已损坏")
+			return compressResult{}, errors.New(tr().GoErrDecodeCorrupt())
 		}
 		frames, delays = anim.Image, make([]int, len(anim.Delay))
 		copy(delays, anim.Delay)
 		loop = anim.LoopCount
 	default:
-		return compressResult{}, errors.New("不支持的动图格式")
+		return compressResult{}, errors.New(tr().GoErrUnsupportedAnimation())
 	}
 	if len(frames) == 0 {
-		return compressResult{}, errors.New("动图没有可用的帧")
+		return compressResult{}, errors.New(tr().GoErrNoAnimationFrames())
 	}
 	for i := range delays {
 		// libwebp rejects zero-length frames; GIF encoders use 0 or 1
@@ -298,7 +298,7 @@ func (a *AnyPic) compressAnimated(ctx context.Context, id int64, path, srcFormat
 
 	var buf bytes.Buffer
 	if err := webp.EncodeAll(&buf, &webp.WEBP{Image: frames, Delay: delays, LoopCount: loop}, webp.Options{Quality: s.Quality, Method: 4}); err != nil {
-		return compressResult{}, errors.New("WebP 编码失败")
+		return compressResult{}, errors.New(tr().GoErrEncodeWebP())
 	}
 	if err := ctx.Err(); err != nil {
 		return compressResult{}, err
@@ -306,7 +306,7 @@ func (a *AnyPic) compressAnimated(ctx context.Context, id int64, path, srcFormat
 
 	info, err := os.Stat(path)
 	if err != nil {
-		return compressResult{}, errors.New("无法读取原图")
+		return compressResult{}, errors.New(tr().GoErrReadOriginal())
 	}
 	if !resized && int64(buf.Len()) >= info.Size() {
 		return compressResult{
@@ -323,17 +323,17 @@ func (a *AnyPic) compressAnimated(ctx context.Context, id int64, path, srcFormat
 
 	dir, err := a.ensureTempDir()
 	if err != nil {
-		return compressResult{}, errors.New("无法创建临时文件")
+		return compressResult{}, errors.New(tr().GoErrCreateTemp())
 	}
 	tmp, err := os.CreateTemp(dir, fmt.Sprintf("%d-*.webp", id))
 	if err != nil {
-		return compressResult{}, errors.New("无法创建临时文件")
+		return compressResult{}, errors.New(tr().GoErrCreateTemp())
 	}
 	outPath := tmp.Name()
 	tmp.Close()
 	if err := os.WriteFile(outPath, buf.Bytes(), 0o600); err != nil {
 		_ = os.Remove(outPath)
-		return compressResult{}, errors.New("无法写入压缩结果")
+		return compressResult{}, errors.New(tr().GoErrWriteResult())
 	}
 	return compressResult{
 		path:       outPath,

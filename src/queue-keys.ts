@@ -5,6 +5,7 @@
 
 import type { Item } from "./mygo";
 import { $ } from "./ui";
+import { t } from "./i18n";
 
 export interface QueueKeysContext {
   rows(): Map<number, HTMLElement>;
@@ -317,7 +318,7 @@ function openQueueMenu(id: number, x: number, y: number) {
   enable("remove", !running);
 
   const multi = ctx.selected().size > 1 && ctx.selected().has(id);
-  $("#queueMenuRemoveLabel").textContent = multi ? `移除所选的 ${ctx.selected().size} 张` : "移除";
+  $("#queueMenuRemoveLabel").textContent = multi ? t.removeSelectedN(ctx.selected().size) : t.remove();
 
   const menu = $<HTMLElement>("#queueMenu");
   menu.hidden = false;

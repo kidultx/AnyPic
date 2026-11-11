@@ -124,6 +124,11 @@ export interface Settings {
   suffix: string;
   theme: string;
   /**
+   * Language is the language the interface shows: "system", "zh-Hans" or
+   * "en" (#32).
+   */
+  language: string;
+  /**
    * AutoProcess compresses additions — files, folders and captures —
    * without the extra compress/export clicks: "on" or "off".
    */

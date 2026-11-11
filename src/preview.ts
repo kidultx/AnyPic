@@ -6,6 +6,7 @@
 
 import { AnyPic, type FrameStyle, type Item, type Preview, type Snapshot } from "./mygo";
 import { $, $$, closeModal, formatBytes, formatDimensions, openModal, pct, showError, showToast } from "./ui";
+import { t } from "./i18n";
 
 /* The app shell's live state the modal needs. Getters, not snapshots: the
    queue changes under the modal between renders. */
@@ -81,15 +82,15 @@ export async function openPreview(id: number, mode: "compare" | "beautify" = "co
   // items. A blocked open says why — silent returns made failures look like
   // the modal being broken.
   if (!item) {
-    showToast("这张图片已不在队列里", "info");
+    showToast(t.previewGone(), "info");
     return;
   }
   if (mode === "compare" && item.status !== "done") {
-    showToast(item.status === "working" ? "正在压缩，完成后可以对比" : "压缩完成后才能对比，请先压缩这张图片", "info");
+    showToast(item.status === "working" ? t.workingCompare() : t.compareNeedsDone(), "info");
     return;
   }
   if (mode === "beautify" && item.status !== "done" && item.status !== "ready") {
-    showToast(item.status === "working" ? "正在处理，完成后可以美化" : "这张图片处理失败，无法美化", "info");
+    showToast(item.status === "working" ? t.workingBeautify() : t.failedBeautify(), "info");
     return;
   }
   selectedId = id;
@@ -111,19 +112,24 @@ export async function openPreview(id: number, mode: "compare" | "beautify" = "co
   }
   previewData = previewCache.get(id) ?? null;
   $("#previewTitle").textContent = item.name;
-  $("#previewMeta").textContent = `${item.format}，${formatDimensions(item.width, item.height)}，${formatBytes(item.originalSize)}，${item.path}`;
+  $("#previewMeta").textContent = t.previewMeta(
+    item.format,
+    formatDimensions(item.width, item.height),
+    formatBytes(item.originalSize),
+    item.path,
+  );
   $("#previewOriginalSize").textContent = formatBytes(item.originalSize);
   $("#previewCompressedSize").textContent = item.passedThrough ? formatBytes(item.originalSize) : formatBytes(item.compressedSize);
   $("#previewSaved").textContent = item.status === "done"
     ? item.passedThrough
-      ? "原图已是最优"
+      ? t.previewAlreadyOptimal()
       : item.compressedSize <= item.originalSize
         ? `−${pct(item.savedPercent)}`
         : `+${pct((item.compressedSize / Math.max(1, item.originalSize) - 1) * 100)}`
-    : "待处理";
+    : t.itemWaiting();
   $("#previewDetails").textContent = item.status === "done"
-    ? `${item.outputFormat || item.format}，${item.outputName || item.name}`
-    : "待处理";
+    ? t.previewOutput(item.outputFormat || item.format, item.outputName || item.name)
+    : t.itemWaiting();
   $<HTMLButtonElement>("#previewExportBtn").disabled = item.status !== "done";
   $("#compareLoading").hidden = false;
   $("#compareFrame").hidden = true;
@@ -155,7 +161,7 @@ async function loadCompare() {
   if (!item) return;
   if (item.status !== "done") {
     $("#compareLoading").hidden = true;
-    showToast(item.status === "working" ? "正在压缩，完成后可以对比" : "压缩完成后才能对比，请先压缩这张图片", "info");
+    showToast(item.status === "working" ? t.workingCompare() : t.compareNeedsDone(), "info");
     return;
   }
   try {
@@ -165,7 +171,7 @@ async function loadCompare() {
     paintPreview(data);
   } catch (error) {
     $("#compareLoading").hidden = true;
-    showError(error, "无法生成预览");
+    showError(error, t.previewFailed());
   }
 }
 
@@ -197,6 +203,8 @@ function setComparePosition(position: number) {
   const handle = $("#compareHandle");
   handle.setAttribute("aria-valuenow", String(Math.round(comparePosition)));
   handle.setAttribute("aria-valuetext", `${Math.round(comparePosition)}%`);
+  // Said every time the modal opens, so the label follows the language (#32).
+  handle.setAttribute("aria-label", t.compareHandle());
 }
 
 /* ---- zoom & paging -------------------------------------------------- */
@@ -404,7 +412,6 @@ function bindCompare() {
   });
   handle.tabIndex = 0;
   handle.setAttribute("role", "slider");
-  handle.setAttribute("aria-label", "前后对比分割线");
   handle.setAttribute("aria-valuemin", "0");
   handle.setAttribute("aria-valuemax", "100");
 }
@@ -428,17 +435,31 @@ export function closePreview() {
    and two darks, so a light capture always finds a stage. */
 const BG_SWATCHES = ["#ffffff", "#e7e7ea", "#f8ecdc", "#dbeafe", "#dcfce7", "#fae8ff", "#1f2937", "#0a0a0a"];
 
-/* Gradient presets mirror the backend's gradientPresets table. */
-const GRADIENT_PRESETS: { id: string; label: string; css: string }[] = [
-  { id: "indigo", label: "靛蓝", css: "linear-gradient(135deg, #a5b4fc, #4f46e5)" },
-  { id: "dusk", label: "暮色", css: "linear-gradient(135deg, #818cf8, #312e81)" },
-  { id: "ocean", label: "海洋", css: "linear-gradient(135deg, #67e8f9, #2563eb)" },
-  { id: "mint", label: "薄荷", css: "linear-gradient(135deg, #6ee7b7, #0d9488)" },
-  { id: "rose", label: "玫瑰", css: "linear-gradient(135deg, #fda4af, #e11d48)" },
-  { id: "sunset", label: "落日", css: "linear-gradient(135deg, #fcd34d, #f97316)" },
-  { id: "slate", label: "石墨", css: "linear-gradient(135deg, #f3f4f6, #9ca3af)" },
-  { id: "charcoal", label: "炭黑", css: "linear-gradient(135deg, #4b5563, #111827)" },
+/* Gradient presets mirror the backend's gradientPresets table. The ids are
+   protocol; the labels come from the catalog when the swatches are labelled. */
+const GRADIENT_PRESETS: { id: string; css: string }[] = [
+  { id: "indigo", css: "linear-gradient(135deg, #a5b4fc, #4f46e5)" },
+  { id: "dusk", css: "linear-gradient(135deg, #818cf8, #312e81)" },
+  { id: "ocean", css: "linear-gradient(135deg, #67e8f9, #2563eb)" },
+  { id: "mint", css: "linear-gradient(135deg, #6ee7b7, #0d9488)" },
+  { id: "rose", css: "linear-gradient(135deg, #fda4af, #e11d48)" },
+  { id: "sunset", css: "linear-gradient(135deg, #fcd34d, #f97316)" },
+  { id: "slate", css: "linear-gradient(135deg, #f3f4f6, #9ca3af)" },
+  { id: "charcoal", css: "linear-gradient(135deg, #4b5563, #111827)" },
 ];
+
+function gradientLabel(id: string): string {
+  switch (id) {
+    case "indigo": return t.gradientIndigo();
+    case "dusk": return t.gradientDusk();
+    case "ocean": return t.gradientOcean();
+    case "mint": return t.gradientMint();
+    case "rose": return t.gradientRose();
+    case "sunset": return t.gradientSunset();
+    case "slate": return t.gradientSlate();
+    default: return t.gradientCharcoal();
+  }
+}
 
 function defaultFrameStyle(): FrameStyle {
   return {
@@ -465,15 +486,12 @@ function populateBeautifyControls() {
     button.style.backgroundColor = hex;
     button.title = hex;
     button.dataset.color = hex;
-    button.setAttribute("aria-label", `纯色 ${hex}`);
     swatches.appendChild(button);
   }
   const picker = document.createElement("input");
   picker.type = "color";
   picker.id = "beautifyColor";
   picker.value = "#e7e7ea";
-  picker.title = "自定义颜色";
-  picker.setAttribute("aria-label", "自定义颜色");
   swatches.appendChild(picker);
 
   const gradients = $("#beautifyGradients");
@@ -482,15 +500,32 @@ function populateBeautifyControls() {
     button.type = "button";
     button.className = "swatch gradient-chip";
     button.style.background = preset.css;
-    button.title = preset.label;
     button.dataset.gradient = preset.id;
-    button.setAttribute("aria-label", `渐变 ${preset.label}`);
     gradients.appendChild(button);
   }
 }
 
 /* Keeps the workbench controls in sync with the frameStyle being tuned. */
+/* Labels are set on every sync so a language change reaches swatches that were
+   built once, at boot (#32). */
+function labelSwatches() {
+  $$<HTMLButtonElement>("#beautifySwatches .swatch").forEach((button) => {
+    const hex = button.dataset.color ?? "";
+    if (!hex) return;
+    button.setAttribute("aria-label", t.solidSwatch(hex));
+  });
+  $<HTMLInputElement>("#beautifyColor").title = t.customColor();
+  $<HTMLInputElement>("#beautifyColor").setAttribute("aria-label", t.customColor());
+  $$<HTMLButtonElement>("#beautifyGradients .swatch").forEach((button) => {
+    const id = button.dataset.gradient ?? "";
+    const label = gradientLabel(id);
+    button.title = label;
+    button.setAttribute("aria-label", t.gradientSwatch(label));
+  });
+}
+
 function syncBeautifyControls() {
+  labelSwatches();
   $$<HTMLButtonElement>("#beautifyBgKind button").forEach((button) => {
     const active = button.dataset.kind === frameStyle.background;
     button.classList.toggle("active", active);
@@ -556,7 +591,7 @@ async function renderBeautify() {
     if (seq !== beautifyRenderSeq || beautifyId === null) return;
     $<HTMLImageElement>("#beautifyImg").src = url;
   } catch (error) {
-    if (seq === beautifyRenderSeq) showError(error, "无法生成美化预览");
+    if (seq === beautifyRenderSeq) showError(error, t.beautifyPreviewFailed());
   } finally {
     if (seq === beautifyRenderSeq) $("#beautifyLoading").hidden = true;
   }
@@ -589,7 +624,7 @@ async function applyBeautify() {
   const id = beautifyId;
   const item = ctx.items().find((entry) => entry.id === id);
   if (ctx.demoMode()) {
-    showToast("浏览器预览模式无法应用美化，请在 MyGo 桌面应用中使用", "info");
+    showToast(t.demoNoBeautifyApply(), "info");
     return;
   }
   try {
@@ -597,10 +632,10 @@ async function applyBeautify() {
     closePreview();
     ctx.applySnapshot(snap, false);
     ctx.renderAll();
-    showToast(`已应用美化：${item ? item.name : ""} 等待压缩`, "success");
+    showToast(t.beautifyApplied(item ? item.name : ""), "success");
     if (ctx.autoProcessEnabled()) ctx.startAutoRun([id], false);
   } catch (error) {
-    showError(error, "美化失败");
+    showError(error, t.beautifyFailed());
   }
 }
 

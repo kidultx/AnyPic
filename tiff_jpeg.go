@@ -18,7 +18,10 @@ import (
 	"io"
 )
 
-var errUnsupportedTIFF = errors.New("不支持的 TIFF 布局")
+// errUnsupportedTIFF is internal: it only tells decodeImage to keep the
+// standard decoder's error, which is what the user sees. It is not copy and
+// stays out of the catalogs.
+var errUnsupportedTIFF = errors.New("unsupported TIFF layout")
 
 const (
 	tiffTypeByte  = 1

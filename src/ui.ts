@@ -1,6 +1,9 @@
 /* Shared UI helpers: DOM lookups, formatting and the toast stack. Anything
    here must not reach into the app's state modules — both main.ts and
-   preview.ts import from this file, so it stays dependency-free. */
+   preview.ts import from this file, so it only depends on the catalog
+   accessors for the few words it formats (#32). */
+
+import { t } from "./i18n";
 
 export const $ = <T extends HTMLElement = HTMLElement>(selector: string): T => {
   const el = document.querySelector<T>(selector);
@@ -32,7 +35,7 @@ export function formatBytes(bytes: number): string {
 export const pct = (value: number) => `${Math.round(Math.max(0, value))}%`;
 
 export function formatDimensions(width: number, height: number): string {
-  if (!width || !height) return "未知尺寸";
+  if (!width || !height) return t.unknownDimensions();
   return `${width} × ${height}`;
 }
 
