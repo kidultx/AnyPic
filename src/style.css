@@ -3014,14 +3014,16 @@ body.side-drag * {
   background-color: var(--card);
 }
 
+/* Selection replaces the status tabs inside the toolbar's fixed 46px row
+   (#27): the list must not move when the first box is ticked. */
 .selection-bar {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 14px;
-  padding: 7px 14px;
-  border-bottom: 1px solid var(--line-2);
   font-size: 13px;
   color: var(--text-soft);
+  white-space: nowrap;
 }
 
 .selection-bar b {

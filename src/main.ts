@@ -525,7 +525,11 @@ function allVisibleSelected(): boolean {
 }
 
 function syncSelectionBar() {
-  $("#selectionBar").hidden = selected.size === 0 || batch.running;
+  const showing = selected.size > 0 && !batch.running;
+  $("#selectionBar").hidden = !showing;
+  // Selection takes the toolbar over in place (#27): an extra row would push
+  // every image down at the moment the first box is ticked.
+  $("#queueTabs").hidden = showing;
   $("#selectionCount").textContent = String(selected.size);
   $<HTMLButtonElement>("#removeSelectedBtn").disabled = batch.running;
 }

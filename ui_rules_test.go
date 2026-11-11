@@ -621,3 +621,71 @@ func TestIssue16ToastActionDiesWithDismiss(t *testing.T) {
 		t.Errorf("src/ui.ts:%d: action.onClick() runs without an earlier `if (dismissed) return` — an action must die with its toast (issue #16)", line)
 	}
 }
+
+// divBodyByClass returns the inner markup of the first <div> whose class list
+// contains class, matched by nesting rather than by a closing-tag regex, so a
+// nested toolbar inside the queue cannot end the block early.
+func divBodyByClass(src, class string) (string, bool) {
+	open := regexp.MustCompile(`<div[^>]*\bclass="[^"]*\b` + regexp.QuoteMeta(class) + `\b[^"]*"[^>]*>`)
+	loc := open.FindStringIndex(src)
+	if loc == nil {
+		return "", false
+	}
+	tag := regexp.MustCompile(`(?i)<div\b|</div\s*>`)
+	depth, i := 1, loc[1]
+	for depth > 0 {
+		m := tag.FindStringIndex(src[i:])
+		if m == nil {
+			return "", false
+		}
+		if strings.EqualFold(src[i+m[0]:i+m[0]+4], "<div") {
+			depth++
+		} else {
+			depth--
+		}
+		i += m[1]
+	}
+	return src[loc[1]:i], true
+}
+
+// TestIssue27SelectionTakesNoExtraRow guards #27: the selection bar used to be
+// a sibling row under the queue toolbar, so ticking the first checkbox pushed
+// every row down by the bar's height and moved the row under the cursor. It
+// now replaces the status tabs inside the toolbar's fixed-height row; the
+// toolbar keeps 46px so surrounding content still cannot move. List and grid
+// share this toolbar, so one structural check covers both.
+func TestIssue27SelectionTakesNoExtraRow(t *testing.T) {
+	raw, err := os.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, ok := divBodyByClass(string(raw), "queue-toolbar")
+	if !ok {
+		t.Fatal("index.html: no .queue-toolbar element (#27)")
+	}
+	if !strings.Contains(body, `id="selectionBar"`) {
+		t.Errorf("index.html: #selectionBar sits outside .queue-toolbar — selecting a row adds a row and shifts the list (#27)")
+	}
+
+	cssRaw, err := os.ReadFile("src/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rule := regexp.MustCompile(`(?s)\.queue-toolbar\s*\{([^{}]*)\}`)
+	m := rule.FindStringSubmatch(stripBlockComments(string(cssRaw)))
+	if m == nil {
+		t.Fatalf("src/style.css: no .queue-toolbar rule (#27)")
+	}
+	if !regexp.MustCompile(`(?m)flex:\s*0 0 \d+px`).MatchString(m[1]) {
+		t.Errorf("src/style.css: .queue-toolbar lost its fixed height, so selection can still move the list (#27):%s", m[1])
+	}
+
+	bar := regexp.MustCompile(`(?s)\.selection-bar\s*\{([^{}]*)\}`)
+	b := bar.FindStringSubmatch(stripBlockComments(string(cssRaw)))
+	if b == nil {
+		t.Fatalf("src/style.css: no .selection-bar rule (#27)")
+	}
+	if regexp.MustCompile(`(?m)border-bottom\s*:`).MatchString(b[1]) {
+		t.Errorf("src/style.css: .selection-bar still draws a row divider — it lives inside the toolbar now (#27):%s", b[1])
+	}
+}

@@ -281,6 +281,11 @@
 
             <div class="queue" id="queue" hidden>
               <div class="queue-toolbar">
+                <div class="selection-bar" id="selectionBar" hidden>
+                  <span>已选 <b id="selectionCount">0</b> 张</span>
+                  <button class="text-button" id="removeSelectedBtn" type="button">移除所选</button>
+                  <button class="text-button" id="clearSelectionBtn" type="button">取消选择</button>
+                </div>
                 <div class="queue-tabs" id="queueTabs" role="tablist" aria-label="筛选图片">
                   <button class="queue-tab active" data-filter="all" role="tab" aria-selected="true">全部</button>
                   <button class="queue-tab" data-filter="done" role="tab" aria-selected="false">已完成</button>
@@ -298,11 +303,6 @@
                     <svg aria-hidden="true" class="icon"><use href="#i-trash" /></svg>
                   </button>
                 </div>
-              </div>
-              <div class="selection-bar" id="selectionBar" hidden>
-                <span>已选 <b id="selectionCount">0</b> 张</span>
-                <button class="text-button" id="removeSelectedBtn" type="button">移除所选</button>
-                <button class="text-button" id="clearSelectionBtn" type="button">取消选择</button>
               </div>
               <div class="queue-columns" id="queueColumns">
                 <span aria-hidden="true"></span>
