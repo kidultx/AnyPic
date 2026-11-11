@@ -627,3 +627,28 @@ func TestIssue32TheChoiceReachesMyGo(t *testing.T) {
 		t.Errorf("a launch pinned to English told MyGo %v, want [en] — the choice is handed over again in case its own record is gone (#32)", told)
 	}
 }
+
+// TestIssue32ADialogsButtonsKeepTheirOwnWords: applyText() fills every
+// element carrying a markup key, and a dialog's buttons must not carry one —
+// askConfirm writes labels of its own, and the update dialog says 稍后 /
+// Later where a plain Cancel would mean something else. With the key still
+// on #confirmCancel, any language change while that dialog was open (a
+// system change, or settings arriving from the backend) rewrote it to
+// 取消 / Cancel. The page's own rule is the same one: elements whose text is
+// rendered from data carry no key.
+func TestIssue32ADialogsButtonsKeepTheirOwnWords(t *testing.T) {
+	raw, err := os.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(raw)
+	for _, id := range []string{"confirmCancel", "confirmOk"} {
+		tag := regexp.MustCompile(`<button[^>]*id="` + id + `"[^>]*>`).FindString(html)
+		if tag == "" {
+			t.Fatalf("index.html: no button #%s to check (#32)", id)
+		}
+		if strings.Contains(tag, "data-i18n") {
+			t.Errorf("index.html: #%s carries a markup key — applyText() would overwrite the label askConfirm wrote (#32): %s", id, tag)
+		}
+	}
+}
