@@ -62,9 +62,6 @@
         </div>
 
         <div class="titlebar-actions">
-          <button class="icon-btn" id="themeBtn" title="切换主题" aria-label="切换主题">
-            <svg aria-hidden="true" class="icon"><use href="#i-monitor" id="themeIcon" /></svg>
-          </button>
           <button class="icon-btn" id="infoBtn" title="关于 AnyPic" aria-label="关于 AnyPic">
             <svg aria-hidden="true" class="icon"><use href="#i-info" /></svg>
           </button>
@@ -92,6 +89,27 @@
                 </div>
               </div>
 
+              <div class="field">
+                <div class="field-label">
+                  <label>输出格式</label>
+                  <span class="field-hint" id="formatHint">保持原格式</span>
+                </div>
+                <div class="segmented" id="formatSeg" role="group" aria-label="输出格式">
+                  <button data-format="auto" class="active" aria-pressed="true">自动</button>
+                  <button data-format="jpeg" aria-pressed="false">JPG</button>
+                  <button data-format="png" aria-pressed="false">PNG</button>
+                  <button data-format="webp" aria-pressed="false">WebP</button>
+                </div>
+              </div>
+
+              <div class="tip-card" id="tipCard">
+                <svg aria-hidden="true" class="icon tip-icon"><use href="#i-info" /></svg>
+                <div>
+                  <strong id="tipTitle">保持原格式</strong>
+                  <p id="tipText">在保持原格式的同时优化体积。</p>
+                </div>
+              </div>
+
               <label class="toggle-row auto-process-row">
                 <span>添加后自动处理</span>
                 <input class="switch-input" id="autoProcessToggle" type="checkbox" checked />
@@ -101,6 +119,7 @@
               <button class="text-button output-inline" id="outputInlineBtn" type="button">
                 保存到 <span id="outputInlineLabel">原图旁边</span> ›
               </button>
+              <button class="text-button reset-location" id="resetLocation" type="button" hidden>改为保存到原图旁边</button>
             </section>
 
             <details class="more-settings" id="moreSettings">
@@ -126,19 +145,6 @@
                     </div>
                   </div>
 
-                  <div class="field">
-                    <div class="field-label">
-                      <label>输出格式</label>
-                      <span class="field-hint" id="formatHint">保持原格式</span>
-                    </div>
-                    <div class="segmented" id="formatSeg" role="group" aria-label="输出格式">
-                      <button data-format="auto" class="active" aria-pressed="true">自动</button>
-                      <button data-format="jpeg" aria-pressed="false">JPG</button>
-                      <button data-format="png" aria-pressed="false">PNG</button>
-                      <button data-format="webp" aria-pressed="false">WebP</button>
-                    </div>
-                  </div>
-
                   <div class="field-row">
                     <label for="maxDim">最大边长</label>
                     <div class="select-wrap">
@@ -158,67 +164,14 @@
                     <label for="suffix">文件名后缀</label>
                     <input id="suffix" class="text-input" type="text" value="-anypic" maxlength="32" spellcheck="false" />
                   </div>
-
-                  <div class="tip-card" id="tipCard">
-                    <svg aria-hidden="true" class="icon tip-icon"><use href="#i-info" /></svg>
-                    <div>
-                      <strong id="tipTitle">保持原格式</strong>
-                      <p id="tipText">在保持原格式的同时优化体积。</p>
-                    </div>
-                  </div>
-                </section>
-
-                <section class="settings-block shortcut-block">
-                  <div class="block-head">
-                    <h2>截图</h2>
-                  </div>
-                  <div class="shortcut-row">
-                    <label for="shortcutBtn">快捷键</label>
-                    <button class="shortcut-input" id="shortcutBtn" type="button" title="点击后按下新的组合键；关闭窗口后仍可用">
-                      <span class="shortcut-value" id="shortcutValue">⌘⌥S</span>
-                      <svg aria-hidden="true" class="icon shortcut-edit" id="shortcutEdit"><use href="#i-pencil" /></svg>
-                    </button>
-                  </div>
-                  <p class="shortcut-hint" id="shortcutHint" hidden>按住修饰键再按一个键，Esc 取消</p>
-                  <label class="toggle-row">
-                    <span>截图后复制到剪贴板</span>
-                    <input class="switch-input" id="clipboardToggle" type="checkbox" checked />
-                    <span class="switch" aria-hidden="true"></span>
-                  </label>
-                  <button class="text-button screen-permission" id="screenPermissionBtn" type="button" hidden>
-                    无法截图？检查屏幕录制权限
-                  </button>
-                </section>
-
-                <section class="settings-block">
-                  <div class="block-head">
-                    <h2>保存位置</h2>
-                  </div>
-                  <button class="destination" id="outputBtn" type="button">
-                    <svg aria-hidden="true" class="icon destination-icon"><use href="#i-folder" /></svg>
-                    <span id="outputLabel">原图旁边</span>
-                    <svg aria-hidden="true" class="icon destination-arrow"><use href="#i-chevron" /></svg>
-                  </button>
-                  <button class="text-button reset-location" id="resetLocation" type="button" hidden>改为保存到原图旁边</button>
-                </section>
-
-                <section class="settings-block" id="windowSettings">
-                  <div class="block-head">
-                    <h2>窗口</h2>
-                  </div>
-                  <label class="toggle-row">
-                    <span>开机时启动 AnyPic</span>
-                    <input class="switch-input" id="openAtLoginToggle" type="checkbox" />
-                    <span class="switch" aria-hidden="true"></span>
-                  </label>
-                  <label class="toggle-row">
-                    <span>关闭窗口后隐藏 Dock 图标</span>
-                    <input class="switch-input" id="dockToggle" type="checkbox" checked />
-                    <span class="switch" aria-hidden="true"></span>
-                  </label>
                 </section>
               </div>
             </details>
+
+            <div class="sidebar-prefs">
+              <button class="text-button" id="prefsBtn" type="button">偏好设置…</button>
+              <kbd class="mod-key" data-shortcut="prefs">⌘,</kbd>
+            </div>
           </div>
 
           <div class="sidebar-actions" id="sidebarActions">
@@ -515,6 +468,69 @@
           </div>
         </div>
         <button class="secondary-btn" id="aboutClose" type="button">关闭</button>
+      </article>
+    </div>
+
+
+    <div class="modal prefs-modal" id="prefsModal" aria-hidden="true">
+      <div class="modal-backdrop" data-close-prefs></div>
+      <article class="prefs-card" role="dialog" aria-modal="true" aria-labelledby="prefsTitle">
+        <header class="prefs-head">
+          <h3 id="prefsTitle">偏好设置</h3>
+          <button class="icon-btn" id="prefsClose" type="button" aria-label="关闭">
+            <svg aria-hidden="true" class="icon"><use href="#i-x" /></svg>
+          </button>
+        </header>
+        <div class="prefs-body">
+          <section class="settings-block">
+            <div class="block-head"><h2>外观</h2></div>
+            <div class="field-row">
+              <label>主题</label>
+              <div class="segmented prefs-theme" id="themeSeg" role="group" aria-label="主题">
+                <button data-theme="system" aria-pressed="false">跟随系统</button>
+                <button data-theme="light" aria-pressed="false">浅色</button>
+                <button data-theme="dark" aria-pressed="false">深色</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-block" id="windowSection">
+            <div class="block-head"><h2>窗口</h2></div>
+            <label class="toggle-row">
+              <span>开机时启动 AnyPic</span>
+              <input class="switch-input" id="openAtLoginToggle" type="checkbox" />
+              <span class="switch" aria-hidden="true"></span>
+            </label>
+            <label class="toggle-row">
+              <span>关闭窗口后隐藏 Dock 图标</span>
+              <input class="switch-input" id="dockToggle" type="checkbox" checked />
+              <span class="switch" aria-hidden="true"></span>
+            </label>
+          </section>
+
+          <section class="settings-block">
+            <div class="block-head"><h2>截图</h2></div>
+            <div class="shortcut-row">
+              <label for="shortcutBtn">快捷键</label>
+              <button class="shortcut-input" id="shortcutBtn" type="button" title="点击后按下新的组合键；关闭窗口后仍可用">
+                <span class="shortcut-value" id="shortcutValue">⌘⌥S</span>
+                <svg aria-hidden="true" class="icon shortcut-edit" id="shortcutEdit"><use href="#i-pencil" /></svg>
+              </button>
+            </div>
+            <p class="shortcut-hint" id="shortcutHint" hidden>按住修饰键再按一个键，Esc 取消</p>
+            <label class="toggle-row">
+              <span>截图后复制到剪贴板</span>
+              <input class="switch-input" id="clipboardToggle" type="checkbox" checked />
+              <span class="switch" aria-hidden="true"></span>
+            </label>
+            <button class="text-button screen-permission" id="screenPermissionBtn" type="button" hidden>
+              无法截图？检查屏幕录制权限
+            </button>
+          </section>
+        </div>
+        <footer class="prefs-foot">
+          <button class="secondary-btn" id="prefsDone" type="button">完成</button>
+        </footer>
       </article>
     </div>
 

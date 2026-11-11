@@ -979,37 +979,6 @@ body.side-drag * {
   margin: 2px 0 0;
 }
 
-.destination {
-  display: flex;
-  width: 100%;
-  height: 36px;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px 0 6px;
-  border: 0;
-  border-radius: 8px;
-  background-color: var(--pill);
-  color: var(--text);
-  font-size: 12.5px;
-  text-align: left;
-  transition: background 0.12s ease;
-}
-
-.destination:hover {
-  background-color: var(--pill-hover);
-}
-
-.destination:focus-visible {
-  background-color: var(--card);
-  box-shadow: inset 0 0 0 1px var(--primary);
-}
-
-.destination:disabled {
-  background-color: var(--pill);
-  color: var(--text-disabled);
-  cursor: not-allowed;
-}
-
 .shortcut-row {
   display: flex;
   align-items: center;
@@ -1157,33 +1126,23 @@ body.side-drag * {
   display: none;
 }
 
-.destination-icon {
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  padding: 8px;
-  border-radius: 10px;
-  background-color: var(--brand-soft);
-  color: var(--brand-foreground);
-}
-
-#outputLabel {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.destination-arrow {
-  width: 12px;
-  height: 12px;
-  color: var(--text-faint);
-}
-
 .reset-location {
-  margin-top: 8px;
-  font-size: 12px;
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* The preferences dialog is reached from here, the menu, and Cmd+, (#22). */
+.sidebar-prefs {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding: 0 4px;
+}
+
+.sidebar-prefs .text-button {
+  font-weight: 500;
 }
 
 .sidebar-actions {
@@ -2179,7 +2138,8 @@ body.side-drag * {
 
 .preview-card,
 .confirm-card,
-.about-card {
+.about-card,
+.prefs-card {
   position: relative;
   border-radius: 14px;
   background-color: var(--card);
@@ -2684,6 +2644,57 @@ body.side-drag * {
 .about-card {
   width: min(420px, 100%);
   padding: 24px;
+}
+
+/* Preferences reuse the sidebar's bordered blocks (#22). */
+.prefs-card {
+  display: flex;
+  width: min(440px, 100%);
+  max-height: calc(100dvh - 48px);
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.prefs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 12px 20px;
+}
+
+.prefs-head h3 {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.prefs-body {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 7px;
+  overflow-y: auto;
+  padding: 0 16px;
+}
+
+.prefs-body .settings-block {
+  padding: 12px;
+}
+
+.prefs-body .field-row {
+  margin-bottom: 0;
+}
+
+.prefs-theme {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.prefs-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 14px 16px 16px;
 }
 
 .about-head {

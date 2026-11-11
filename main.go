@@ -137,6 +137,8 @@ func main() {
 			}},
 			{Role: mygo.RoleEditMenu},
 			{Label: "视图", Submenu: []*mygo.MenuItem{
+				{Label: "偏好设置…", Accelerator: "CmdOrCtrl+,", Click: command("prefs")},
+				mygo.Separator(),
 				{Label: "切换主题", Accelerator: "CmdOrCtrl+Shift+L", Click: command("theme")},
 				mygo.Separator(),
 				{Role: mygo.RoleToggleFullScreen},

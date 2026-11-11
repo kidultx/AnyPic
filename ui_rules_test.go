@@ -823,3 +823,59 @@ func TestIssue30ActionsColumnFitsTheButtons(t *testing.T) {
 	}
 }
 
+
+// TestIssue22PreferencesLiveInADialog guards #22: the sidebar answers "how
+// should this batch come out" — quality, output format, where it lands. The
+// application's own preferences (theme, launch at login, the Dock, the capture
+// shortcut and clipboard) moved into a preferences dialog reached by 偏好设置…
+// and Cmd+,. Output format is part of the answer every time, so it sits on the
+// first screen rather than behind 更多设置.
+func TestIssue22PreferencesLiveInADialog(t *testing.T) {
+	raw, err := os.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(raw)
+
+	start := strings.Index(html, `<aside class="sidebar">`)
+	end := strings.Index(html, `</aside>`)
+	if start < 0 || end < start {
+		t.Fatal("index.html: no <aside class=\"sidebar\"> block (#22)")
+	}
+	aside := html[start:end]
+	for _, id := range []string{"openAtLoginToggle", "dockToggle", "shortcutBtn", "clipboardToggle", "themeBtn"} {
+		if strings.Contains(aside, `id="`+id+`"`) {
+			t.Errorf("index.html: #%s still lives in the sidebar — application preferences belong in the preferences dialog (#22)", id)
+		}
+	}
+
+	if !strings.Contains(html, `id="prefsModal"`) {
+		t.Errorf("index.html: no #prefsModal — 偏好设置 has nowhere to open (#22)")
+	}
+	for _, id := range []string{"themeSeg", "openAtLoginToggle", "dockToggle", "shortcutBtn", "clipboardToggle"} {
+		if !strings.Contains(html, `id="`+id+`"`) {
+			t.Errorf("index.html: #%s is missing from the preferences dialog (#22)", id)
+		}
+	}
+
+	formatAt := strings.Index(html, `id="formatSeg"`)
+	detailsAt := strings.Index(html, `<details class="more-settings"`)
+	if formatAt < 0 || detailsAt < 0 {
+		t.Fatalf("index.html: missing #formatSeg or the 更多设置 disclosure (#22)")
+	}
+	if formatAt > detailsAt {
+		t.Errorf("index.html: 输出格式 still sits behind 更多设置 — it decides every result and belongs on the first screen (#22)")
+	}
+
+	goRaw, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	goSrc := string(goRaw)
+	if !strings.Contains(goSrc, `command("prefs")`) {
+		t.Errorf("main.go: no menu command for 偏好设置 (#22)")
+	}
+	if !strings.Contains(goSrc, `"CmdOrCtrl+,"`) {
+		t.Errorf("main.go: 偏好设置 has no CmdOrCtrl+, accelerator (#22)")
+	}
+}

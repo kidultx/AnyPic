@@ -140,12 +140,13 @@ function detectPlatform() {
   setShortcutPlatform(isMac);
   document.documentElement.classList.toggle("is-mac", isMac);
   $("#screenPermissionBtn").hidden = !(isMac && isMyGo());
-  $("#windowSettings").hidden = !isMac;
+  $("#windowSection").hidden = !isMac;
   $$<HTMLElement>("[data-shortcut]").forEach((el) => {
     const shortcut = el.dataset.shortcut;
     if (shortcut === "open") el.textContent = isMac ? "⌘ O" : "Ctrl O";
     else if (shortcut === "compress") el.textContent = isMac ? "⌘ ↵" : "Ctrl ↵";
     else if (shortcut === "paste") el.textContent = isMac ? "⌘ V" : "Ctrl V";
+    else if (shortcut === "prefs") el.textContent = isMac ? "⌘," : "Ctrl,";
   });
 }
 
@@ -375,7 +376,6 @@ function renderSettings() {
     : "关闭后需手动点「压缩全部」，再点「导出」。";
   $("#emptyTitle").textContent = autoProcessEnabled() ? "拖入图片，自动压缩保存" : "拖入图片开始压缩";
   $("#emptyShotKey").textContent = formatShortcut(settings.screenshotShortcut);
-  $("#outputInlineBtn").hidden = !autoProcessEnabled();
   $("#outputInlineLabel").textContent =
     settings.outputMode === "folder" && settings.outputFolder ? shortenPath(settings.outputFolder) : "原图旁边";
   $("#outputInlineBtn").title = settings.outputMode === "folder" && settings.outputFolder ? settings.outputFolder : "原图旁边";
@@ -396,15 +396,7 @@ function renderSettings() {
   $("#formatHint").textContent =
     format === "auto" ? "保持原格式" : format === "jpeg" ? "有损" : format === "png" ? "无损" : "有损";
 
-  if (settings.outputMode === "folder" && settings.outputFolder) {
-    $("#outputLabel").textContent = shortenPath(settings.outputFolder);
-    $("#outputLabel").title = settings.outputFolder;
-    $("#resetLocation").hidden = false;
-  } else {
-    $("#outputLabel").textContent = "原图旁边";
-    $("#outputLabel").title = "";
-    $("#resetLocation").hidden = true;
-  }
+  $("#resetLocation").hidden = !(settings.outputMode === "folder" && settings.outputFolder);
 
   const tips: Record<string, [string, string]> = {
     auto: ["保持原格式", "原格式保留；其他格式转为 JPG 或 PNG。"],
@@ -838,7 +830,6 @@ function renderActions() {
   $<HTMLButtonElement>("#screenshotBtn").hidden = autoProcessEnabled() && items.length > 0;
   $<HTMLButtonElement>("#screenshotBtn").disabled = running;
   $<HTMLButtonElement>("#emptyAddBtn").disabled = running;
-  $<HTMLButtonElement>("#outputBtn").disabled = running;
   $<HTMLButtonElement>("#resetBtn").disabled = running;
   $<HTMLButtonElement>("#suffix").disabled = running;
   $<HTMLButtonElement>("#maxDim").disabled = running;
@@ -886,10 +877,17 @@ function bindEvents() {
     if (lastSaved) void AnyPic.revealPath(lastSaved.path);
   });
   $("#clearBtn").addEventListener("click", () => void clearQueue());
-  $("#outputBtn").addEventListener("click", () => void chooseOutputFolder());
   $("#outputInlineBtn").addEventListener("click", () => void chooseOutputFolder());
   $("#resetLocation").addEventListener("click", () => void setSettings({ outputMode: "alongside" }));
-  $("#themeBtn").addEventListener("click", cycleTheme);
+  $("#prefsBtn").addEventListener("click", openPrefs);
+  $("#prefsClose").addEventListener("click", closePrefs);
+  $("#prefsDone").addEventListener("click", closePrefs);
+  $$<HTMLElement>("[data-close-prefs]").forEach((el) => el.addEventListener("click", closePrefs));
+  $("#themeSeg").addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-theme]");
+    if (!button) return;
+    void setSettings({ theme: button.dataset.theme ?? "system" });
+  });
   $("#shortcutBtn").addEventListener("click", () => {
     if (recordingShortcut) stopShortcutRecording();
     else startShortcutRecording();
@@ -1110,6 +1108,9 @@ function bindEvents() {
       } else if ($("#previewModal").classList.contains("open")) {
         event.preventDefault();
         closePreview();
+      } else if ($("#prefsModal").classList.contains("open")) {
+        event.preventDefault();
+        closePrefs();
       } else if (aboutModal.classList.contains("open")) {
         event.preventDefault();
         closeAbout();
@@ -1124,6 +1125,9 @@ function bindEvents() {
       if (target?.closest("input, textarea, select") || target?.isContentEditable) return;
       event.preventDefault();
       void pasteImage();
+    } else if (event.key === ",") {
+      event.preventDefault();
+      openPrefs();
     } else if (event.key.toLowerCase() === "o") {
       event.preventDefault();
       void pickFiles();
@@ -1851,10 +1855,11 @@ function applyTheme(mode: string) {
   } catch {
     /* storage can be unavailable */
   }
-  const name = theme === "system" ? "monitor" : theme === "dark" ? "moon" : "sun";
-  setUseIcon("themeIcon", name);
-  const button = document.getElementById("themeBtn");
-  if (button) button.title = theme === "system" ? "主题：跟随系统" : theme === "dark" ? "主题：深色" : "主题：浅色";
+  $$<HTMLButtonElement>("#themeSeg button").forEach((button) => {
+    const active = button.dataset.theme === theme;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -1889,6 +1894,15 @@ function openAbout() {
 
 function closeAbout() {
   closeModal($("#aboutModal"));
+}
+
+function openPrefs() {
+  openModal($("#prefsModal"));
+  $("#prefsClose").focus({ preventScroll: true });
+}
+
+function closePrefs() {
+  closeModal($("#prefsModal"));
 }
 
 /* ------------------------------------------------------------------ */
@@ -2074,6 +2088,9 @@ async function handleCommand(command: string) {
       break;
     case "theme":
       cycleTheme();
+      break;
+    case "prefs":
+      openPrefs();
       break;
   }
 }
