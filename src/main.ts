@@ -82,6 +82,7 @@ async function init() {
   detectPlatform();
   initPreview({
     items: () => items,
+    visibleIds: () => visibleItems().map((item) => item.id),
     demoMode: () => demoMode,
     batchRunning: () => batch.running,
     autoProcessEnabled,

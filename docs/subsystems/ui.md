@@ -39,6 +39,21 @@ kept for what acts（`src/style.css` 第一行）。中性底、白色细边卡�
   ≤1040px 规则隐藏的 `.summary-foot`。守卫：
   `TestIssue31PendingNoteSurvivesNarrowWindows`。
 
+## 预览的缩放与翻页（#21）
+
+缩放只作用在两张 `<img>` 上（`--compare-zoom` / `--compare-pan-*`），分割线与
+透明棋盘格的裁切留在画框坐标里——所以放大后分割线仍在鼠标下，仍把两张图切在
+同一个源像素。别把 transform 挪到 `.compare-frame` 或 `.compare-after-wrap` 上。
+
+- 比例以「每源像素几个 CSS 像素」记：适应窗口每次从画框重算；「100%」固定为 1
+  （小图被适应窗口放大时也回得到 1）；滚轮走自定义档，读数只在有歧义时才有意义，
+ 但仍始终显示。滚到正好是适应窗口时吸附回该档，免得两个按钮都不亮。
+- 翻页顺序 = 队列当前看到的顺序（状态页签 + 文件名过滤），由
+  `PreviewContext.visibleIds()` 提供；对比页签只翻 `done`，美化页签也含 `ready`。
+- ←/→ 全局翻页，焦点在分割线手柄上时归手柄（滑杆自己的方向键），输入框里不翻页。
+
+守卫：`TestIssue21PreviewZoomsAndNavigates`。
+
 ## 约束与执行
 
 | 约束 | 现在由谁执行 |

@@ -108,15 +108,18 @@ func TestNoNewNativeSelects(t *testing.T) {
 // was for. The 2026-11 walk-through's first fixes crossed main.ts's line;
 // its shortcut notation (labels, accelerators, reserved keys) moved to
 // src/shortcuts.ts instead, budgeted here so the split is a move with a
-// ledger entry, not a second hiding place.
+// ledger entry, not a second hiding place. #21 grew style.css to 59,208 and
+// index.html to 31,315: the zoom pill, pager and their over-image styling —
+// preview.ts, where the zoom/pan and paging state lives, is not in this
+// ledger yet.
 var uiBudgets = []struct {
 	file   string
 	budget int
 }{
 	{"src/main.ts", 80_200},
 	{"src/shortcuts.ts", 4_200},
-	{"src/style.css", 58_400},
-	{"index.html", 31_000},
+	{"src/style.css", 60_400},
+	{"index.html", 31_900},
 }
 
 // TestScriptAndStyleBudgets guards them. Sizes are counted with LF line
@@ -998,5 +1001,88 @@ func TestIssue31PendingNoteSurvivesNarrowWindows(t *testing.T) {
 	}
 	if !regexp.MustCompile(`(?m)^\.summary-pending\s*\{`).MatchString(stripBlockComments(string(css))) {
 		t.Errorf("src/style.css: no .summary-pending rule for the note (#31)")
+	}
+}
+
+// TestIssue21PreviewZoomsAndNavigates guards #21: the compare view could only
+// fit the whole picture to the window (a 6000px photo rendered at ~1000px, so
+// compression artefacts were invisible), and checking a batch meant closing
+// and reopening the preview for every image. The contract:
+//
+//   - the zoom transform sits on the two <img> elements only; the split line
+//     and the clip live in frame coordinates, so the divider stays under the
+//     cursor and keeps cutting both images at the same source pixel;
+//   - the wheel listener is non-passive, or the preview scrolls instead of
+//     zooming;
+//   - ←/→ navigate the queue, but the focused split handle keeps them for its
+//     own slider (it must not be possible to page away mid-drag);
+//   - the order is the queue order the user sees (current tab + name filter).
+func TestIssue21PreviewZoomsAndNavigates(t *testing.T) {
+	html, err := os.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	markup := string(html)
+	for _, want := range []string{`id="zoomFit"`, `id="zoom100"`, `id="zoomReadout"`, `id="previewPrev"`, `id="previewNext"`, `id="previewCount"`} {
+		if !strings.Contains(markup, want) {
+			t.Errorf("index.html: missing %s — #21 needs a fit/100%% toggle with its ratio and prev/next controls", want)
+		}
+	}
+
+	cssRaw, err := os.ReadFile("src/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := stripBlockComments(string(cssRaw))
+	imgRule := regexp.MustCompile(`(?s)\.compare-img\s*\{([^{}]*)\}`).FindStringSubmatch(css)
+	if imgRule == nil {
+		t.Fatal("src/style.css: no .compare-img rule (#21)")
+	}
+	if !regexp.MustCompile(`transform:[^;]*scale\(var\(--compare-zoom`).MatchString(imgRule[1]) {
+		t.Errorf("src/style.css: .compare-img has no scale(var(--compare-zoom)) transform — the wheel cannot zoom the picture (#21)")
+	}
+	for _, sel := range []string{".compare-handle", ".compare-after-wrap"} {
+		rule := regexp.MustCompile(`(?s)` + regexp.QuoteMeta(sel) + `\s*\{([^{}]*)\}`).FindStringSubmatch(css)
+		if rule == nil {
+			t.Fatalf("src/style.css: no %s rule (#21)", sel)
+		}
+		if regexp.MustCompile(`transform:[^;]*scale\(|--compare-zoom`).MatchString(rule[1]) {
+			t.Errorf("src/style.css: %s scales with the image — the split line and its clip must stay in frame coordinates (#21)", sel)
+		}
+	}
+
+	ts, err := os.ReadFile("src/preview.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(ts)
+	compareBody, _, _, ok := functionBody(src, "bindCompare")
+	if !ok {
+		t.Fatal("src/preview.ts: no bindCompare() (#21)")
+	}
+	wheel := strings.Index(compareBody, `addEventListener("wheel"`)
+	if wheel < 0 || !strings.Contains(compareBody[wheel:], "passive: false") {
+		t.Errorf("src/preview.ts: the wheel zoom listener is missing or passive — the preview would scroll instead of zooming (#21)")
+	}
+
+	keys, _, _, ok := functionBody(src, "bindPreviewKeys")
+	if !ok {
+		t.Fatal("src/preview.ts: no bindPreviewKeys() (#21)")
+	}
+	guard := strings.Index(keys, `closest("#compareHandle")`)
+	step := strings.Index(keys, "stepPreview(")
+	if guard < 0 || step < 0 || guard > step {
+		t.Errorf("src/preview.ts: ←/→ navigation does not bow out for the focused split handle — the slider and the pager would both consume the arrow (#21)")
+	}
+	if !strings.Contains(keys, `"ArrowLeft"`) || !strings.Contains(keys, `"ArrowRight"`) {
+		t.Errorf("src/preview.ts: bindPreviewKeys() does not handle ←/→ (#21)")
+	}
+
+	main, err := os.ReadFile("src/main.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(main), "visibleIds:") {
+		t.Errorf("src/main.ts: the preview context does not expose visibleIds() — prev/next would ignore the current tab and name filter (#21)")
 	}
 }
