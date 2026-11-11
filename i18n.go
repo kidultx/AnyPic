@@ -17,17 +17,38 @@ import (
 
 	"github.com/egoist/mygo"
 
+	// MyGo's own strings — the labels of menu roles, dialog buttons — in
+	// Traditional Chinese. mygo generate imports the translations of the
+	// catalogs' languages (zh-Hans, en); zh-Hant is one of ours without a
+	// catalog, so it is imported here.
+	_ "github.com/egoist/mygo/locales/zh-Hant"
+
 	"anypic/locales"
 )
+
+// appLanguages is what AnyPic tells MyGo it is written in, the fallback
+// first. MyGo picks the language to show among them (App.Locale) — the page
+// reads that pick (mygo.locale), so do the menus MyGo labels itself, and so
+// does this file: one answer, which is why they cannot disagree (#32). The
+// list is shaped to give the rule the app promises:
+//
+//   - English first: a desktop that reads none of them gets English, not the
+//     catalogs' source language.
+//   - zh-Hant is listed although only a Simplified catalog ships: a
+//     Traditional-Chinese desktop then resolves to Chinese — catalogFor reads
+//     it from the Simplified catalog — instead of the English such desktops
+//     usually list second.
+var appLanguages = []string{"en", "zh-Hans", "zh-Hant"}
+
+// appLocale is the language MyGo shows: its pick among appLanguages for the
+// desktop. A variable so tests can stand in for a desktop without a running
+// app.
+var appLocale = func() string { return mygo.App.Locale() }
 
 // uiLang holds the resolved language: "zh-Hans" or "en". The source
 // language is the default so a service built without a running app — the
 // tests — still says its messages in one language.
 var uiLang atomic.Value
-
-// preferredLanguages is the desktop's languages, most preferred first. A
-// variable so tests can answer without a running app.
-var preferredLanguages = func() []string { return mygo.App.PreferredLanguages() }
 
 // languageListener is told when the resolved language changes, so main.go can
 // relabel the native menu and tray. Installed once, when the app is ready.
@@ -42,26 +63,25 @@ func uiLanguage() string { return uiLang.Load().(string) }
 // a sentence is never written twice.
 func tr() locales.Messages { return locales.In(uiLanguage()) }
 
+// catalogFor names the catalog that says a language MyGo shows: every
+// Chinese variant reads the Simplified translation until a Traditional one
+// ships; anything else reads English.
+func catalogFor(tag string) string {
+	if strings.HasPrefix(strings.ToLower(tag), "zh") {
+		return "zh-Hans"
+	}
+	return "en"
+}
+
 // resolveLanguage turns the stored setting into the language to show: an
-// explicit language wins; "system" walks the desktop's languages in order and
-// takes the first one the app speaks. Chinese variants all read the Simplified
-// translation until a Traditional one is shipped; a desktop with no shipped
-// language reads English.
+// explicit language wins; "system" shows the language MyGo picked for the
+// desktop, which is the one the page shows too.
 func resolveLanguage(setting string) string {
 	switch setting {
 	case "zh-Hans", "en":
 		return setting
 	}
-	for _, tag := range preferredLanguages() {
-		lower := strings.ToLower(tag)
-		switch {
-		case strings.HasPrefix(lower, "zh"):
-			return "zh-Hans"
-		case strings.HasPrefix(lower, "en"):
-			return "en"
-		}
-	}
-	return "en"
+	return catalogFor(appLocale())
 }
 
 // setUILanguage resolves and stores the language to show.
@@ -78,6 +98,21 @@ func (a *AnyPic) resolveLanguageNow() string {
 	setting := a.settings.Language
 	a.mu.Unlock()
 	return setUILanguage(setting)
+}
+
+// followDesktopLanguage re-reads the language after MyGo reports that the one
+// it shows changed, as it does when the desktop's languages change while the
+// app follows them. Without it the native menus, the tray, the dialogs and
+// the Go-side copy keep the old language until a relaunch, while the page
+// follows along.
+func (a *AnyPic) followDesktopLanguage() {
+	a.mu.Lock()
+	setting := a.settings.Language
+	a.mu.Unlock()
+	before := uiLanguage()
+	if setUILanguage(setting) != before {
+		notifyLanguageChanged()
+	}
 }
 
 // setLanguageListener installs the callback main.go uses to relabel the

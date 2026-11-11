@@ -288,35 +288,160 @@ func TestIssue32LanguageIsASetting(t *testing.T) {
 	}
 }
 
-// TestIssue32LanguagesResolveFromTheDesktop guards the choice itself: an
-// explicit language wins, "system" follows the desktop's first Chinese tag or
-// falls back to English.
-func TestIssue32LanguagesResolveFromTheDesktop(t *testing.T) {
-	original := preferredLanguages
-	defer func() { preferredLanguages = original }()
+// The tests run without an app: the desktop is whatever a test says it is.
+func init() {
+	appLocale = func() string { return "zh-Hans" }
+}
 
+// issue32Desktop makes MyGo "show" what it would pick for a desktop whose
+// languages are tags: its own matching among appLanguages, falling back to
+// the first, exactly as App.Locale does.
+func issue32Desktop(t *testing.T, tags ...string) {
+	t.Helper()
+	original := appLocale
+	t.Cleanup(func() { appLocale = original })
+	appLocale = func() string {
+		if match := i18n.Match(tags, appLanguages); match != "" {
+			return match
+		}
+		return appLanguages[0]
+	}
+}
+
+// TestIssue32LanguagesResolveFromTheDesktop: "system" shows the first of the
+// desktop's languages the app speaks. Every Chinese variant reads the
+// Simplified translation until a Traditional one ships — also when the
+// desktop lists English second, as Traditional-Chinese desktops usually do —
+// and a desktop that reads none of them gets English, never the catalogs'
+// source language. The page reads the same answer from MyGo (mygo.locale),
+// so each row is also what the page shows.
+func TestIssue32LanguagesResolveFromTheDesktop(t *testing.T) {
 	cases := []struct {
 		tags []string
 		want string
 	}{
 		{[]string{"zh-Hans-CN", "en-US"}, "zh-Hans"},
+		{[]string{"zh-CN"}, "zh-Hans"},
+		{[]string{"zh-SG"}, "zh-Hans"},
 		{[]string{"zh-Hant-TW"}, "zh-Hans"}, // read as Simplified until one ships
+		{[]string{"zh-Hant-TW", "en-TW"}, "zh-Hans"},
+		{[]string{"zh-HK", "en-HK"}, "zh-Hans"},
+		{[]string{"zh-TW"}, "zh-Hans"},
 		{[]string{"en-GB", "zh-Hans"}, "en"},
+		{[]string{"en-US", "zh-Hant-TW"}, "en"},
 		{[]string{"fr-FR"}, "en"}, // no catalog: English, not an empty page
+		{[]string{"ja-JP"}, "en"},
+		{[]string{"de-DE", "en-DE"}, "en"},
+		{[]string{"fr-FR", "zh-Hans-CN"}, "zh-Hans"},
 		{nil, "en"},
 	}
 	for _, c := range cases {
-		tags := c.tags
-		preferredLanguages = func() []string { return tags }
+		issue32Desktop(t, c.tags...)
 		if got := resolveLanguage("system"); got != c.want {
-			t.Errorf("resolveLanguage(system) with desktop languages %v is %q, want %q (#32)", tags, got, c.want)
+			t.Errorf("resolveLanguage(system) with desktop languages %v is %q, want %q (#32)", c.tags, got, c.want)
 		}
 	}
 	for _, choice := range []string{"zh-Hans", "en"} {
-		preferredLanguages = func() []string { return []string{"fr-FR"} }
+		issue32Desktop(t, "fr-FR")
 		if got := resolveLanguage(choice); got != choice {
 			t.Errorf("resolveLanguage(%q) is %q; an explicit choice must beat the desktop (#32)", choice, got)
 		}
+	}
+}
+
+// TestIssue32OneAnswerForPageMenusAndGo: the page asks MyGo which language
+// the app shows (src/i18n.ts reads mygo.locale); the Go side used to walk the
+// desktop's languages by a rule of its own, and the two disagreed — on a
+// Traditional-Chinese desktop the page was English while the menus, skip
+// reasons and errors were Chinese; on a desktop with neither language the
+// page was Chinese and the rest English. Now MyGo is told the languages the
+// app speaks, shaped so that its pick is the documented rule, and both sides
+// read that pick.
+func TestIssue32OneAnswerForPageMenusAndGo(t *testing.T) {
+	if len(appLanguages) == 0 || appLanguages[0] != "en" {
+		t.Errorf("appLanguages = %v; English must come first — it is what a desktop that reads none of them gets (#32)", appLanguages)
+	}
+	for _, tag := range []string{"zh-Hans", "zh-Hant"} {
+		found := false
+		for _, have := range appLanguages {
+			found = found || have == tag
+		}
+		if !found {
+			t.Errorf("appLanguages = %v, missing %s — desktops in that script would not resolve to Chinese (#32)", appLanguages, tag)
+		}
+	}
+
+	main, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(main), "app.SetLanguages(appLanguages...)") {
+		t.Error("main.go: MyGo is never told appLanguages — it picks among the catalogs' languages with the source language as fallback, so a desktop with no shipped language shows Chinese (#32)")
+	}
+
+	page, err := os.ReadFile("src/i18n.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(page), "locale()") {
+		t.Error("src/i18n.ts: the page no longer reads the language MyGo shows (mygo.locale) — it and the Go side would resolve the desktop separately again (#32)")
+	}
+	source, err := os.ReadFile("i18n.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(source), "PreferredLanguages()") {
+		t.Error("i18n.go: the Go side walks the desktop's languages itself again — it must map the language MyGo shows, as the page does (#32)")
+	}
+}
+
+// TestIssue32GoFollowsADesktopLanguageChange: while the app follows the
+// system, a language change on the desktop reached the page (MyGo tells it)
+// but not the Go side — menus, tray, dialogs and errors kept the old language
+// until a relaunch. MyGo's OnLocaleChanged now re-reads it, and the menus are
+// relabelled once per real change. An explicit choice does not follow.
+func TestIssue32GoFollowsADesktopLanguageChange(t *testing.T) {
+	original := uiLanguage()
+	defer setUILanguage(original)
+
+	service := &AnyPic{settings: defaultSettings()}
+	var relabelled int
+	service.setLanguageListener(func() { relabelled++ })
+	defer service.setLanguageListener(nil)
+
+	issue32Desktop(t, "zh-Hans-CN")
+	if got := service.resolveLanguageNow(); got != "zh-Hans" {
+		t.Fatalf("on a Chinese desktop the app starts in %q, want zh-Hans", got)
+	}
+
+	issue32Desktop(t, "en-US")
+	service.followDesktopLanguage()
+	if uiLanguage() != "en" {
+		t.Errorf("after the desktop switched to English the Go side still says %q (#32)", uiLanguage())
+	}
+	if relabelled != 1 {
+		t.Errorf("menus were relabelled %d times for one desktop change, want 1 (#32)", relabelled)
+	}
+	service.followDesktopLanguage()
+	if relabelled != 1 {
+		t.Errorf("menus were relabelled %d times with no further change, want 1 (#32)", relabelled)
+	}
+
+	service.settings.Language = "zh-Hans"
+	setUILanguage("zh-Hans")
+	relabelled = 0
+	issue32Desktop(t, "en-US")
+	service.followDesktopLanguage()
+	if uiLanguage() != "zh-Hans" || relabelled != 0 {
+		t.Errorf("an explicit 中文 followed the desktop to %q (relabelled %d times); a choice does not follow (#32)", uiLanguage(), relabelled)
+	}
+
+	main, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`app\.OnLocaleChanged\(func\([^)]*\)\s*\{\s*service\.followDesktopLanguage\(\)\s*\}\)`).Match(main) {
+		t.Error("main.go: nothing calls service.followDesktopLanguage from app.OnLocaleChanged — the Go side never hears a desktop language change (#32)")
 	}
 }
 

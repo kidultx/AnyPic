@@ -24,6 +24,11 @@ func main() {
 		return
 	}
 
+	// The languages the app is written in (#32); MyGo picks the one to show
+	// among them, and the page, the menus MyGo labels itself and the Go side
+	// all read that one answer (i18n.go).
+	app.SetLanguages(appLanguages...)
+
 	service := NewAnyPic()
 	mygo.Bind(service)
 
@@ -108,7 +113,10 @@ func main() {
 
 		// The menus say their labels in the language the app shows (#32);
 		// resolveLanguageNow reads the desktop's languages now that the app is
-		// ready. A later change from the preferences rebuilds both menus.
+		// ready, and OnLocaleChanged re-reads them when they change while the
+		// app follows the system. A change from the preferences rebuilds both
+		// menus through the same listener.
+		app.OnLocaleChanged(func(string) { service.followDesktopLanguage() })
 		service.resolveLanguageNow()
 		t := tr()
 
