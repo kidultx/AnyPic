@@ -501,6 +501,63 @@ func TestIssue31SummarySamePopulation(t *testing.T) {
 	}
 }
 
+// listenerBody returns the arrow-function body of the change listener opened
+// by decl, e.g. `$("#dockToggle").addEventListener("change"`.
+func listenerBody(t *testing.T, src, decl string) string {
+	t.Helper()
+	i := strings.Index(src, decl)
+	if i < 0 {
+		t.Fatalf("src/main.ts: no change listener %q", decl)
+	}
+	open := strings.Index(src[i:], "{")
+	if open < 0 {
+		t.Fatalf("src/main.ts: listener %q has no body", decl)
+	}
+	body, _, ok := braceBodyAt(src, i+open)
+	if !ok {
+		t.Fatalf("src/main.ts: cannot read the body of %q", decl)
+	}
+	return body
+}
+
+// TestIssue26ToggleToastsOnlyOnFailure guards #26: a toggle's own state is the
+// feedback, so flipping one succeeds silently. A toast appears only when the
+// backend refuses the change, and only after its answer. The old handlers
+// announced every toggle with an info/success toast, and "开机时启动" claimed
+// success before SaveSettings had answered.
+func TestIssue26ToggleToastsOnlyOnFailure(t *testing.T) {
+	src := ruleSources(t)["src/main.ts"]
+
+	for _, id := range []string{"clipboardToggle", "autoProcessToggle", "dockToggle"} {
+		if !strings.Contains(src, `bindToggle("#`+id+`"`) {
+			t.Errorf("src/main.ts: #%s is not bound through the failure-only helper (#26)", id)
+		}
+	}
+
+	bind, _, _, ok := functionBody(src, "bindToggle")
+	if !ok {
+		t.Errorf("src/main.ts: no bindToggle helper; every toggle needs one failure-only path (#26)")
+	} else {
+		if !strings.Contains(bind, "showError") {
+			t.Errorf("src/main.ts: bindToggle never reports a failed save (#26)")
+		}
+		if strings.Contains(bind, `"success"`) || strings.Contains(bind, `"info"`) {
+			t.Errorf("src/main.ts: bindToggle still reports success/info — only failures deserve a toast (#26)")
+		}
+		if at, backendAt := strings.Index(bind, "showError"), strings.Index(bind, "setSettings("); at >= 0 && backendAt >= 0 && at < backendAt {
+			t.Errorf("src/main.ts: bindToggle reports failure before the backend answers (#26)")
+		}
+	}
+
+	open := listenerBody(t, src, `$("#openAtLoginToggle").addEventListener("change"`)
+	if !strings.Contains(open, `"error"`) {
+		t.Errorf("src/main.ts: the 开机时启动 toggle has no failure message for a refused login item (#26)")
+	}
+	if at, backendAt := strings.Index(open, "showToast("), strings.Index(open, "setSettings("); at >= 0 && backendAt >= 0 && at < backendAt {
+		t.Errorf("src/main.ts: 开机时启动 claims a result before SaveSettings returns (#26)")
+	}
+}
+
 // TestIssue16ToastActionDiesWithDismiss guards the #12 promise that an undo
 // entry disappears with its toast. CSS stops a faded action from receiving
 // pointer events; this checks the code-side guard in showToast's action

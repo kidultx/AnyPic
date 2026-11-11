@@ -890,29 +890,31 @@ function bindEvents() {
     if (recordingShortcut) stopShortcutRecording();
     else startShortcutRecording();
   });
-  $("#clipboardToggle").addEventListener("change", (event) => {
-    const on = (event.target as HTMLInputElement).checked;
-    void setSettings({ screenshotClipboard: on ? "on" : "off" });
-    showToast(on ? "截图后将复制到剪贴板" : "截图后不再复制到剪贴板", "info");
-  });
-  $("#autoProcessToggle").addEventListener("change", (event) => {
-    const on = (event.target as HTMLInputElement).checked;
-    void setSettings({ autoProcess: on ? "on" : "off" });
-    showToast(on ? "添加后自动压缩并保存" : "已改为手动压缩和导出", "info");
-  });
-  $("#dockToggle").addEventListener("change", (event) => {
-    const on = (event.target as HTMLInputElement).checked;
-    void setSettings({ hideDockWhenTray: on ? "on" : "off" });
-    showToast(on ? "关闭窗口后将隐藏 Dock 图标" : "关闭窗口后保留 Dock 图标", "info");
-  });
-  $("#openAtLoginToggle").addEventListener("change", (event) => {
-    const on = (event.target as HTMLInputElement).checked;
-    void setSettings({ openAtLogin: on ? "on" : "off" }, (next) => {
-      // The backend may refuse the login item; the toggle follows the truth.
-      const input = event.target as HTMLInputElement;
-      input.checked = next.openAtLogin === "on";
+  function bindToggle(id: string, key: "screenshotClipboard" | "autoProcess" | "hideDockWhenTray", failure: string) {
+    $(id).addEventListener("change", (event) => {
+      const on = (event.target as HTMLInputElement).checked;
+      void setSettings({ [key]: on ? "on" : "off" } as Partial<Settings>, undefined, (error) => showError(error, failure));
     });
-    showToast(on ? "AnyPic 将在登录时启动" : "AnyPic 不再随登录启动", on ? "success" : "info");
+  }
+  bindToggle("#clipboardToggle", "screenshotClipboard", "无法保存截图剪贴板设置");
+  bindToggle("#autoProcessToggle", "autoProcess", "无法保存自动处理设置");
+  bindToggle("#dockToggle", "hideDockWhenTray", "无法保存 Dock 图标设置");
+  $("#openAtLoginToggle").addEventListener("change", (event) => {
+    const input = event.target as HTMLInputElement;
+    const on = input.checked;
+    void setSettings(
+      { openAtLogin: on ? "on" : "off" },
+      (next) => {
+        // The backend may refuse the login item; the toggle follows the truth.
+        input.checked = next.openAtLogin === "on";
+        if (input.checked !== on) showToast("系统拒绝了这次更改，开关已恢复原状", "error");
+      },
+      (error) => {
+        input.checked = !on;
+        settings = { ...settings, openAtLogin: on ? "off" : "on" };
+        showError(error, "无法更改「开机时启动」");
+      },
+    );
   });
   $("#screenPermissionBtn").addEventListener("click", () => {
     if (demoMode) return;
@@ -1614,21 +1616,23 @@ async function applyShortcut(accelerator: string) {
   }
 }
 
-async function setSettings(patch: Partial<Settings>, then?: (next: Settings) => void) {
+async function setSettings(patch: Partial<Settings>, then?: (next: Settings) => void, onError?: (error: unknown) => void) {
   settings = { ...settings, ...patch };
   if (patch.theme) applyTheme(settings.theme);
   markDirty();
   syncSettingsToUI();
   renderAll();
   queueSave();
-  if (then && !demoMode) {
+  if (!demoMode && (then || onError)) {
     try {
       const next = await AnyPic.saveSettings(settings);
       settings = { ...defaultSettings(), ...next };
       syncSettingsToUI();
-      then(settings);
-    } catch {
-      /* keep the optimistic UI; the save retried on the next change */
+      then?.(settings);
+    } catch (error) {
+      // Keep the optimistic UI; the caller decides whether the failure needs
+      // a message (toggles report it, silent preference changes do not).
+      onError?.(error);
     }
   }
 }
