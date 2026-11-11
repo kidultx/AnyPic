@@ -38,7 +38,7 @@ Download the installer for your platform from the [Releases](../../releases) pag
 - **Resize on demand**: limit the long edge to 3840, 2560, 1920, 1280 or 800 pixels, using Lanczos resampling.
 - **Honest processing that never sacrifices clarity**: if re-encoding would make the file bigger, the original is used as-is and labeled “Already optimal”.
 - **Retry failures**: failed images can be retried in one click; completed images are not re-encoded.
-- **Before / after**: drag a divider in the app to inspect the difference in detail before and after compression.
+- **Before / after**: drag a divider in the app to inspect the difference in detail before and after compression. Scroll or pinch to zoom and drag to pan (the two images move together), switch between “Fit” and “100%” with the current ratio shown, and use ←/→ to step through the queue.
 - **Flexible saving**: save next to the original or to a folder you choose, with a custom filename suffix and batch export.
 - **A clean desktop interface**: a neutral background, white cards with hairline borders and clear tables, with a hideable title bar, native menus, keyboard shortcuts, drag and drop, light / dark themes, and window-state memory.
 - **Privacy first**: no image uploads, no accounts, no telemetry; image processing happens entirely on your machine. The app's only network activity is checking for updates and downloading installers (only when you act, and only from GitHub Releases). Temporary files are cleaned up when the app quits (unsaved compression results are lost).

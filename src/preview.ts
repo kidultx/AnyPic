@@ -11,6 +11,10 @@ import { $, $$, closeModal, formatBytes, formatDimensions, openModal, pct, showE
    queue changes under the modal between renders. */
 export interface PreviewContext {
   items(): Item[];
+  /* The ids the queue is showing right now, in display order: the current
+     status tab plus the name filter. Preview paging follows the same order the
+     rows do, so "next" means the next row the user can see (#21). */
+  visibleIds(): number[];
   demoMode(): boolean;
   batchRunning(): boolean;
   autoProcessEnabled(): boolean;
@@ -35,6 +39,18 @@ const previewCache = new Map<number, Preview>();
 let comparePosition = 50;
 let compareHintSeen = false;
 let lastFocused: HTMLElement | null = null;
+let previewMode: "compare" | "beautify" = "compare";
+
+/* Compare zoom, in CSS px per source px. "fit" re-derives the scale from the
+   frame every time, so resizing the window never leaves the picture cropped;
+   "100" pins one source pixel to one screen pixel; "custom" is the wheel's
+   arbitrary level and is what turns the readout on. Pan is in screen px and
+   clamped so the picture never drifts off the frame (#21). */
+let zoomMode: "fit" | "100" | "custom" = "fit";
+let zoomScale = 1;
+let panX = 0;
+let panY = 0;
+const MAX_ZOOM = 8;
 
 /* Beautify workbench state: which item is open, the style being tuned, and
    the rendered results cached per style so switching back is instant. */
@@ -84,7 +100,15 @@ export async function openPreview(id: number, mode: "compare" | "beautify" = "co
     frameCache.clear();
   }
   beautifyId = id;
-  lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  // Paging with ←/→ must not steal focus from the row that opened the modal:
+  // closing goes back to that row, not to the close button of a reopened one.
+  const alreadyOpen = $("#previewModal").classList.contains("open");
+  if (!alreadyOpen) {
+    lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    compareHintSeen = false;
+    $("#compareHint").classList.remove("hidden");
+    setComparePosition(50);
+  }
   previewData = previewCache.get(id) ?? null;
   $("#previewTitle").textContent = item.name;
   $("#previewMeta").textContent = `${item.format}，${formatDimensions(item.width, item.height)}，${formatBytes(item.originalSize)}，${item.path}`;
@@ -103,12 +127,18 @@ export async function openPreview(id: number, mode: "compare" | "beautify" = "co
   $<HTMLButtonElement>("#previewExportBtn").disabled = item.status !== "done";
   $("#compareLoading").hidden = false;
   $("#compareFrame").hidden = true;
-  compareHintSeen = false;
-  $("#compareHint").classList.remove("hidden");
-  setComparePosition(50);
+  // A zoom level belongs to the picture it was set on; the next image starts
+  // at fit even when the modal never closed (#21).
+  zoomMode = "fit";
+  zoomScale = 1;
+  panX = 0;
+  panY = 0;
   switchPreviewMode(mode);
   openModal($("#previewModal"));
-  $("#previewClose").focus({ preventScroll: true });
+  // The compare panel may have painted while the modal was still display:none
+  // (demo data arrives synchronously), so fit once the frame has a size.
+  applyZoom();
+  if (!alreadyOpen) $("#previewClose").focus({ preventScroll: true });
 }
 
 /* Loads the before/after data for the item on show and paints the compare.
@@ -157,7 +187,7 @@ function paintPreview(data: Preview) {
   $("#previewAfter").setAttribute("src", data.after);
   $("#compareLoading").hidden = true;
   $("#compareFrame").hidden = false;
-  setComparePosition(50);
+  applyZoom();
 }
 
 function setComparePosition(position: number) {
@@ -169,10 +199,128 @@ function setComparePosition(position: number) {
   handle.setAttribute("aria-valuetext", `${Math.round(comparePosition)}%`);
 }
 
+/* ---- zoom & paging -------------------------------------------------- */
+
+/* Source-pixel size of the picture on screen. previewData carries it even
+   before the <img> has decoded, so the first fit is already correct. */
+function imageSize(): { w: number; h: number } {
+  const data = previewData;
+  return {
+    w: data?.beforeWidth || data?.width || 0,
+    h: data?.beforeHeight || data?.height || 0,
+  };
+}
+
+/* CSS px per source px when the picture is contained in the frame. */
+function fitScaleFor(width: number, height: number): number {
+  const { w, h } = imageSize();
+  if (w <= 0 || h <= 0 || width <= 0 || height <= 0) return 1;
+  return Math.min(width / w, height / h);
+}
+
+function applyZoom() {
+  const frame = $("#compareFrame");
+  const rect = frame.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return;
+  const fit = fitScaleFor(rect.width, rect.height);
+  if (zoomMode === "fit") {
+    // Fit follows the frame: it is re-derived on every resize, and a change
+    // of frame size must never leave the picture cropped.
+    zoomScale = fit;
+    panX = 0;
+    panY = 0;
+  }
+  // 100% must stay reachable even when "fit" upscales a small picture.
+  const floor = Math.min(fit, 1);
+  zoomScale = Math.max(floor, Math.min(MAX_ZOOM, zoomScale));
+
+  const { w, h } = imageSize();
+  const maxX = Math.max(0, (w * zoomScale - rect.width) / 2);
+  const maxY = Math.max(0, (h * zoomScale - rect.height) / 2);
+  panX = Math.max(-maxX, Math.min(maxX, panX));
+  panY = Math.max(-maxY, Math.min(maxY, panY));
+
+  frame.style.setProperty("--compare-zoom", String(zoomScale / fit));
+  frame.style.setProperty("--compare-pan-x", `${panX}px`);
+  frame.style.setProperty("--compare-pan-y", `${panY}px`);
+  frame.classList.toggle("zoomed", maxX > 0.5 || maxY > 0.5);
+  $("#zoomReadout").textContent = `${Math.round(zoomScale * 100)}%`;
+  $$<HTMLButtonElement>("#zoomSeg button").forEach((button) => {
+    const active = button.dataset.zoom === zoomMode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+/* Wheel zoom keeps the point under the cursor fixed: (c − pan) / k is the
+   source point under it; the new pan puts the same point back under c. */
+function zoomAt(event: WheelEvent) {
+  const frame = $("#compareFrame");
+  const rect = frame.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return;
+  if (!compareHintSeen) {
+    // Zooming is the other half of what the hint advertises; once the user
+    // has zoomed, it has done its job.
+    compareHintSeen = true;
+    $("#compareHint").classList.add("hidden");
+  }
+  const fit = fitScaleFor(rect.width, rect.height);
+  const floor = Math.min(fit, 1);
+  const next = Math.max(floor, Math.min(MAX_ZOOM, zoomScale * Math.exp(-event.deltaY * 0.0025)));
+  if (Math.abs(next - zoomScale) < 0.0001) return;
+  const k = zoomScale / fit;
+  const kNext = next / fit;
+  const cx = event.clientX - rect.left - rect.width / 2;
+  const cy = event.clientY - rect.top - rect.height / 2;
+  panX = cx - ((cx - panX) / k) * kNext;
+  panY = cy - ((cy - panY) / k) * kNext;
+  zoomScale = next;
+  // Landing exactly on fit or on 1:1 is what the two buttons mean; showing
+  // neither as active there would claim the view is somewhere else.
+  zoomMode = Math.abs(next - fit) < 0.0001 ? "fit" : Math.abs(next - 1) < 0.0001 ? "100" : "custom";
+  applyZoom();
+}
+
+/* The rows the preview may page through, in the queue's display order. The
+   compare tab needs a compressed result; the beautify tab also takes a fresh
+   capture. */
+function navigableIds(): number[] {
+  const byId = new Map(ctx.items().map((item) => [item.id, item]));
+  return ctx.visibleIds().filter((id) => {
+    const item = byId.get(id);
+    if (!item) return false;
+    return previewMode === "compare"
+      ? item.status === "done"
+      : item.status === "done" || item.status === "ready";
+  });
+}
+
+function syncPreviewNav() {
+  const ids = navigableIds();
+  const index = selectedId === null ? -1 : ids.indexOf(selectedId);
+  $("#previewNav").hidden = ids.length < 2 || index < 0;
+  $("#previewCount").textContent = index >= 0 ? `${index + 1} / ${ids.length}` : "";
+  $<HTMLButtonElement>("#previewPrev").disabled = index <= 0;
+  $<HTMLButtonElement>("#previewNext").disabled = index < 0 || index >= ids.length - 1;
+}
+
+function stepPreview(delta: number) {
+  const ids = navigableIds();
+  const index = selectedId === null ? -1 : ids.indexOf(selectedId);
+  const next = index + delta;
+  if (index < 0 || next < 0 || next >= ids.length) return;
+  const id = ids[next];
+  if (id === undefined) return;
+  void openPreview(id, previewMode);
+}
+
 function bindCompare() {
   const compare = $("#compare");
+  const frame = $("#compareFrame");
   const handle = $("#compareHandle");
   let dragging = false;
+  let panning = false;
+  let panStart = { x: 0, y: 0, panX: 0, panY: 0 };
 
   const update = (event: PointerEvent) => {
     const rect = compare.getBoundingClientRect();
@@ -186,21 +334,62 @@ function bindCompare() {
 
   compare.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
+    const origin = event.target as HTMLElement;
+    if (origin.closest("#compareZoom")) return;
+    // Zoomed in, a drag on the picture pans it; the split line keeps its own
+    // drag (knob or line) so both gestures stay available (#21).
+    if (!handle.contains(origin) && frame.classList.contains("zoomed")) {
+      panning = true;
+      panStart = { x: event.clientX, y: event.clientY, panX, panY };
+      frame.classList.add("panning");
+      compare.setPointerCapture(event.pointerId);
+      event.preventDefault();
+      return;
+    }
     dragging = true;
     handle.classList.add("dragging");
     compare.setPointerCapture(event.pointerId);
     update(event);
   });
   compare.addEventListener("pointermove", (event) => {
+    if (panning) {
+      panX = panStart.panX + (event.clientX - panStart.x);
+      panY = panStart.panY + (event.clientY - panStart.y);
+      applyZoom();
+      return;
+    }
     if (!dragging) return;
     update(event);
   });
   const end = () => {
     dragging = false;
+    panning = false;
     handle.classList.remove("dragging");
+    frame.classList.remove("panning");
   };
   compare.addEventListener("pointerup", end);
   compare.addEventListener("pointercancel", end);
+
+  frame.addEventListener("wheel", (event) => {
+    if ((event.target as HTMLElement).closest("#compareZoom")) return;
+    // Non-passive: the preview must zoom, not scroll the page under it.
+    event.preventDefault();
+    zoomAt(event);
+  }, { passive: false });
+
+  $("#zoomSeg").addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-zoom]");
+    if (!button) return;
+    zoomMode = button.dataset.zoom === "100" ? "100" : "fit";
+    // Choosing a named level re-centres; panning afterwards keeps working
+    // because applyZoom only derives pan in "fit" mode (#21).
+    zoomScale = zoomMode === "100" ? 1 : zoomScale;
+    panX = 0;
+    panY = 0;
+    applyZoom();
+  });
+  window.addEventListener("resize", applyZoom);
+
   handle.addEventListener("keydown", (event) => {
     if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
       event.preventDefault();
@@ -374,6 +563,7 @@ async function renderBeautify() {
 }
 
 function switchPreviewMode(mode: "compare" | "beautify") {
+  previewMode = mode;
   const compare = mode === "compare";
   $("#compare").hidden = !compare;
   $("#beautify").hidden = compare;
@@ -389,6 +579,7 @@ function switchPreviewMode(mode: "compare" | "beautify") {
   // data (cached after the first load), 美化 renders the tuned style.
   if (compare) void loadCompare();
   else void renderBeautify();
+  syncPreviewNav();
 }
 
 /* Applies the tuned style: the backend writes 原名-美化.png beside the
@@ -486,8 +677,27 @@ function bindBeautify() {
   $("#beautifyApply").addEventListener("click", () => void applyBeautify());
 }
 
+/* ←/→ page through the queue while the preview is open. The focused split
+   handle keeps the arrows for its own slider, and text fields keep them for
+   the cursor (#21). */
+function bindPreviewKeys() {
+  document.addEventListener("keydown", (event) => {
+    if (!$("#previewModal").classList.contains("open")) return;
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("#compareHandle")) return;
+    if (target?.closest("input, textarea, select") || target?.isContentEditable) return;
+    event.preventDefault();
+    stepPreview(event.key === "ArrowRight" ? 1 : -1);
+  });
+  $("#previewPrev").addEventListener("click", () => stepPreview(-1));
+  $("#previewNext").addEventListener("click", () => stepPreview(1));
+}
+
 /* Wires the whole modal: compare slider and beautify workbench. */
 export function bindPreview() {
   bindCompare();
+  bindPreviewKeys();
   bindBeautify();
 }

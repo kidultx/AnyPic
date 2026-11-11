@@ -297,6 +297,12 @@
             </div>
           </div>
           <div class="preview-head-actions">
+            <div class="preview-nav" id="previewNav" role="group" aria-label="切换图片">
+              <button class="icon-btn" id="previewPrev" type="button" aria-label="上一张" title="上一张（←）"><svg aria-hidden="true" class="icon"><use href="#i-chevron" /></svg></button>
+              <span class="preview-count" id="previewCount" aria-live="polite">1 / 1</span>
+              <button class="icon-btn" id="previewNext" type="button" aria-label="下一张" title="下一张（→）"><svg aria-hidden="true" class="icon"><use href="#i-chevron" /></svg></button>
+            </div>
+            <span class="queue-divider" aria-hidden="true"></span>
             <div class="preview-tabs" id="previewTabs" role="tablist" aria-label="预览模式">
               <button class="preview-tab active" data-mode="compare" role="tab" aria-selected="true">对比</button>
               <button class="preview-tab" data-mode="beautify" role="tab" aria-selected="false">美化</button>
@@ -322,7 +328,14 @@
               <span class="compare-line"></span>
               <span class="compare-knob"><svg aria-hidden="true" class="icon"><use href="#i-compare" /></svg></span>
             </div>
-            <div class="compare-hint" id="compareHint">拖动分割线查看细节</div>
+            <div class="compare-hint" id="compareHint">拖动分割线对比 · 滚轮缩放</div>
+            <div class="compare-zoom" id="compareZoom">
+              <div class="segmented zoom-seg" id="zoomSeg" role="group" aria-label="缩放">
+                <button type="button" id="zoomFit" data-zoom="fit" aria-pressed="true">适应窗口</button>
+                <button type="button" id="zoom100" data-zoom="100" aria-pressed="false">100%</button>
+              </div>
+              <span class="zoom-readout" id="zoomReadout">100%</span>
+            </div>
           </div>
         </div>
         <div class="beautify" id="beautify" hidden>
