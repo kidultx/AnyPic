@@ -1,7 +1,7 @@
 import { AnyPic, events, type Batch, type Item, type Preview, type Settings, type Snapshot, type UpdateInfo } from "./mygo";
 import { isMyGo, onFileDrop, runtime } from "mygo-runtime";
 import { $, $$, closeModal, esc, formatBytes, formatDimensions, icon, openModal, pct, showError, shortenPath, showToast } from "./ui";
-import { errorCodes, onSystemLanguageChange, setLanguage, t } from "./i18n";
+import { errorCodes, language, onSystemLanguageChange, setLanguage, t } from "./i18n";
 import { bindPreview, closePreview, initPreview, invalidatePreview, openPreview, previewSelectedId } from "./preview";
 import { ensureQueueFocus, initQueueKeys, queueFocusAfterRemoval, queueRowFocus, queueRowKeys, queueRowTabIndex } from "./queue-keys";
 import { DEFAULT_SHORTCUT, acceleratorFromEvent, formatShortcut, isReservedShortcut, setShortcutPlatform } from "./shortcuts";
@@ -604,7 +604,7 @@ function createRow(id: number): HTMLElement {
   row.dataset.id = String(id);
   row.innerHTML = `
     <label class="item-select">
-      <input type="checkbox" data-select aria-label="${esc(t.selectThisImage())}" />
+      <input type="checkbox" data-select />
     </label>
     <div class="thumb">
       <div class="thumb-placeholder">${icon("image")}</div>
@@ -620,10 +620,10 @@ function createRow(id: number): HTMLElement {
       <span class="saving-pill"></span>
     </div>
     <div class="item-actions">
-      <button class="icon-btn" data-action="preview" title="${esc(t.comparePreview())}" aria-label="${esc(t.comparePreview())}">${icon("eye")}</button>
-      <button class="icon-btn" data-action="decorate" title="${esc(t.beautifyWithCurrent())}" aria-label="${esc(t.beautify())}">${icon("sparkle")}</button>
-      <button class="icon-btn" data-action="export" title="${esc(t.exportThis())}" aria-label="${esc(t.exportThis())}">${icon("download")}</button>
-      <button class="icon-btn" data-action="remove" title="${esc(t.remove())}" aria-label="${esc(t.remove())}">${icon("x")}</button>
+      <button class="icon-btn" data-action="preview">${icon("eye")}</button>
+      <button class="icon-btn" data-action="decorate">${icon("sparkle")}</button>
+      <button class="icon-btn" data-action="export">${icon("download")}</button>
+      <button class="icon-btn" data-action="remove">${icon("x")}</button>
     </div>`;
 
   const checkbox = row.querySelector<HTMLInputElement>("input[data-select]")!;
@@ -658,7 +658,27 @@ function createRow(id: number): HTMLElement {
   return row;
 }
 
+/* What a row's controls are called. A row outlives a language change, so
+   updateRow re-applies these whenever the row is not in the page's language
+   (#32); the decorate tooltip depends on the image and stays in updateRow. */
+function labelRow(row: HTMLElement) {
+  const name = (selector: string, text: string, tip = true) => {
+    const control = row.querySelector<HTMLElement>(selector)!;
+    control.setAttribute("aria-label", text);
+    if (tip) control.title = text;
+  };
+  name("input[data-select]", t.selectThisImage(), false);
+  name('[data-action="preview"]', t.comparePreview());
+  name('[data-action="decorate"]', t.beautify(), false);
+  name('[data-action="export"]', t.exportThis());
+  name('[data-action="remove"]', t.remove());
+}
+
 function updateRow(row: HTMLElement, item: Item) {
+  if (row.dataset.lang !== language) {
+    labelRow(row);
+    row.dataset.lang = language;
+  }
   row.dataset.id = String(item.id);
   row.title = item.path ? `${item.name}\n${item.path}` : item.name;
   row.classList.toggle("is-clickable", item.status === "done" || item.status === "error");

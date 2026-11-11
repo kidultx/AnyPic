@@ -403,3 +403,50 @@ func TestIssue32SavingTheLanguageSwitchesAtOnce(t *testing.T) {
 		t.Errorf("language listener ran %d times after an unchanged save, want 1 (#32)", calls)
 	}
 }
+
+// TestIssue32QueueRowsFollowALanguageChange: a queue row is built once and
+// reused for as long as its image stays in the list, so anything createRow
+// writes from the catalog keeps the language of the moment the image was
+// added. The tooltips and screen-reader labels of a row's controls did
+// exactly that — 「对比预览」「导出这张」「移除」 stayed on every queued image
+// after switching to English. They have to be applied by updateRow, which
+// runs again on every render, whenever the row's language is not the page's.
+func TestIssue32QueueRowsFollowALanguageChange(t *testing.T) {
+	raw, err := os.ReadFile("src/main.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := string(raw)
+	labels := []string{"t.selectThisImage(", "t.comparePreview(", "t.beautify(", "t.exportThis(", "t.remove("}
+
+	create, _, _, ok := functionBody(ts, "createRow")
+	if !ok {
+		t.Fatal("src/main.ts: no createRow function")
+	}
+	for _, label := range labels {
+		if strings.Contains(create, label) {
+			t.Errorf("src/main.ts: createRow writes %s) into the row once — a row outlives a language change, so the label stays in the old language (#32)", label)
+		}
+	}
+
+	relabel, _, _, ok := functionBody(ts, "labelRow")
+	if !ok {
+		t.Fatal("src/main.ts: no labelRow function — the labels of a row's controls have nowhere to be re-applied from (#32)")
+	}
+	for _, label := range labels {
+		if !strings.Contains(relabel, label) {
+			t.Errorf("src/main.ts: labelRow does not apply %s) (#32)", label)
+		}
+	}
+
+	update, _, _, ok := functionBody(ts, "updateRow")
+	if !ok {
+		t.Fatal("src/main.ts: no updateRow function")
+	}
+	if !strings.Contains(update, "labelRow(") {
+		t.Error("src/main.ts: updateRow never calls labelRow — rows already in the queue keep the labels of the language they were created in (#32)")
+	}
+	if !regexp.MustCompile(`row\.dataset\.lang\s*!==\s*language`).MatchString(update) {
+		t.Error("src/main.ts: updateRow does not compare the row's language with the page's — relabel when they differ, not on every update (#32)")
+	}
+}
