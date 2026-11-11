@@ -74,12 +74,28 @@ main.ts 只提供状态（`QueueKeysContext`）。
 
 守卫：`TestIssue20QueueIsAKeyboardList`。
 
+## 字号、圆角与控件高度（#23）
+
+三组阶梯都定义在 `src/style.css` 的 `:root` 里，token 注释写明每档用途。
+新控件不是新数值，而是最近的一档：
+
+| 组 | token | 档位 | 用在哪 |
+| --- | --- | --- | --- |
+| 字号 | `--fs-micro` / `--fs-small` / `--fs-body` / `--fs-title` / `--fs-display` | 11 / 12 / 13 / 15 / 18 | 元信息与徽标 / 次级标签与按钮 / 正文与行名 / 标题与主操作 / 空状态大标题 |
+| 圆角 | `--radius-control` / `--radius-card` / `--radius-dialog` / `--radius-pill` | 6 / 10 / 14 / 全圆 | 按钮、输入、页签 / 卡片、菜单、浮层 / 对话框 / 开关与徽标 |
+| 控件高度 | `--control-sm` / `--control-md` | 26 / 32 | 页签、图标按钮、次级小按钮 / 按钮、输入、主操作 |
+
+规则：token 块之外不写 px 的 `font-size` 或 `border-radius`；百分比圆角
+（`50%`、logo 的 `23%`）与 `inherit` 描述形状而不是阶梯，可以留在规则里。
+半像素字号已全部移除。守卫：`TestIssue23TypeAndRadiusLadders`。
+
 ## 约束与执行
 
 | 约束 | 现在由谁执行 |
 | --- | --- |
 | 颜色一律 token：hex 只许住在 token 块里；阴影的 rgba 字面量允许但不新增 | `TestStyleColorsLiveInTokens` |
 | 不新增原生 `<select>`；例外 `maxDim`（`.select-wrap` 包装） | `TestNoNewNativeSelects` |
+| 字号 / px 圆角 / 控件高度只用阶梯 token | `TestIssue23TypeAndRadiusLadders` |
 | main.ts / style.css / index.html 大小预算 | `TestScriptAndStyleBudgets` |
 | 一次点击永不滚动页面；有长列表需求时先建 `scrollOnPurpose` 等价物再写功能 | 规则已立，review 时查 |
 | 动效尊重 `prefers-reduced-motion`；全站一条 easing | style.css `@media`；review 时查 |

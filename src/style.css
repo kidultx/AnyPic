@@ -32,6 +32,30 @@
   --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI",
     Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
 
+  /* Type and shape ladder (#23). Five text steps, three corner radii and two
+     control heights; a new value is not a new step, it is the nearest token.
+     --fs-micro: metadata, hints, badges, column headers.
+     --fs-small: secondary labels, buttons, tabs, field labels.
+     --fs-body: body text, row names, inputs.
+     --fs-title: section / dialog titles, the primary action, big readouts.
+     --fs-display: empty-state and overlay headlines.
+     --radius-control: buttons, inputs, tabs, chips, badges, focus rings.
+     --radius-card: cards, menus, toasts, floating controls.
+     --radius-dialog: dialogs and the drop overlay.
+     --radius-pill: switches, badges, the filter's fully rounded shape.
+     --control-sm / --control-md: the only two control heights. */
+  --fs-micro: 11px;
+  --fs-small: 12px;
+  --fs-body: 13px;
+  --fs-title: 15px;
+  --fs-display: 18px;
+  --radius-control: 6px;
+  --radius-card: 10px;
+  --radius-dialog: 14px;
+  --radius-pill: 999px;
+  --control-sm: 26px;
+  --control-md: 32px;
+
   /* The text ladder, measured on white (WCAG): --text 17:1 for body and
      titles, --text-soft 8.6:1 for secondary, --ctl-fg 5.3:1 the control's
      quiet text — chosen to stay 4.5:1 or better on every surface it sits on
@@ -298,7 +322,7 @@ body {
   background-color: var(--bg);
   color: var(--text);
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: var(--fs-body);
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -336,7 +360,7 @@ img {
 :focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
-  border-radius: 2px;
+  border-radius: var(--radius-control);
 }
 
 .svg-sprite {
@@ -364,10 +388,10 @@ kbd {
 .mod-key {
   padding: 1px 4px;
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: var(--radius-control);
   background-color: var(--card);
   color: var(--text-faint);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   font-weight: 500;
   line-height: 1.4;
   white-space: nowrap;
@@ -444,7 +468,7 @@ html.is-mac .titlebar {
 .wordmark {
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: var(--fs-title);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -467,15 +491,15 @@ html.is-mac .titlebar {
 }
 
 .titlebar-actions .secondary-btn {
-  height: 28px;
+  height: var(--control-sm);
 }
 
 .icon-btn {
   display: inline-grid;
   width: 28px;
-  height: 28px;
+  height: var(--control-sm);
   place-items: center;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   color: var(--muted);
   transition: background 0.1s ease, color 0.1s ease;
 }
@@ -532,7 +556,7 @@ html.is-mac .titlebar {
 .side-edge:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
 }
 
 body.side-drag,
@@ -551,7 +575,7 @@ body.side-drag * {
 .settings-block {
   padding: 10px 11px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background-color: var(--card);
   color: var(--text);
   box-shadow: var(--shadow-card);
@@ -572,14 +596,14 @@ body.side-drag * {
   margin: 0;
   color: var(--muted);
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   line-height: 1.4;
 }
 
 .text-button {
   color: var(--brand-foreground);
-  font-size: 12px;
+  font-size: var(--fs-small);
   font-weight: 600;
   transition: color 0.1s ease;
 }
@@ -614,14 +638,14 @@ body.side-drag * {
 .field-label label,
 .field-row > label {
   color: var(--text-soft);
-  font-size: 11.5px;
+  font-size: var(--fs-small);
   font-weight: 500;
 }
 
 .field-hint {
   overflow: hidden;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -631,15 +655,15 @@ body.side-drag * {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 2px;
   padding: 2px;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   background-color: var(--seg-track);
 }
 
 .segmented button {
-  height: 26px;
-  border-radius: 5px;
+  height: var(--control-sm);
+  border-radius: var(--radius-control);
   color: var(--ctl-fg);
-  font-size: 12px;
+  font-size: var(--fs-small);
   font-weight: 500;
   transition: background 0.1s ease, color 0.1s ease;
 }
@@ -660,7 +684,7 @@ body.side-drag * {
 
 .quality-readout {
   color: var(--text);
-  font-size: 14px;
+  font-size: var(--fs-title);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -668,7 +692,7 @@ body.side-drag * {
 .quality-readout small {
   margin-left: 1px;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 500;
 }
 
@@ -697,7 +721,7 @@ body.side-drag * {
 
 .range-wrap input::-webkit-slider-runnable-track {
   height: 4px;
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   background-color: var(--pill-hover);
 }
 
@@ -728,7 +752,7 @@ body.side-drag * {
   left: 0;
   width: 0;
   height: 4px;
-  border-radius: 2px;
+  border-radius: var(--radius-control);
   background-color: var(--brand);
   transform: translateY(-50%);
   pointer-events: none;
@@ -739,7 +763,7 @@ body.side-drag * {
   justify-content: space-between;
   margin-top: 2px;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: var(--fs-micro);
 }
 
 .quality-label {
@@ -764,7 +788,7 @@ body.side-drag * {
   margin-top: 6px;
   padding: 0;
   color: var(--ctl-fg);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 500;
   text-align: left;
 }
@@ -781,7 +805,7 @@ body.side-drag * {
 .field-note {
   margin: 5px 0 0;
   color: var(--ctl-fg);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   line-height: 1.45;
 }
 
@@ -797,11 +821,11 @@ body.side-drag * {
   justify-content: space-between;
   padding: 11px 12px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background-color: var(--card);
   box-shadow: var(--shadow-card);
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   line-height: 1.4;
   cursor: pointer;
@@ -860,14 +884,14 @@ body.side-drag * {
 
 .select-wrap select {
   width: 100%;
-  height: 32px;
+  height: var(--control-md);
   padding: 0 28px 0 10px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   outline: none;
   background-color: var(--pill);
   color: var(--text);
-  font-size: 12.5px;
+  font-size: var(--fs-small);
   font-weight: 500;
   cursor: pointer;
   appearance: none;
@@ -903,14 +927,14 @@ body.side-drag * {
 
 .text-input {
   width: 100%;
-  height: 32px;
+  height: var(--control-md);
   padding: 0 10px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   outline: none;
   background-color: var(--pill);
   color: var(--text);
-  font-size: 12.5px;
+  font-size: var(--fs-small);
   transition: background 0.12s ease, box-shadow 0.12s ease;
 }
 
@@ -937,7 +961,7 @@ body.side-drag * {
   padding-top: 10px;
   border-top: 1px solid var(--line-2);
   color: var(--ctl-fg);
-  font-size: 11.5px;
+  font-size: var(--fs-small);
   line-height: 1.45;
 }
 
@@ -952,7 +976,7 @@ body.side-drag * {
 .tip-card strong {
   display: block;
   color: var(--text-soft);
-  font-size: 11.5px;
+  font-size: var(--fs-small);
   font-weight: 600;
 }
 
@@ -970,7 +994,7 @@ body.side-drag * {
 .shortcut-row label {
   flex: none;
   color: var(--text-soft);
-  font-size: 12.5px;
+  font-size: var(--fs-small);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -978,16 +1002,16 @@ body.side-drag * {
 .shortcut-input {
   display: flex;
   min-width: 0;
-  height: 28px;
+  height: var(--control-sm);
   align-items: center;
   gap: 6px;
   padding: 0 6px 0 10px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   background-color: var(--pill);
   color: var(--text);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--fs-small);
   transition: background 0.12s ease, box-shadow 0.12s ease;
 }
 
@@ -1008,7 +1032,7 @@ body.side-drag * {
 .shortcut-value {
   overflow: hidden;
   font-family: var(--font-display);
-  font-size: 12.5px;
+  font-size: var(--fs-small);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-overflow: ellipsis;
@@ -1029,7 +1053,7 @@ body.side-drag * {
 .shortcut-hint {
   margin: 8px 0 0;
   color: var(--ctl-fg);
-  font-size: 11.5px;
+  font-size: var(--fs-small);
   line-height: 1.45;
 }
 
@@ -1040,7 +1064,7 @@ body.side-drag * {
   gap: 10px;
   margin-top: 9px;
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: var(--fs-small);
   font-weight: 500;
   cursor: pointer;
   user-select: none;
@@ -1063,7 +1087,7 @@ body.side-drag * {
   width: 32px;
   height: 19px;
   flex: 0 0 32px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background-color: var(--pill);
   box-shadow: inset 0 0 0 0.5px var(--line);
 }
@@ -1098,7 +1122,7 @@ body.side-drag * {
 .screen-permission {
   margin-top: 10px;
   padding: 0;
-  font-size: 11.5px;
+  font-size: var(--fs-small);
   font-weight: 500;
   text-align: left;
 }
@@ -1109,7 +1133,7 @@ body.side-drag * {
 
 .reset-location {
   margin-top: 6px;
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 500;
 }
 
@@ -1129,15 +1153,15 @@ body.side-drag * {
 .primary-btn {
   display: flex;
   width: 100%;
-  height: 60px;
+  height: var(--control-md);
   align-items: center;
   justify-content: center;
   gap: 10px;
   padding: 0 16px;
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   background-color: var(--brand-solid);
   color: var(--brand-ink);
-  font-size: 15px;
+  font-size: var(--fs-title);
   font-weight: 500;
   letter-spacing: 0.01em;
   box-shadow: var(--shadow-cta);
@@ -1166,8 +1190,8 @@ body.side-drag * {
 .primary-btn .mod-key {
   margin-left: auto;
   padding: 2px 6px;
-  border-radius: 5px;
-  font-size: 11px;
+  border-radius: var(--radius-control);
+  font-size: var(--fs-micro);
   border-color: var(--brand-key-border);
   background-color: var(--brand-key-bg);
   color: var(--brand-ink);
@@ -1181,10 +1205,10 @@ body.side-drag * {
 
 .primary-btn.compact {
   width: auto;
-  height: 30px;
+  height: var(--control-md);
   padding: 0 14px;
-  border-radius: 7px;
-  font-size: 12px;
+  border-radius: var(--radius-control);
+  font-size: var(--fs-small);
 }
 
 .primary-btn.compact .icon {
@@ -1195,7 +1219,7 @@ body.side-drag * {
 .cancel-btn {
   height: 24px;
   color: var(--danger);
-  font-size: 12px;
+  font-size: var(--fs-small);
   font-weight: 600;
 }
 
@@ -1239,7 +1263,7 @@ body.side-drag * {
   margin: 0;
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 16px;
+  font-size: var(--fs-title);
   font-weight: 600;
   line-height: 1.4;
   letter-spacing: -0.01em;
@@ -1252,10 +1276,10 @@ body.side-drag * {
   align-items: center;
   justify-content: center;
   padding: 0 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background-color: var(--pill);
   color: var(--ctl-fg);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 500;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -1266,22 +1290,22 @@ body.side-drag * {
   align-items: center;
   gap: 4px;
   color: var(--warning);
-  font-size: 12px;
+  font-size: var(--fs-small);
   font-weight: 600;
 }
 
 .secondary-btn {
   display: inline-flex;
-  height: 32px;
+  height: var(--control-md);
   align-items: center;
   justify-content: center;
   gap: 6px;
   padding: 0 12px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background-color: var(--card);
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: var(--fs-small);
   font-weight: 500;
   white-space: nowrap;
   box-shadow: var(--btn-edge);
@@ -1310,10 +1334,10 @@ body.side-drag * {
 }
 
 .secondary-btn.small {
-  height: 28px;
+  height: var(--control-sm);
   padding: 0 10px;
-  border-radius: 7px;
-  font-size: 12px;
+  border-radius: var(--radius-control);
+  font-size: var(--fs-small);
 }
 
 .secondary-btn .icon {
@@ -1324,10 +1348,10 @@ body.side-drag * {
 
 .view-switch {
   display: flex;
-  height: 32px;
+  height: var(--control-md);
   gap: 2px;
   padding: 2px;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   background-color: var(--seg-track);
 }
 
@@ -1336,7 +1360,7 @@ body.side-drag * {
   width: 34px;
   height: 100%;
   place-items: center;
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   color: var(--ctl-fg);
   transition: background 0.1s ease, color 0.1s ease;
 }
@@ -1363,7 +1387,7 @@ body.side-drag * {
   gap: 14px;
   margin: 0;
   color: var(--text-faint);
-  font-size: 12px;
+  font-size: var(--fs-small);
   line-height: 1;
   white-space: nowrap;
 }
@@ -1371,7 +1395,7 @@ body.side-drag * {
 .stage-summary strong {
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 12.5px;
+  font-size: var(--fs-small);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -1430,7 +1454,7 @@ body.side-drag * {
   justify-content: center;
   padding: 48px 32px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background-color: var(--card);
   box-shadow: var(--shadow-card);
   text-align: center;
@@ -1455,7 +1479,7 @@ body.side-drag * {
   margin: 0;
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 16px;
+  font-size: var(--fs-title);
   font-weight: 600;
   line-height: 1.44;
 }
@@ -1463,7 +1487,7 @@ body.side-drag * {
 .empty-state p {
   margin: 4px 0 0;
   color: var(--ctl-fg);
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 
 .empty-actions {
@@ -1472,17 +1496,17 @@ body.side-drag * {
   gap: 12px;
   margin-top: 20px;
   color: var(--ctl-fg);
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 
 .empty-actions .primary-btn {
-  height: 34px;
+  height: var(--control-md);
   padding: 0 16px;
 }
 
 .empty-state .empty-hint {
   margin-top: 14px;
-  font-size: 11.5px;
+  font-size: var(--fs-small);
 }
 
 /* ---------- queue ---------- */
@@ -1494,7 +1518,7 @@ body.side-drag * {
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background-color: var(--surface);
   box-shadow: var(--shadow-card);
 }
@@ -1511,21 +1535,21 @@ body.side-drag * {
 
 .queue-tabs {
   display: flex;
-  height: 30px;
+  height: var(--control-md);
   align-items: center;
   gap: 2px;
   padding: 2px;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   background-color: var(--seg-track);
 }
 
 .queue-tab {
   position: relative;
-  height: 26px;
+  height: var(--control-sm);
   padding: 0 10px;
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   color: var(--ctl-fg);
-  font-size: 12px;
+  font-size: var(--fs-small);
   font-weight: 500;
   white-space: nowrap;
   transition: background 0.1s ease, color 0.1s ease;
@@ -1533,7 +1557,7 @@ body.side-drag * {
 
 .queue-tab span {
   margin-left: 4px;
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -1565,7 +1589,7 @@ body.side-drag * {
 }
 
 .queue-tools .view-switch {
-  height: 30px;
+  height: var(--control-md);
 }
 
 .queue-tools .view-switch button {
@@ -1583,7 +1607,7 @@ body.side-drag * {
   border-bottom: 1px solid var(--line-2);
   background-color: var(--card-2);
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: var(--fs-small);
   font-weight: 500;
 }
 
@@ -1637,7 +1661,7 @@ body.side-drag * {
   overflow: hidden;
   place-items: center;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background-color: var(--pill);
 }
 
@@ -1698,7 +1722,7 @@ body.side-drag * {
   margin: 0;
   overflow: hidden;
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--fs-body);
   font-weight: 600;
   line-height: 1.4;
   text-overflow: ellipsis;
@@ -1710,7 +1734,7 @@ body.side-drag * {
 .item-state {
   margin-left: 6px;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 400;
 }
 
@@ -1721,7 +1745,7 @@ body.side-drag * {
   margin-top: 2px;
   overflow: hidden;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   white-space: nowrap;
 }
 
@@ -1735,10 +1759,10 @@ body.side-drag * {
   height: 18px;
   align-items: center;
   padding: 0 7px;
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   background-color: var(--pill);
   color: var(--ctl-fg);
-  font-size: 10.5px;
+  font-size: var(--fs-micro);
   font-weight: 500;
   letter-spacing: 0.02em;
 }
@@ -1755,7 +1779,7 @@ body.side-drag * {
   margin-top: 2px;
   overflow: hidden;
   color: var(--danger);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1774,14 +1798,14 @@ body.side-drag * {
   align-items: center;
   gap: 8px;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .result-sizes strong {
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--fs-body);
   font-weight: 600;
 }
 
@@ -1797,10 +1821,10 @@ body.side-drag * {
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background-color: var(--success-soft);
   color: var(--success);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -1842,8 +1866,8 @@ body.side-drag * {
 
 .item-actions .icon-btn {
   width: 28px;
-  height: 28px;
-  border-radius: 7px;
+  height: var(--control-sm);
+  border-radius: var(--radius-control);
 }
 
 .item-actions .icon {
@@ -1859,7 +1883,7 @@ body.side-drag * {
 .queue-empty-filter {
   padding: 40px 16px;
   color: var(--ctl-fg);
-  font-size: 12px;
+  font-size: var(--fs-small);
   text-align: center;
 }
 
@@ -1880,7 +1904,7 @@ body.side-drag * {
   gap: 8px;
   padding: 8px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   background-color: var(--card);
 }
 
@@ -1891,7 +1915,7 @@ body.side-drag * {
 .queue-list.grid .thumb {
   width: 100%;
   height: 130px;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
 }
 
 .queue-list.grid .item-main {
@@ -1899,7 +1923,7 @@ body.side-drag * {
 }
 
 .queue-list.grid .item-name {
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 
 .queue-list.grid .item-result {
@@ -1921,7 +1945,7 @@ body.side-drag * {
 
 .queue-list.grid .item-actions .icon-btn {
   width: 26px;
-  height: 26px;
+  height: var(--control-sm);
 }
 
 /* ---------- footer ---------- */
@@ -1951,7 +1975,7 @@ body.side-drag * {
   flex: 0 1 auto;
   min-width: 0;
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: var(--fs-small);
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1959,7 +1983,7 @@ body.side-drag * {
 
 .footer-open {
   flex: 0 0 auto;
-  font-size: 11.5px;
+  font-size: var(--fs-small);
   white-space: nowrap;
 }
 
@@ -1967,7 +1991,7 @@ body.side-drag * {
   flex: 0 0 auto;
   min-width: 30px;
   color: var(--text-faint);
-  font-size: 11.5px;
+  font-size: var(--fs-small);
   font-weight: 500;
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -1978,7 +2002,7 @@ body.side-drag * {
   min-width: 40px;
   height: 4px;
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background-color: var(--line);
 }
 
@@ -2024,7 +2048,7 @@ body.side-drag * {
   align-items: center;
   justify-content: center;
   border: 2px dashed var(--drop-border);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   background-color: var(--drop-surface);
   color: var(--drop-text);
   box-shadow: var(--shadow-float);
@@ -2036,7 +2060,7 @@ body.side-drag * {
   height: 48px;
   margin-bottom: 20px;
   place-items: center;
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   background-color: var(--brand-soft);
   color: var(--brand-foreground);
 }
@@ -2049,14 +2073,14 @@ body.side-drag * {
 .drop-overlay-inner h3 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 18px;
+  font-size: var(--fs-display);
   font-weight: 600;
 }
 
 .drop-overlay-inner p {
   margin: 4px 0 0;
   color: var(--drop-text-muted);
-  font-size: 12.5px;
+  font-size: var(--fs-small);
 }
 
 /* ---------- modals ---------- */
@@ -2088,7 +2112,7 @@ body.side-drag * {
 .about-card,
 .prefs-card {
   position: relative;
-  border-radius: 14px;
+  border-radius: var(--radius-dialog);
   background-color: var(--card);
   color: var(--text);
   box-shadow: var(--shadow-modal);
@@ -2125,7 +2149,7 @@ body.side-drag * {
   overflow: hidden;
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 16px;
+  font-size: var(--fs-title);
   font-weight: 600;
   line-height: 1.38;
   text-overflow: ellipsis;
@@ -2137,7 +2161,7 @@ body.side-drag * {
   overflow: hidden;
   max-width: 640px;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2160,7 +2184,7 @@ body.side-drag * {
 .preview-count {
   min-width: 42px;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
@@ -2181,16 +2205,16 @@ body.side-drag * {
   gap: 2px;
   padding: 2px;
   background-color: var(--pill);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
 }
 
 .preview-tab {
   padding: 4px 14px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: none;
   color: var(--ctl-fg);
-  font-size: 12px;
+  font-size: var(--fs-small);
   font-weight: 600;
   cursor: pointer;
 }
@@ -2224,7 +2248,7 @@ body.side-drag * {
   gap: 12px;
   background-color: var(--preview-bg);
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 
 .compare-loading p {
@@ -2282,10 +2306,10 @@ body.side-drag * {
   z-index: 5;
   top: 12px;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background-color: var(--compare-label-bg);
   color: var(--compare-label-text);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   line-height: 1.3;
   pointer-events: none;
@@ -2349,10 +2373,10 @@ body.side-drag * {
   bottom: 16px;
   left: 50%;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background-color: var(--compare-hint-bg);
   color: var(--compare-hint-ink);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   transform: translateX(-50%);
   transition: opacity 0.18s ease;
   pointer-events: none;
@@ -2373,7 +2397,7 @@ body.side-drag * {
   align-items: center;
   gap: 8px;
   padding: 3px 8px 3px 3px;
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   background-color: var(--card);
   box-shadow: var(--shadow-float);
 }
@@ -2387,7 +2411,7 @@ body.side-drag * {
   padding-left: 8px;
   border-left: 1px solid var(--line);
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -2412,7 +2436,7 @@ body.side-drag * {
 .preview-stats strong {
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 16px;
+  font-size: var(--fs-title);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -2430,14 +2454,14 @@ body.side-drag * {
 .preview-save {
   margin-left: 4px;
   color: var(--success);
-  font-size: 12.5px;
+  font-size: var(--fs-small);
   font-weight: 600;
 }
 
 .preview-details {
   overflow: hidden;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2508,7 +2532,7 @@ body.side-drag * {
 
 .beautify-label {
   color: var(--ctl-fg);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 600;
 }
 
@@ -2547,7 +2571,7 @@ body.side-drag * {
 
 .gradient-chip {
   width: 34px;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
 }
 
 /* The custom color input is styled as one more swatch so the picker does not
@@ -2612,7 +2636,7 @@ body.side-drag * {
   margin: 0;
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: var(--fs-title);
   font-weight: 600;
   line-height: 1.4;
 }
@@ -2620,7 +2644,7 @@ body.side-drag * {
 .confirm-card p {
   margin: 6px 0 20px;
   color: var(--text-soft);
-  font-size: 13px;
+  font-size: var(--fs-body);
   line-height: 1.54;
 }
 
@@ -2632,14 +2656,14 @@ body.side-drag * {
 
 .danger-btn {
   display: inline-flex;
-  height: 32px;
+  height: var(--control-md);
   align-items: center;
   justify-content: center;
   padding: 0 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background-color: var(--danger-solid);
   color: var(--danger-ink);
-  font-size: 12px;
+  font-size: var(--fs-small);
   font-weight: 500;
   transition: background 0.1s ease, scale 0.15s ease;
 }
@@ -2681,7 +2705,7 @@ body.side-drag * {
   margin: 0;
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: var(--fs-title);
   font-weight: 600;
 }
 
@@ -2728,7 +2752,7 @@ body.side-drag * {
   margin: 0;
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 18px;
+  font-size: var(--fs-display);
   font-weight: 600;
   line-height: 1.33;
 }
@@ -2736,13 +2760,13 @@ body.side-drag * {
 .about-version {
   margin: 1px 0 0;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: var(--fs-micro);
 }
 
 .about-desc {
   margin: 16px 0;
   color: var(--text-soft);
-  font-size: 13px;
+  font-size: var(--fs-body);
   line-height: 1.54;
 }
 
@@ -2757,7 +2781,7 @@ body.side-drag * {
   justify-content: space-between;
   padding: 8px 0;
   border-bottom: 1px solid var(--line);
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 
 .about-facts dt {
@@ -2790,7 +2814,7 @@ body.side-drag * {
   margin: 0;
   min-width: 0;
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 
 .about-update-status strong {
@@ -2828,11 +2852,11 @@ body.side-drag * {
   gap: 12px;
   padding: 8px 16px;
   border: 0;
-  border-radius: 11px;
+  border-radius: var(--radius-card);
   background-color: var(--toast-bg);
   color: var(--toast-text);
   box-shadow: var(--shadow-float);
-  font-size: 12.5px;
+  font-size: var(--fs-small);
   line-height: 1.44;
   pointer-events: auto;
   animation: toast-in 0.16s ease-out;
@@ -2854,7 +2878,7 @@ body.side-drag * {
   height: 28px;
   flex: 0 0 28px;
   place-items: center;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background-color: var(--brand-soft);
 }
 
@@ -2882,7 +2906,7 @@ body.side-drag * {
 .toast-action {
   margin-left: 4px;
   color: var(--toast-action);
-  font-size: 12px;
+  font-size: var(--fs-small);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -2921,7 +2945,7 @@ body.side-drag * {
 
 ::-webkit-scrollbar-thumb {
   border: 3px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background-color: var(--scrollbar);
   background-clip: padding-box;
 }
@@ -3021,7 +3045,7 @@ body.side-drag * {
    inside the row so it is not clipped by the scroll container. */
 .queue-item:focus-visible {
   outline-offset: -2px;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
 }
 
 .queue-item.is-selected {
@@ -3039,7 +3063,7 @@ body.side-drag * {
   gap: 1px;
   padding: 4px;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-card);
   background-color: var(--card);
   box-shadow: var(--shadow-float);
 }
@@ -3053,9 +3077,9 @@ body.side-drag * {
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--fs-small);
   text-align: left;
 }
 
@@ -3098,7 +3122,7 @@ body.side-drag * {
   left: 10px;
   z-index: 2;
   padding: 3px;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background-color: var(--card);
 }
 
@@ -3109,7 +3133,7 @@ body.side-drag * {
   min-width: 0;
   align-items: center;
   gap: 14px;
-  font-size: 13px;
+  font-size: var(--fs-body);
   color: var(--text-soft);
   white-space: nowrap;
 }
@@ -3120,13 +3144,13 @@ body.side-drag * {
 
 .queue-filter {
   width: 160px;
-  height: 30px;
+  height: var(--control-md);
   padding: 0 10px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background-color: var(--field);
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--fs-body);
 }
 
 .queue-filter::placeholder {
@@ -3149,10 +3173,10 @@ body.side-drag * {
   height: 18px;
   align-items: center;
   padding: 0 7px;
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   background-color: var(--primary-soft);
   color: var(--primary);
-  font-size: 10.5px;
+  font-size: var(--fs-micro);
   font-weight: 500;
   letter-spacing: 0.02em;
 }

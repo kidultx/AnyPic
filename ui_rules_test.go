@@ -113,7 +113,9 @@ func TestNoNewNativeSelects(t *testing.T) {
 // preview.ts, where the zoom/pan and paging state lives, is not in this
 // ledger yet. #20 grew style.css to 60,571 and index.html to 32,423: the row
 // focus ring and the right-click menu's surface; its behaviour moved to
-// src/queue-keys.ts rather than pushing main.ts past its line.
+// src/queue-keys.ts rather than pushing main.ts past its line. #23 replaced
+// every literal font-size and px radius with a token, so style.css carries the
+// longer names (63,599): the ladder is the point, not a hidden growth.
 var uiBudgets = []struct {
 	file   string
 	budget int
@@ -121,7 +123,7 @@ var uiBudgets = []struct {
 	{"src/main.ts", 80_200},
 	{"src/shortcuts.ts", 4_200},
 	{"src/queue-keys.ts", 12_300},
-	{"src/style.css", 61_400},
+	{"src/style.css", 64_800},
 	{"index.html", 32_900},
 }
 
@@ -1195,6 +1197,83 @@ func TestIssue20QueueIsAKeyboardList(t *testing.T) {
 	for _, want := range []string{"queueRowKeys(", "queueRowTabIndex("} {
 		if !strings.Contains(string(main), want) {
 			t.Errorf("src/main.ts: rows are not wired to %s (#20)", want)
+		}
+	}
+}
+
+// TestIssue23TypeAndRadiusLadders guards #23: eleven font sizes (10 to 18,
+// half-pixel steps included), nearly every integer radius from 2 to 14, and
+// seven control heights. Adjacent elements differed by 0.5px of type and 1px
+// of corner — hierarchy was invisible, only misalignment showed. The
+// contract:
+//
+//   - five text steps, three corner radii (control / card / dialog) and two
+//     control heights, defined once in the :root token block with a note
+//     saying what each step is for;
+//   - outside that block no literal px font-size or border-radius — a new
+//     value is not a new step, pick the nearest token. Percentage radii
+//     (circle, squircle) and `inherit` describe a shape, not a step.
+func TestIssue23TypeAndRadiusLadders(t *testing.T) {
+	raw, err := os.ReadFile("src/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := stripBlockComments(string(raw))
+	tokens := tokenLines(css)
+
+	fsDecl := regexp.MustCompile(`font-size:\s*([^;]+)`)
+	radiusDecl := regexp.MustCompile(`border-radius:\s*([^;]+)`)
+	for i, line := range strings.Split(css, "\n") {
+		if tokens[i+1] {
+			continue
+		}
+		for _, m := range fsDecl.FindAllStringSubmatch(line, -1) {
+			if !strings.HasPrefix(strings.TrimSpace(m[1]), "var(--fs-") {
+				t.Errorf("src/style.css:%d: font-size %q outside the ladder — use a --fs-* token (#23)", i+1, strings.TrimSpace(m[1]))
+			}
+		}
+		for _, m := range radiusDecl.FindAllStringSubmatch(line, -1) {
+			value := strings.TrimSpace(m[1])
+			ok := strings.HasPrefix(value, "var(--radius-") ||
+				value == "50%" || value == "23%" || value == "inherit"
+			if !ok {
+				t.Errorf("src/style.css:%d: border-radius %q outside the ladder — use a --radius-* token (#23)", i+1, value)
+			}
+		}
+	}
+
+	// A half-pixel step is the exact thing being removed, token or not.
+	if decimal := regexp.MustCompile(`font-size:\s*[0-9]+\.[0-9]+px`).FindString(css); decimal != "" {
+		t.Errorf("src/style.css: fractional type size %s — the ladder is whole pixels (#23)", decimal)
+	}
+
+	fontSteps := regexp.MustCompile(`--fs-[a-z]+:\s*[0-9]+px`).FindAllString(css, -1)
+	if len(fontSteps) < 4 || len(fontSteps) > 5 {
+		t.Errorf("src/style.css: the type ladder has %d steps, want 4–5 (#23)", len(fontSteps))
+	}
+	radiusSteps := regexp.MustCompile(`--radius-(control|card|dialog):\s*[0-9]+px`).FindAllString(css, -1)
+	if len(radiusSteps) != 3 {
+		t.Errorf("src/style.css: the radius ladder has %d size steps, want 3 — control / card / dialog (#23)", len(radiusSteps))
+	}
+	for _, name := range []string{"--control-sm", "--control-md"} {
+		if !regexp.MustCompile(regexp.QuoteMeta(name) + `:\s*[0-9]+px`).MatchString(css) {
+			t.Errorf("src/style.css: no %s token — control heights are still ad hoc (#23)", name)
+		}
+	}
+
+	// The controls that set the app's rhythm must use the height tokens.
+	for _, pair := range [][2]string{
+		{".secondary-btn", "--control-md"},
+		{".text-input", "--control-md"},
+		{".segmented button", "--control-sm"},
+	} {
+		rule := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(pair[0]) + `\s*\{([^{}]*)\}`).FindStringSubmatch(css)
+		if rule == nil {
+			t.Errorf("src/style.css: no %s rule (#23)", pair[0])
+			continue
+		}
+		if !strings.Contains(rule[1], "var("+pair[1]+")") {
+			t.Errorf("src/style.css: %s does not use %s for its height (#23)", pair[0], pair[1])
 		}
 	}
 }
