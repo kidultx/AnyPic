@@ -441,20 +441,24 @@ function renderStage() {
 }
 
 function renderStats() {
-  const totalOriginal = items.reduce((sum, item) => sum + item.originalSize, 0);
   const done = items.filter((item) => item.status === "done");
   const doneOriginal = done.reduce((sum, item) => sum + item.originalSize, 0);
   const doneCompressed = done.reduce((sum, item) => sum + item.compressedSize, 0);
   const saved = Math.max(0, doneOriginal - doneCompressed);
   const savedPercent = doneOriginal > 0 ? (saved / doneOriginal) * 100 : 0;
+  const pending = items.length - done.length;
 
-  $("#statOriginal").textContent = formatBytes(totalOriginal);
+  // All three numbers describe the finished images; mixing in the originals
+  // still queued made the row's own arithmetic wrong (#31).
+  $("#statOriginal").textContent = done.length > 0 ? formatBytes(doneOriginal) : "暂无";
   $("#statCompressed").textContent = done.length > 0 ? formatBytes(doneCompressed) : "暂无";
   $("#statSaved").textContent = done.length > 0 ? `${Math.round(savedPercent)}%` : "暂无";
   $("#statSavedFoot").textContent =
     done.length === 0 ? "" : saved > 0 ? `（共 ${formatBytes(saved)}）` : "（无需压缩）";
   $("#summaryDone").style.display = done.length === 0 ? "none" : "";
   $("#summarySaved").style.display = done.length === 0 ? "none" : "";
+  $("#summaryPending").hidden = pending === 0;
+  $("#summaryPending").textContent = `另有 ${pending} 张未完成`;
 }
 
 function renderQueue() {

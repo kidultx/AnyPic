@@ -473,6 +473,34 @@ func TestIssue16ExitRemovalHasTimerFallback(t *testing.T) {
 	}
 }
 
+// TestIssue31SummarySamePopulation guards #31: the three header numbers must
+// describe the same images — the finished ones — and anything still pending is
+// stated separately. The old rule mixed all queue originals with the finished
+// output, so "20.3 MB → 2.3 MB · 74%" did not add up.
+func TestIssue31SummarySamePopulation(t *testing.T) {
+	stats, _, _, ok := functionBody(ruleSources(t)["src/main.ts"], "renderStats")
+	if !ok {
+		t.Fatalf("src/main.ts: no renderStats function (#31)")
+	}
+	if strings.Contains(stats, "totalOriginal") || strings.Contains(stats, "formatBytes(totalOriginal)") {
+		t.Errorf("src/main.ts: renderStats still feeds the all-items original total into the header; original, compressed and saved must share the finished set (#31)")
+	}
+	if !strings.Contains(stats, "formatBytes(doneOriginal)") {
+		t.Errorf("src/main.ts: the header's original total is not computed from the finished images (#31)")
+	}
+	if !strings.Contains(stats, "summaryPending") {
+		t.Errorf("src/main.ts: renderStats never fills #summaryPending; unprocessed images need a separate note (#31)")
+	}
+
+	html, err := os.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(html), `id="summaryPending"`) {
+		t.Errorf("index.html: no #summaryPending element for the images still waiting (#31)")
+	}
+}
+
 // TestIssue16ToastActionDiesWithDismiss guards the #12 promise that an undo
 // entry disappears with its toast. CSS stops a faded action from receiving
 // pointer events; this checks the code-side guard in showToast's action
