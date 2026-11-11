@@ -240,17 +240,13 @@ func captureRegion(ctx context.Context) ([]byte, bool, error) {
 
 	cmd := exec.Command(plan.name, plan.args...)
 	if !plan.clipboard {
-		// The tool writes the shot to a file we point it at (or its default
-		// location); read the newest file instead of the clipboard.
-		path, err := captureToFile(cmd, plan)
+		// The tool writes the shot to a file we point it at; read it there
+		// instead of going through the clipboard, which on macOS would ask for
+		// the paste permission every time.
+		data, err := captureToFile(cmd, plan)
 		if err != nil {
 			return nil, false, err
 		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil, false, fmt.Errorf("无法读取截图文件：%w", err)
-		}
-		_ = os.Remove(path)
 		return data, false, nil
 	}
 
@@ -277,28 +273,33 @@ func captureRegion(ctx context.Context) ([]byte, bool, error) {
 	return nil, false, errCaptureCanceled
 }
 
-// captureToFile runs a file-writing capture command and returns the path of
-// the newest image it produced.
-func captureToFile(cmd *exec.Cmd, plan screenshotCommand) (string, error) {
+// captureToFile runs a file-writing capture command and returns the image it
+// wrote. The temporary folder handed to the tool is removed on every path —
+// success, cancel and failure alike (#18): it used to survive as an empty
+// anypic-shot-* folder in $TMPDIR, one per capture, uncleaned at exit.
+func captureToFile(cmd *exec.Cmd, plan screenshotCommand) ([]byte, error) {
+	if plan.name != "/usr/sbin/screencapture" {
+		// Generic fallback: watch the default screenshot folder for a new file.
+		return nil, fmt.Errorf("截图工具 %s 不支持输出到文件", plan.name)
+	}
 	dir, err := os.MkdirTemp("", "anypic-shot-")
 	if err != nil {
-		return "", fmt.Errorf("无法创建临时目录：%w", err)
+		return nil, fmt.Errorf("无法创建临时目录：%w", err)
 	}
-	if plan.name == "/usr/sbin/screencapture" {
-		// screencapture writes straight to the path given as an argument.
-		path := filepath.Join(dir, "shot.png")
-		cmd.Args = append(cmd.Args, path)
-		cmd.Path = plan.name
-		if err := runCaptureCommand(cmd); err != nil {
-			return "", errCaptureCanceled
-		}
-		if _, err := os.Stat(path); err != nil {
-			return "", errCaptureCanceled
-		}
-		return path, nil
+	defer os.RemoveAll(dir)
+
+	// screencapture writes straight to the path given as an argument.
+	path := filepath.Join(dir, "shot.png")
+	cmd.Args = append(cmd.Args, path)
+	cmd.Path = plan.name
+	if err := runCaptureCommand(cmd); err != nil {
+		return nil, errCaptureCanceled
 	}
-	// Generic fallback: watch the default screenshot folder for a new file.
-	return "", fmt.Errorf("截图工具 %s 不支持输出到文件", plan.name)
+	data, err := os.ReadFile(path)
+	if err != nil || len(data) == 0 {
+		return nil, errCaptureCanceled
+	}
+	return data, nil
 }
 
 // waitForNewImage polls the clipboard until an image that differs from the
@@ -352,4 +353,18 @@ func writeScreenshot(data []byte) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// cleanupStaleShotDirs removes anypic-shot-* folders an earlier launch (or an
+// earlier version, which never removed them) left in the temp directory. It
+// runs at start, when no capture of ours can be in flight, and touches only
+// folders carrying this app's own prefix (#18).
+func cleanupStaleShotDirs() {
+	matches, err := filepath.Glob(filepath.Join(os.TempDir(), "anypic-shot-*"))
+	if err != nil {
+		return
+	}
+	for _, path := range matches {
+		_ = os.RemoveAll(path)
+	}
 }
