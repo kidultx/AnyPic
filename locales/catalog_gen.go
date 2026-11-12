@@ -2880,6 +2880,176 @@ func (msgs Messages) GradientCharcoal() string {
 	return Catalog.Format(msgs.locale, "gradientCharcoal", nil)
 }
 
+// Pattern says "图案"
+// in the language the app shows.
+func Pattern() string { return In(i18n.Locale()).Pattern() }
+
+// Pattern says "图案"
+// in the language of msgs.
+func (msgs Messages) Pattern() string {
+	return Catalog.Format(msgs.locale, "pattern", nil)
+}
+
+// PatternTeal says "青绿"
+// in the language the app shows.
+func PatternTeal() string { return In(i18n.Locale()).PatternTeal() }
+
+// PatternTeal says "青绿"
+// in the language of msgs.
+func (msgs Messages) PatternTeal() string {
+	return Catalog.Format(msgs.locale, "patternTeal", nil)
+}
+
+// PatternGingham says "格纹"
+// in the language the app shows.
+func PatternGingham() string { return In(i18n.Locale()).PatternGingham() }
+
+// PatternGingham says "格纹"
+// in the language of msgs.
+func (msgs Messages) PatternGingham() string {
+	return Catalog.Format(msgs.locale, "patternGingham", nil)
+}
+
+// PatternGrid says "方格"
+// in the language the app shows.
+func PatternGrid() string { return In(i18n.Locale()).PatternGrid() }
+
+// PatternGrid says "方格"
+// in the language of msgs.
+func (msgs Messages) PatternGrid() string {
+	return Catalog.Format(msgs.locale, "patternGrid", nil)
+}
+
+// PatternKraft says "牛皮纸"
+// in the language the app shows.
+func PatternKraft() string { return In(i18n.Locale()).PatternKraft() }
+
+// PatternKraft says "牛皮纸"
+// in the language of msgs.
+func (msgs Messages) PatternKraft() string {
+	return Catalog.Format(msgs.locale, "patternKraft", nil)
+}
+
+// PatternCyan says "蓝点"
+// in the language the app shows.
+func PatternCyan() string { return In(i18n.Locale()).PatternCyan() }
+
+// PatternCyan says "蓝点"
+// in the language of msgs.
+func (msgs Messages) PatternCyan() string {
+	return Catalog.Format(msgs.locale, "patternCyan", nil)
+}
+
+// PatternDots says "黑点"
+// in the language the app shows.
+func PatternDots() string { return In(i18n.Locale()).PatternDots() }
+
+// PatternDots says "黑点"
+// in the language of msgs.
+func (msgs Messages) PatternDots() string {
+	return Catalog.Format(msgs.locale, "patternDots", nil)
+}
+
+// PatternDeck says "竖条"
+// in the language the app shows.
+func PatternDeck() string { return In(i18n.Locale()).PatternDeck() }
+
+// PatternDeck says "竖条"
+// in the language of msgs.
+func (msgs Messages) PatternDeck() string {
+	return Catalog.Format(msgs.locale, "patternDeck", nil)
+}
+
+// PatternLinen says "亚麻"
+// in the language the app shows.
+func PatternLinen() string { return In(i18n.Locale()).PatternLinen() }
+
+// PatternLinen says "亚麻"
+// in the language of msgs.
+func (msgs Messages) PatternLinen() string {
+	return Catalog.Format(msgs.locale, "patternLinen", nil)
+}
+
+// PatternSeigaiha says "青海波"
+// in the language the app shows.
+func PatternSeigaiha() string { return In(i18n.Locale()).PatternSeigaiha() }
+
+// PatternSeigaiha says "青海波"
+// in the language of msgs.
+func (msgs Messages) PatternSeigaiha() string {
+	return Catalog.Format(msgs.locale, "patternSeigaiha", nil)
+}
+
+// PatternXuan says "宣纸"
+// in the language the app shows.
+func PatternXuan() string { return In(i18n.Locale()).PatternXuan() }
+
+// PatternXuan says "宣纸"
+// in the language of msgs.
+func (msgs Messages) PatternXuan() string {
+	return Catalog.Format(msgs.locale, "patternXuan", nil)
+}
+
+// PatternZigzag says "锯齿"
+// in the language the app shows.
+func PatternZigzag() string { return In(i18n.Locale()).PatternZigzag() }
+
+// PatternZigzag says "锯齿"
+// in the language of msgs.
+func (msgs Messages) PatternZigzag() string {
+	return Catalog.Format(msgs.locale, "patternZigzag", nil)
+}
+
+// PatternTerracotta says "赤陶"
+// in the language the app shows.
+func PatternTerracotta() string { return In(i18n.Locale()).PatternTerracotta() }
+
+// PatternTerracotta says "赤陶"
+// in the language of msgs.
+func (msgs Messages) PatternTerracotta() string {
+	return Catalog.Format(msgs.locale, "patternTerracotta", nil)
+}
+
+// PatternLilac says "淡紫"
+// in the language the app shows.
+func PatternLilac() string { return In(i18n.Locale()).PatternLilac() }
+
+// PatternLilac says "淡紫"
+// in the language of msgs.
+func (msgs Messages) PatternLilac() string {
+	return Catalog.Format(msgs.locale, "patternLilac", nil)
+}
+
+// PatternVelvet says "天鹅绒"
+// in the language the app shows.
+func PatternVelvet() string { return In(i18n.Locale()).PatternVelvet() }
+
+// PatternVelvet says "天鹅绒"
+// in the language of msgs.
+func (msgs Messages) PatternVelvet() string {
+	return Catalog.Format(msgs.locale, "patternVelvet", nil)
+}
+
+// PatternPolka says "波点"
+// in the language the app shows.
+func PatternPolka() string { return In(i18n.Locale()).PatternPolka() }
+
+// PatternPolka says "波点"
+// in the language of msgs.
+func (msgs Messages) PatternPolka() string {
+	return Catalog.Format(msgs.locale, "patternPolka", nil)
+}
+
+// PatternSwatch says "图案 {label}"
+// in the language the app shows.
+func PatternSwatch(label string) string { return In(i18n.Locale()).PatternSwatch(label) }
+
+// PatternSwatch says "图案 {label}"
+// in the language of msgs.
+func (msgs Messages) PatternSwatch(label string) string {
+	return Catalog.Format(msgs.locale, "patternSwatch", map[string]any{"label": label})
+}
+
 // CustomColor says "自定义颜色"
 // in the language the app shows.
 func CustomColor() string { return In(i18n.Locale()).CustomColor() }

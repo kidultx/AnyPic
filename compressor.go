@@ -722,7 +722,14 @@ func (a *AnyPic) PreviewDecorated(id int64, style FrameStyle) (string, error) {
 		return "", errors.New(tr().GoErrDecodeImage())
 	}
 
-	out := decorateScreenshot(img, style)
+	// Render the frame at the preview's own scale instead of drawing a
+	// 4600px canvas for a 1600px stage. decorateScaled computes the geometry
+	// at full size and shrinks every length together, so the preview is the
+	// exported frame, smaller — corners, shadow and pattern grain included.
+	ob := img.Bounds()
+	g := computeFrame(ob.Dx(), ob.Dy(), style)
+	scale := min(1.0, float64(previewMaxSide)/float64(max(g.canvasW, g.canvasH)))
+	out := decorateScaled(img, style, scale)
 	// Without a backdrop the canvas keeps transparent margins, so the preview
 	// must carry alpha; a backdrop makes it fully opaque.
 	return dataURL(out, style.Background == "none", 90, previewMaxSide)

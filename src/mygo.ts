@@ -51,12 +51,14 @@ export interface ExportResult {
  * by normalizeFrameStyle, so an IPC caller can only produce a defined render.
  */
 export interface FrameStyle {
-  /** "none", "solid", "gradient" */
+  /** "none", "solid", "gradient", "pattern" */
   background: string;
   /** "#rrggbb" when solid */
   backgroundColor: string;
   /** preset id when gradient */
   backgroundGradient: string;
+  /** day-card pattern id when pattern */
+  backgroundPattern: string;
   /** "none", "small", "medium", "large" */
   radius: string;
   /** hairline ring around the content */

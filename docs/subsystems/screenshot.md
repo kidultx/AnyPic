@@ -16,14 +16,17 @@
 - 快捷键与剪贴板偏好:`screenshot.go` 读 `Settings.ScreenshotShortcut` /
   `ScreenshotClipboard`。
 - 美化样式:`FrameStyle`(decorate.go),六个旋钮——背景(无/纯色 hex/
-  渐变预设)、圆角四档、描边、投影两档、边距三档、画布比例(只外扩不裁切)。
+  渐变预设/day-card 图案)、圆角四档、描边、投影两档、边距三档、画布比例
+  (只外扩不裁切)。图案 id 是闭集(patterns.go),非法值回落 `teal`。
   **样式由页面持有,且只属于当前正在调的图**:换一张图,工作台即重置为
   默认样式、渲染缓存清空——上一张的样式与渲染结果绝不泄漏到下一张;
   不写 localStorage,不进 Settings/settings.json。后端只渲染,
   `normalizeFrameStyle` 把任何输入兜底成已定义渲染。
-- 视觉参数(边距/圆角缩放、渐变预设表、描边色、投影档位)定义在
-  `decorate.go`;页面侧的色板与渐变 chip 列表在 `src/main.ts`
-  (`BG_SWATCHES`/`GRADIENT_PRESETS`),两边预设 id 对齐。
+- 视觉参数(边距/圆角缩放、渐变预设表、图案表与平铺缩放、描边色、投影
+  档位)定义在 `decorate.go` / `patterns.go`;页面侧的色板、渐变 chip 与
+  图案 chip 列表在 `src/preview.ts`
+  (`BG_SWATCHES`/`GRADIENT_PRESETS`/`PATTERN_PRESETS`),两边预设 id 与
+  渐变 stop 对齐。
 
 ## 主要运行路径
 
@@ -67,8 +70,8 @@
 
 - 全部在本机完成(不变量 1);`decorateScreenshot` 是纯 Go 绘制,无网络。
 - 绝不覆盖原图(不变量 2):美化结果永远是 `原名-美化.png`,重名加序号。
-- 美化是显式动作:没有全局设置、没有截图时静默套用;样式记忆只存页面
-  localStorage。
+- 美化是显式动作:没有全局设置、没有截图时静默套用;样式不记忆
+  (不写 localStorage),每次打开都回到默认。
 - 非法样式输入由 `normalizeFrameStyle` 兜底为默认渲染,不报错。
 
 ## 验证命令
@@ -76,6 +79,7 @@
 ```sh
 go test -race -run 'TestIssue17' .   # 权限检查、错误文本契约、窗口前置
 go test -race -run 'TestIssue1' .   # 样式归一化、各旋钮、条目应用、预览
+go test -race -run 'TestPattern' .  # 图案闭集、平铺比例、边界画布、阴影色
 go test -race ./...                 # 全量
 bun run typecheck                   # tsc --noEmit
 ```

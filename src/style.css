@@ -2574,6 +2574,14 @@ body.side-drag * {
   border-radius: var(--radius-control);
 }
 
+/* Pattern chips are miniature versions of the paper they select: a 34px
+   square reads as a swatch of material where a circle would not. */
+.pattern-chip {
+  width: 34px;
+  border-radius: var(--radius-control);
+  background-clip: padding-box;
+}
+
 /* The custom color input is styled as one more swatch so the picker does not
    break the chip row. */
 #beautifyColor {

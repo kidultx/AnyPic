@@ -172,6 +172,24 @@ func TestIssue1DecorateShadowLevels(t *testing.T) {
 	}
 }
 
+// TestFrameShadowFitsMargin pins the geometry contract behind the padding
+// tiers: every shadow layer's visible extent (two sigmas past its offset) has
+// to stay inside the margin the padding bought, or the canvas edge would cut
+// the shadow off — visibly so on the deep level.
+func TestFrameShadowFitsMargin(t *testing.T) {
+	for _, level := range []string{"soft", "deep"} {
+		for _, p := range []float64{24, 76, 120, 345} {
+			extent := 0.0
+			for _, layer := range shadowStack(level, p) {
+				extent = max(extent, 2*layer.sigma+layer.dy)
+			}
+			if extent > p {
+				t.Errorf("%s shadow at margin %.0f reaches %.1fpx, past the canvas edge", level, p, extent)
+			}
+		}
+	}
+}
+
 func TestIssue1DecorateRing(t *testing.T) {
 	src := solidImage(400, 300, color.RGBA{R: 0xe0, G: 0x20, B: 0x20, A: 0xff})
 	base := FrameStyle{Background: "none", Shadow: "off", Radius: "none"}
@@ -297,6 +315,14 @@ func TestIssue1PreviewDecorated(t *testing.T) {
 	}
 	if !strings.HasPrefix(s, "data:image/") {
 		t.Errorf("preview %q is not an image data URL", s[:min(40, len(s))])
+	}
+
+	// The pattern path goes through the scaled preview renderer; a silent
+	// failure there would only show up as a blank stage in the workbench.
+	if s, err := a.PreviewDecorated(7, FrameStyle{Background: "pattern", BGPattern: "polka"}); err != nil {
+		t.Fatalf("PreviewDecorated pattern: %v", err)
+	} else if !strings.HasPrefix(s, "data:image/") {
+		t.Errorf("pattern preview %q is not an image data URL", s[:min(40, len(s))])
 	}
 
 	if _, err := a.PreviewDecorated(99, FrameStyle{}); err == nil {
