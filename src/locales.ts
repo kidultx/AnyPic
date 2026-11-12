@@ -1132,6 +1132,74 @@ export interface Messages {
    */
   gradientCharcoal(): string;
   /**
+   * `图案`
+   */
+  pattern(): string;
+  /**
+   * `青绿`
+   */
+  patternTeal(): string;
+  /**
+   * `格纹`
+   */
+  patternGingham(): string;
+  /**
+   * `方格`
+   */
+  patternGrid(): string;
+  /**
+   * `牛皮纸`
+   */
+  patternKraft(): string;
+  /**
+   * `蓝点`
+   */
+  patternCyan(): string;
+  /**
+   * `黑点`
+   */
+  patternDots(): string;
+  /**
+   * `竖条`
+   */
+  patternDeck(): string;
+  /**
+   * `亚麻`
+   */
+  patternLinen(): string;
+  /**
+   * `青海波`
+   */
+  patternSeigaiha(): string;
+  /**
+   * `宣纸`
+   */
+  patternXuan(): string;
+  /**
+   * `锯齿`
+   */
+  patternZigzag(): string;
+  /**
+   * `赤陶`
+   */
+  patternTerracotta(): string;
+  /**
+   * `淡紫`
+   */
+  patternLilac(): string;
+  /**
+   * `天鹅绒`
+   */
+  patternVelvet(): string;
+  /**
+   * `波点`
+   */
+  patternPolka(): string;
+  /**
+   * `图案 {label}`
+   */
+  patternSwatch(label: string): string;
+  /**
    * `自定义颜色`
    */
   customColor(): string;
@@ -1875,6 +1943,23 @@ const catalog = createCatalog<Messages>({
     "gradientSunset": [],
     "gradientSlate": [],
     "gradientCharcoal": [],
+    "pattern": [],
+    "patternTeal": [],
+    "patternGingham": [],
+    "patternGrid": [],
+    "patternKraft": [],
+    "patternCyan": [],
+    "patternDots": [],
+    "patternDeck": [],
+    "patternLinen": [],
+    "patternSeigaiha": [],
+    "patternXuan": [],
+    "patternZigzag": [],
+    "patternTerracotta": [],
+    "patternLilac": [],
+    "patternVelvet": [],
+    "patternPolka": [],
+    "patternSwatch": ["label"],
     "customColor": [],
     "solidSwatch": ["hex"],
     "gradientSwatch": ["label"],
@@ -2273,6 +2358,23 @@ const catalog = createCatalog<Messages>({
       "gradientSunset": "落日",
       "gradientSlate": "石墨",
       "gradientCharcoal": "炭黑",
+      "pattern": "图案",
+      "patternTeal": "青绿",
+      "patternGingham": "格纹",
+      "patternGrid": "方格",
+      "patternKraft": "牛皮纸",
+      "patternCyan": "蓝点",
+      "patternDots": "黑点",
+      "patternDeck": "竖条",
+      "patternLinen": "亚麻",
+      "patternSeigaiha": "青海波",
+      "patternXuan": "宣纸",
+      "patternZigzag": "锯齿",
+      "patternTerracotta": "赤陶",
+      "patternLilac": "淡紫",
+      "patternVelvet": "天鹅绒",
+      "patternPolka": "波点",
+      "patternSwatch": "图案 {label}",
       "customColor": "自定义颜色",
       "solidSwatch": "纯色 {hex}",
       "gradientSwatch": "渐变 {label}",
@@ -2670,6 +2772,23 @@ const catalog = createCatalog<Messages>({
       "gradientSunset": "Sunset",
       "gradientSlate": "Slate",
       "gradientCharcoal": "Charcoal",
+      "pattern": "Pattern",
+      "patternTeal": "Teal",
+      "patternGingham": "Gingham",
+      "patternGrid": "Grid",
+      "patternKraft": "Kraft",
+      "patternCyan": "Cyan",
+      "patternDots": "Dots",
+      "patternDeck": "Deck",
+      "patternLinen": "Linen",
+      "patternSeigaiha": "Seigaiha",
+      "patternXuan": "Xuan",
+      "patternZigzag": "Zigzag",
+      "patternTerracotta": "Terracotta",
+      "patternLilac": "Lilac",
+      "patternVelvet": "Velvet",
+      "patternPolka": "Polka",
+      "patternSwatch": "Pattern {label}",
       "customColor": "Custom color",
       "solidSwatch": "Solid {hex}",
       "gradientSwatch": "Gradient {label}",

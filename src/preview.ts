@@ -435,17 +435,85 @@ export function closePreview() {
    and two darks, so a light capture always finds a stage. */
 const BG_SWATCHES = ["#ffffff", "#e7e7ea", "#f8ecdc", "#dbeafe", "#dcfce7", "#fae8ff", "#1f2937", "#0a0a0a"];
 
-/* Gradient presets mirror the backend's gradientPresets table. The ids are
-   protocol; the labels come from the catalog when the swatches are labelled. */
+/* Gradient presets mirror the backend's gradientPresets table stop for stop.
+   The ids are protocol; the labels come from the catalog when the swatches
+   are labelled. Keep this list and decorate.go in step — a chip that promises
+   a different ramp from the render is worse than no chip. */
 const GRADIENT_PRESETS: { id: string; css: string }[] = [
-  { id: "indigo", css: "linear-gradient(135deg, #a5b4fc, #4f46e5)" },
-  { id: "dusk", css: "linear-gradient(135deg, #818cf8, #312e81)" },
-  { id: "ocean", css: "linear-gradient(135deg, #67e8f9, #2563eb)" },
-  { id: "mint", css: "linear-gradient(135deg, #6ee7b7, #0d9488)" },
-  { id: "rose", css: "linear-gradient(135deg, #fda4af, #e11d48)" },
-  { id: "sunset", css: "linear-gradient(135deg, #fcd34d, #f97316)" },
-  { id: "slate", css: "linear-gradient(135deg, #f3f4f6, #9ca3af)" },
-  { id: "charcoal", css: "linear-gradient(135deg, #4b5563, #111827)" },
+  { id: "indigo", css: "linear-gradient(135deg, #c3cbfd, #4f46e5)" },
+  { id: "dusk", css: "linear-gradient(135deg, #a5b2f0, #3b358c)" },
+  { id: "ocean", css: "linear-gradient(135deg, #a9e4f2, #2c5fd1)" },
+  { id: "mint", css: "linear-gradient(135deg, #b2e8d1, #14867f)" },
+  { id: "rose", css: "linear-gradient(135deg, #f6c2c6, #c72a5b)" },
+  { id: "sunset", css: "linear-gradient(135deg, #f7ddb4, #d96a3c)" },
+  { id: "slate", css: "linear-gradient(135deg, #f6f7f9, #a8afba)" },
+  { id: "charcoal", css: "linear-gradient(135deg, #454b57, #141820)" },
+];
+
+/* Pattern chips mirror the backend's day-card pattern set (patterns.go). The
+   chips are CSS approximations of the same motif — tiny, but enough that the
+   choice is made on the chip; the stage shows the real render. */
+const PATTERN_PRESETS: { id: string; css: string }[] = [
+  {
+    id: "teal",
+    css: "linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.4)), linear-gradient(135deg, #1dd8d1, #92ecc6)",
+  },
+  {
+    id: "gingham",
+    css: "repeating-linear-gradient(0deg, rgba(214,72,56,.42) 0 8px, transparent 8px 16px), repeating-linear-gradient(90deg, rgba(214,72,56,.42) 0 8px, transparent 8px 16px), #fbf6ef",
+  },
+  {
+    id: "grid",
+    css: "repeating-linear-gradient(0deg, rgba(60,110,180,.25) 0 1px, transparent 1px 7px), repeating-linear-gradient(90deg, rgba(60,110,180,.25) 0 1px, transparent 1px 7px), #f3f0e6",
+  },
+  {
+    id: "kraft",
+    css: "radial-gradient(rgba(80,52,24,.35) .7px, transparent .9px) 0 0/4px 4px, radial-gradient(rgba(255,255,255,.3) .6px, transparent .8px) 2px 1px/5px 5px, #c4a274",
+  },
+  {
+    id: "cyan",
+    css: "radial-gradient(rgba(255,255,255,.3) .8px, transparent 1px) 0 0/4px 4px, #1b3a7a",
+  },
+  {
+    id: "dots",
+    css: "radial-gradient(#3d3d3d 1.4px, transparent 1.6px) 0 0/7px 7px, #151515",
+  },
+  {
+    id: "deck",
+    css: "repeating-linear-gradient(90deg, #2f5d50 0 8px, #f2ead8 8px 16px)",
+  },
+  {
+    id: "linen",
+    css: "repeating-linear-gradient(0deg, rgba(255,255,255,.07) 0 1px, transparent 1px 3px), repeating-linear-gradient(90deg, rgba(0,0,0,.1) 0 1px, transparent 1px 4px), #6f7a52",
+  },
+  {
+    id: "seigaiha",
+    css: "radial-gradient(circle at 50% 100%, transparent 5px, rgba(240,232,214,.45) 5px 6px, transparent 6px 7px) 0 0/12px 6px, #24506a",
+  },
+  {
+    id: "xuan",
+    css: "repeating-linear-gradient(115deg, rgba(120,98,66,.14) 0 1px, transparent 1px 6px), #efe9db",
+  },
+  {
+    id: "zigzag",
+    css: "linear-gradient(135deg, #ebdfc8 25%, transparent 25%) -4px 0/8px 8px, linear-gradient(225deg, #ebdfc8 25%, transparent 25%) -4px 0/8px 8px, #d6c4a2",
+  },
+  {
+    id: "terracotta",
+    css: "radial-gradient(rgba(255,236,214,.35) .8px, transparent 1px) 0 0/5px 5px, #bf6748",
+  },
+  {
+    id: "lilac",
+    css: "repeating-linear-gradient(45deg, rgba(78,60,120,.18) 0 1px, transparent 1px 6px), #d9d3e6",
+  },
+  {
+    id: "velvet",
+    css: "radial-gradient(circle at 30% 15%, rgba(80,140,110,.5), rgba(80,140,110,0) 70%), #17322a",
+  },
+  {
+    id: "polka",
+    css: "radial-gradient(#e0795a 2.2px, transparent 2.4px) 0 0/9px 9px, #f4e4cf",
+  },
 ];
 
 function gradientLabel(id: string): string {
@@ -461,11 +529,32 @@ function gradientLabel(id: string): string {
   }
 }
 
+function patternLabel(id: string): string {
+  switch (id) {
+    case "teal": return t.patternTeal();
+    case "gingham": return t.patternGingham();
+    case "grid": return t.patternGrid();
+    case "kraft": return t.patternKraft();
+    case "cyan": return t.patternCyan();
+    case "dots": return t.patternDots();
+    case "deck": return t.patternDeck();
+    case "linen": return t.patternLinen();
+    case "seigaiha": return t.patternSeigaiha();
+    case "xuan": return t.patternXuan();
+    case "zigzag": return t.patternZigzag();
+    case "terracotta": return t.patternTerracotta();
+    case "lilac": return t.patternLilac();
+    case "velvet": return t.patternVelvet();
+    default: return t.patternPolka();
+  }
+}
+
 function defaultFrameStyle(): FrameStyle {
   return {
     background: "gradient",
     backgroundColor: "#e7e7ea",
     backgroundGradient: "indigo",
+    backgroundPattern: "teal",
     radius: "medium",
     ring: true,
     shadow: "soft",
@@ -503,6 +592,16 @@ function populateBeautifyControls() {
     button.dataset.gradient = preset.id;
     gradients.appendChild(button);
   }
+
+  const patterns = $("#beautifyPatterns");
+  for (const preset of PATTERN_PRESETS) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "swatch pattern-chip";
+    button.style.background = preset.css;
+    button.dataset.pattern = preset.id;
+    patterns.appendChild(button);
+  }
 }
 
 /* Keeps the workbench controls in sync with the frameStyle being tuned. */
@@ -522,6 +621,12 @@ function labelSwatches() {
     button.title = label;
     button.setAttribute("aria-label", t.gradientSwatch(label));
   });
+  $$<HTMLButtonElement>("#beautifyPatterns .swatch").forEach((button) => {
+    const id = button.dataset.pattern ?? "";
+    const label = patternLabel(id);
+    button.title = label;
+    button.setAttribute("aria-label", t.patternSwatch(label));
+  });
 }
 
 function syncBeautifyControls() {
@@ -533,6 +638,7 @@ function syncBeautifyControls() {
   });
   $("#beautifySwatches").hidden = frameStyle.background !== "solid";
   $("#beautifyGradients").hidden = frameStyle.background !== "gradient";
+  $("#beautifyPatterns").hidden = frameStyle.background !== "pattern";
 
   $$<HTMLButtonElement>("#beautifySwatches .swatch").forEach((button) => {
     button.classList.toggle("active", frameStyle.background === "solid" && button.dataset.color === frameStyle.backgroundColor);
@@ -542,6 +648,9 @@ function syncBeautifyControls() {
     : "#e7e7ea";
   $$<HTMLButtonElement>("#beautifyGradients .swatch").forEach((button) => {
     button.classList.toggle("active", frameStyle.background === "gradient" && button.dataset.gradient === frameStyle.backgroundGradient);
+  });
+  $$<HTMLButtonElement>("#beautifyPatterns .swatch").forEach((button) => {
+    button.classList.toggle("active", frameStyle.background === "pattern" && button.dataset.pattern === frameStyle.backgroundPattern);
   });
 
   for (const [id, key] of [
@@ -676,6 +785,13 @@ function bindBeautify() {
     if (!button) return;
     frameStyle.background = "gradient";
     frameStyle.backgroundGradient = button.dataset.gradient ?? "indigo";
+    void renderBeautify();
+  });
+  $("#beautifyPatterns").addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>(".swatch");
+    if (!button) return;
+    frameStyle.background = "pattern";
+    frameStyle.backgroundPattern = button.dataset.pattern ?? "teal";
     void renderBeautify();
   });
 
