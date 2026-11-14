@@ -28,7 +28,7 @@ Download the installer for your platform from the [Releases](../../releases) pag
 - **Open With**: AnyPic registers as an image handler — choose AnyPic from Open With in Finder / Explorer, drag an image onto the Dock / taskbar icon, or pass a path on the command line, and it goes straight into the queue (on Windows / Linux, later launches hand the file to the already-running instance).
 - **Queue batch actions**: select several images or all of them and remove the selection in one click (undoable), and filter the queue by filename. The queue also behaves like a real list: ↑/↓ move, Shift+↑/↓ or Shift+click select a range, ⌘/Ctrl+A selects the visible rows, Delete/Backspace removes the selection (⌘⌫ still clears the queue), and Space or Enter opens the preview. Right-click any row for preview, beautify, export, Show in Folder, or remove — the same in list and grid view.
 - **Paste to queue**: copy an image in another app and press ⌘V / Ctrl+V to add it to the queue; pasted images are saved to `Pictures/AnyPic`, alongside screenshots.
-- **Hotkey screenshots**: the default is ⌘⌥S (Ctrl+Alt+S on Windows / Linux); click the shortcut in Preferences (⌘, or the sidebar's footer) to record a new combination. Capture a region of the screen at any time — the screenshot is saved to `Pictures/AnyPic` and added to the queue, and you can choose whether to copy it to the clipboard as well. On macOS the image is taken through a temporary file rather than the clipboard, so the paste-permission prompt does not keep coming back.
+- **Hotkey screenshots**: the default is ⌘⌥S (Ctrl+Alt+S on Windows / Linux); click the shortcut in Preferences (⌘, or the sidebar's footer) to record a new combination. Capture a region of the screen at any time — the screenshot is saved to `Pictures/AnyPic` and added to the queue, and you can choose whether to copy it to the clipboard as well. On macOS the image is taken through a temporary file rather than the clipboard, so the paste-permission prompt does not keep coming back. “Compress captures and copy the result” (「截图后自动压缩并复制」) in Preferences → Screenshots is off by default; when enabled, the raw shot goes to the clipboard first, and the compressed result replaces it when compression finishes, so a paste in between still gets the shot. Replacement happens only while the clipboard still holds the image AnyPic put there — text, another image, or an emptied clipboard copied meanwhile is left alone. The switch depends on “Copy captures to the clipboard” and disables with it. The tray menu also offers “Copy the last compressed result again”.
 - **Beautify in preview**: the preview has two tabs, Compare / Beautify (「对比 / 美化」). The beautify workspace offers six groups of controls — background (solid colors, gradient presets, 15 code-drawn day-card patterns and a custom color picker), corner radius, hairline border, shadow, padding, and canvas ratio (1:1 / 4:3 / 16:9, which only extends the canvas and never crops). Adjustments are reflected in the large preview in real time; when you are happy with them, apply in one click — this creates the file `<name>-美化.png` next to the original without touching it, then compresses and exports as usual. Beautifying happens entirely on your machine; the pattern backdrops are drawn in code, with no network fetch.
 - **Lives in the tray**: after you close the window, AnyPic stays in the menu bar / notification area and the screenshot hotkey keeps working; Preferences lets you choose whether to hide the Dock icon while the window is closed (hidden by default). The menu bar icon can reopen the window or quit. Only one AnyPic runs at a time: starting it again while it is already running brings the existing window back to the front instead of opening a second copy.
 - **Launch at login**: Preferences has a Launch AnyPic at login (「开机时启动 AnyPic」) toggle that writes to the system's login items (Login Items on macOS / XDG autostart on Linux / the Run registry key on Windows); the toggle stays in sync with the actual system state.
@@ -36,7 +36,8 @@ Download the installer for your platform from the [Releases](../../releases) pag
 - **Animated images to WebP**: animated GIF / WebP become animated WebP with frame count, timing, looping and transparency preserved — never just the first frame; if transcoding makes the file bigger, the original is kept and labeled “Already optimal” (「已是最优」). Beautify (borders, backgrounds, etc.) does not support animated images yet.
 - **Output formats**: Auto (「自动」), or JPG / PNG / WebP, with a quality slider covering 30–100; when JPG is selected, images with transparency are saved as PNG instead of being flattened onto a background.
 - **Resize on demand**: limit the long edge to 3840, 2560, 1920, 1280 or 800 pixels, using Lanczos resampling.
-- **Honest processing that never sacrifices clarity**: if re-encoding would make the file bigger, the original is used as-is and labeled “Already optimal”.
+- **Target size**: cap each image at 500 KB / 1 MB / 2 MB or a custom limit. JPG/WebP and animations (converted to animated WebP) search for the highest quality that fits; when even the lowest quality is too large, the row says “Over target · min 58 KB · quality 10”, naming both the bytes it reached and the quality it used, and keeps the smallest result instead of quietly giving up. PNG is lossless and cannot tune quality to a cap, so the selector warns about it; the result may still exceed the cap. Transparent images also stay lossless PNG in target mode and may exceed it.
+- **Honest processing that never sacrifices clarity**: if re-encoding would make the file bigger, the original is used as-is and labeled “Already optimal”. Each row also shows a measured SSIM tier — “Nearly identical / Slight loss / Visible loss” — with the exact score on hover, so the label reflects the result's actual quality rather than the quality setting. Animations are not measured and say “Quality not measured” rather than passing off an unmeasured zero as a score.
 - **Retry failures**: failed images can be retried in one click; completed images are not re-encoded.
 - **Before / after**: drag a divider in the app to inspect the difference in detail before and after compression. Scroll or pinch to zoom and drag to pan (the two images move together), switch between “Fit” and “100%” with the current ratio shown, and use ←/→ to step through the queue.
 - **Flexible saving**: save next to the original or to a folder you choose, with a custom filename suffix and batch export.
@@ -77,9 +78,11 @@ bun run dev:web
 ```bash
 bun run typecheck    # TypeScript type check
 go vet ./...
-go test -race ./...  # backend unit and integration tests
+go test -race ./...  # backend unit and integration tests (including the compression benchmark)
 bun run build        # build the app bundle and installers under build/
 ```
+
+The compressor ships with a fixed benchmark set (`testdata/benchmark/`, 19 cases, `du` 832 KB: two screenshots including a real app capture, three photos including two public-domain NASA JPL Earth photos, two transparent PNGs including the project logo, and two animations including one derived from the real screenshot). `TestBenchmarkSet` records each output format's size, SSIM, and the not-measured flag for animations, and compares them with `baseline.json`, catching a size regression above 2% or an SSIM loss above 0.002. The three quality tiers (0.98 / 0.92) are calibrated against this set at quality 82: real screenshots and the logo score 0.999–0.991, real photos 0.994–0.987, and the synthetic photo and target-size result 0.933–0.942. After changing encoder parameters, `go test -run TestBenchmarkSet -v .` prints the comparison table; for a deliberate trade-off change, re-record the baseline with `-update-benchmark` and say why in the commit.
 
 `bun run build` automatically unlocks the local signing keychain (`~/Library/Keychains/anypic-signing.keychain-db`, password `anypic-local`) and signs with the self-signed certificate “AnyPic Local Signing” stored there. The certificate identity is fixed, so the macOS screen-recording permission stays valid across rebuilds. CI builds no longer always sign ad hoc: release builds use the fixed release certificate described under “Release & CI”, and only smoke builds or manual branch builds without the secrets fall back to ad-hoc signing.
 
@@ -128,6 +131,8 @@ The interface is organized around a flat set of design tokens (the UI language t
 ```text
 main.go            app entry point, window, native menus, tray and command events
 compressor.go      image queue, compression pipeline, previews, export, settings persistence
+quality.go         target-size quality search and SSIM quality measurement
+clipboard.go       result copying, clipboard overwrite guard and Markdown links
 animation.go       animated-image frame counting: walks the file structure without decoding pixels
 screenshot.go      hotkey screenshots, clipboard image capture and screenshot archiving
 decorate.go        screenshot beautification: corner radius, border, shadow and background
@@ -145,7 +150,8 @@ src/style.css      design system and responsive layout
 src/mygo.ts        MyGo-generated type-safe IPC client
 mygo.config.ts     app name, identifier, version and build config
 .github/workflows  CI and release workflows
-docs/              UI screenshots
+docs/              UI screenshots and subsystem notes
+testdata/benchmark/ fixed compression benchmark images, generator and baseline.json
 site/              static website (GitHub Pages), no build step
 site/video/        rendered intro video, plus its storyboard (src/) and render script (render.mjs)
 ```

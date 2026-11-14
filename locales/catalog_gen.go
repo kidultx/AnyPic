@@ -274,6 +274,48 @@ func (msgs Messages) CopyAfterCapture() string {
 	return Catalog.Format(msgs.locale, "copyAfterCapture", nil)
 }
 
+// ScreenshotPipelineLabel says "截图后自动压缩并复制"
+// in the language the app shows.
+func ScreenshotPipelineLabel() string { return In(i18n.Locale()).ScreenshotPipelineLabel() }
+
+// ScreenshotPipelineLabel says "截图后自动压缩并复制"
+// in the language of msgs.
+func (msgs Messages) ScreenshotPipelineLabel() string {
+	return Catalog.Format(msgs.locale, "screenshotPipelineLabel", nil)
+}
+
+// ScreenshotPipelineNoteOn says "截图会先复制原图；压缩完成后换成压缩结果，期间可以直接粘贴。"
+// in the language the app shows.
+func ScreenshotPipelineNoteOn() string { return In(i18n.Locale()).ScreenshotPipelineNoteOn() }
+
+// ScreenshotPipelineNoteOn says "截图会先复制原图；压缩完成后换成压缩结果，期间可以直接粘贴。"
+// in the language of msgs.
+func (msgs Messages) ScreenshotPipelineNoteOn() string {
+	return Catalog.Format(msgs.locale, "screenshotPipelineNoteOn", nil)
+}
+
+// ScreenshotPipelineNoteOff says "只按上一项复制原图，压缩结果不会自动进剪贴板。"
+// in the language the app shows.
+func ScreenshotPipelineNoteOff() string { return In(i18n.Locale()).ScreenshotPipelineNoteOff() }
+
+// ScreenshotPipelineNoteOff says "只按上一项复制原图，压缩结果不会自动进剪贴板。"
+// in the language of msgs.
+func (msgs Messages) ScreenshotPipelineNoteOff() string {
+	return Catalog.Format(msgs.locale, "screenshotPipelineNoteOff", nil)
+}
+
+// ScreenshotPipelineNeedsClipboard says "先打开「截图后复制到剪贴板」，才能启用这一步；它换的正是那份原图。"
+// in the language the app shows.
+func ScreenshotPipelineNeedsClipboard() string {
+	return In(i18n.Locale()).ScreenshotPipelineNeedsClipboard()
+}
+
+// ScreenshotPipelineNeedsClipboard says "先打开「截图后复制到剪贴板」，才能启用这一步；它换的正是那份原图。"
+// in the language of msgs.
+func (msgs Messages) ScreenshotPipelineNeedsClipboard() string {
+	return Catalog.Format(msgs.locale, "screenshotPipelineNeedsClipboard", nil)
+}
+
 // CheckScreenRecording says "无法截图？检查屏幕录制权限"
 // in the language the app shows.
 func CheckScreenRecording() string { return In(i18n.Locale()).CheckScreenRecording() }
@@ -724,6 +766,200 @@ func QualityExtreme() string { return In(i18n.Locale()).QualityExtreme() }
 // in the language of msgs.
 func (msgs Messages) QualityExtreme() string {
 	return Catalog.Format(msgs.locale, "qualityExtreme", nil)
+}
+
+// SizeTargetLabel says "每张不超过"
+// in the language the app shows.
+func SizeTargetLabel() string { return In(i18n.Locale()).SizeTargetLabel() }
+
+// SizeTargetLabel says "每张不超过"
+// in the language of msgs.
+func (msgs Messages) SizeTargetLabel() string {
+	return Catalog.Format(msgs.locale, "sizeTargetLabel", nil)
+}
+
+// NoSizeLimit says "不限制"
+// in the language the app shows.
+func NoSizeLimit() string { return In(i18n.Locale()).NoSizeLimit() }
+
+// NoSizeLimit says "不限制"
+// in the language of msgs.
+func (msgs Messages) NoSizeLimit() string {
+	return Catalog.Format(msgs.locale, "noSizeLimit", nil)
+}
+
+// CustomSize says "自定义…"
+// in the language the app shows.
+func CustomSize() string { return In(i18n.Locale()).CustomSize() }
+
+// CustomSize says "自定义…"
+// in the language of msgs.
+func (msgs Messages) CustomSize() string {
+	return Catalog.Format(msgs.locale, "customSize", nil)
+}
+
+// SizeTargetCustomLabel says "自定义上限"
+// in the language the app shows.
+func SizeTargetCustomLabel() string { return In(i18n.Locale()).SizeTargetCustomLabel() }
+
+// SizeTargetCustomLabel says "自定义上限"
+// in the language of msgs.
+func (msgs Messages) SizeTargetCustomLabel() string {
+	return Catalog.Format(msgs.locale, "sizeTargetCustomLabel", nil)
+}
+
+// TargetAutoQuality says "JPG 和 WebP 会自动调整质量以满足上限；PNG 保持无损，可能超出。"
+// in the language the app shows.
+func TargetAutoQuality() string { return In(i18n.Locale()).TargetAutoQuality() }
+
+// TargetAutoQuality says "JPG 和 WebP 会自动调整质量以满足上限；PNG 保持无损，可能超出。"
+// in the language of msgs.
+func (msgs Messages) TargetAutoQuality() string {
+	return Catalog.Format(msgs.locale, "targetAutoQuality", nil)
+}
+
+// TargetLossyNote says "会自动调整质量以满足上限；透明图片仍存为无损 PNG，可能超出。"
+// in the language the app shows.
+func TargetLossyNote() string { return In(i18n.Locale()).TargetLossyNote() }
+
+// TargetLossyNote says "会自动调整质量以满足上限；透明图片仍存为无损 PNG，可能超出。"
+// in the language of msgs.
+func (msgs Messages) TargetLossyNote() string {
+	return Catalog.Format(msgs.locale, "targetLossyNote", nil)
+}
+
+// TargetPngNote says "PNG 为无损格式，无法按目标体积调整；在意体积请选择 JPG 或 WebP。"
+// in the language the app shows.
+func TargetPngNote() string { return In(i18n.Locale()).TargetPngNote() }
+
+// TargetPngNote says "PNG 为无损格式，无法按目标体积调整；在意体积请选择 JPG 或 WebP。"
+// in the language of msgs.
+func (msgs Messages) TargetPngNote() string {
+	return Catalog.Format(msgs.locale, "targetPngNote", nil)
+}
+
+// TargetMissedBadge says "未达目标 · 最小 {size} · {quality}"
+// in the language the app shows.
+func TargetMissedBadge(size string, quality string) string {
+	return In(i18n.Locale()).TargetMissedBadge(size, quality)
+}
+
+// TargetMissedBadge says "未达目标 · 最小 {size} · {quality}"
+// in the language of msgs.
+func (msgs Messages) TargetMissedBadge(size string, quality string) string {
+	return Catalog.Format(msgs.locale, "targetMissedBadge", map[string]any{"size": size, "quality": quality})
+}
+
+// TargetMissedTitle says "无法压到 {target}：已给到最小 {size}（{quality}）"
+// in the language the app shows.
+func TargetMissedTitle(target string, size string, quality string) string {
+	return In(i18n.Locale()).TargetMissedTitle(target, size, quality)
+}
+
+// TargetMissedTitle says "无法压到 {target}：已给到最小 {size}（{quality}）"
+// in the language of msgs.
+func (msgs Messages) TargetMissedTitle(target string, size string, quality string) string {
+	return Catalog.Format(msgs.locale, "targetMissedTitle", map[string]any{"target": target, "size": size, "quality": quality})
+}
+
+// TargetQualityValue says "质量 {quality}"
+// in the language the app shows.
+func TargetQualityValue(quality int) string { return In(i18n.Locale()).TargetQualityValue(quality) }
+
+// TargetQualityValue says "质量 {quality}"
+// in the language of msgs.
+func (msgs Messages) TargetQualityValue(quality int) string {
+	return Catalog.Format(msgs.locale, "targetQualityValue", map[string]any{"quality": quality})
+}
+
+// TargetQualityLossless says "无损"
+// in the language the app shows.
+func TargetQualityLossless() string { return In(i18n.Locale()).TargetQualityLossless() }
+
+// TargetQualityLossless says "无损"
+// in the language of msgs.
+func (msgs Messages) TargetQualityLossless() string {
+	return Catalog.Format(msgs.locale, "targetQualityLossless", nil)
+}
+
+// TargetQualityOriginal says "保留原图"
+// in the language the app shows.
+func TargetQualityOriginal() string { return In(i18n.Locale()).TargetQualityOriginal() }
+
+// TargetQualityOriginal says "保留原图"
+// in the language of msgs.
+func (msgs Messages) TargetQualityOriginal() string {
+	return Catalog.Format(msgs.locale, "targetQualityOriginal", nil)
+}
+
+// TargetMissedCount says "{n, plural, other {# 张图片未压到目标体积}}"
+// in the language the app shows.
+func TargetMissedCount(n int) string { return In(i18n.Locale()).TargetMissedCount(n) }
+
+// TargetMissedCount says "{n, plural, other {# 张图片未压到目标体积}}"
+// in the language of msgs.
+func (msgs Messages) TargetMissedCount(n int) string {
+	return Catalog.Format(msgs.locale, "targetMissedCount", map[string]any{"n": n})
+}
+
+// QualityNearlyIdentical says "几乎无差别"
+// in the language the app shows.
+func QualityNearlyIdentical() string { return In(i18n.Locale()).QualityNearlyIdentical() }
+
+// QualityNearlyIdentical says "几乎无差别"
+// in the language of msgs.
+func (msgs Messages) QualityNearlyIdentical() string {
+	return Catalog.Format(msgs.locale, "qualityNearlyIdentical", nil)
+}
+
+// QualitySlightLoss says "轻微损失"
+// in the language the app shows.
+func QualitySlightLoss() string { return In(i18n.Locale()).QualitySlightLoss() }
+
+// QualitySlightLoss says "轻微损失"
+// in the language of msgs.
+func (msgs Messages) QualitySlightLoss() string {
+	return Catalog.Format(msgs.locale, "qualitySlightLoss", nil)
+}
+
+// QualityVisibleLoss says "明显损失"
+// in the language the app shows.
+func QualityVisibleLoss() string { return In(i18n.Locale()).QualityVisibleLoss() }
+
+// QualityVisibleLoss says "明显损失"
+// in the language of msgs.
+func (msgs Messages) QualityVisibleLoss() string {
+	return Catalog.Format(msgs.locale, "qualityVisibleLoss", nil)
+}
+
+// QualityNotMeasured says "画质未测量"
+// in the language the app shows.
+func QualityNotMeasured() string { return In(i18n.Locale()).QualityNotMeasured() }
+
+// QualityNotMeasured says "画质未测量"
+// in the language of msgs.
+func (msgs Messages) QualityNotMeasured() string {
+	return Catalog.Format(msgs.locale, "qualityNotMeasured", nil)
+}
+
+// QualityNotMeasuredTitle says "动图或无法解码的结果不计算 SSIM；动图会保留所有帧。"
+// in the language the app shows.
+func QualityNotMeasuredTitle() string { return In(i18n.Locale()).QualityNotMeasuredTitle() }
+
+// QualityNotMeasuredTitle says "动图或无法解码的结果不计算 SSIM；动图会保留所有帧。"
+// in the language of msgs.
+func (msgs Messages) QualityNotMeasuredTitle() string {
+	return Catalog.Format(msgs.locale, "qualityNotMeasuredTitle", nil)
+}
+
+// SsimTitle says "画质 SSIM {ssim}"
+// in the language the app shows.
+func SsimTitle(ssim string) string { return In(i18n.Locale()).SsimTitle(ssim) }
+
+// SsimTitle says "画质 SSIM {ssim}"
+// in the language of msgs.
+func (msgs Messages) SsimTitle(ssim string) string {
+	return Catalog.Format(msgs.locale, "ssimTitle", map[string]any{"ssim": ssim})
 }
 
 // OriginalStatLabel says "原始"
@@ -1798,6 +2034,18 @@ func (msgs Messages) AutoProcessSettingsFailed() string {
 	return Catalog.Format(msgs.locale, "autoProcessSettingsFailed", nil)
 }
 
+// ScreenshotPipelineSettingsFailed says "无法保存截图自动处理设置"
+// in the language the app shows.
+func ScreenshotPipelineSettingsFailed() string {
+	return In(i18n.Locale()).ScreenshotPipelineSettingsFailed()
+}
+
+// ScreenshotPipelineSettingsFailed says "无法保存截图自动处理设置"
+// in the language of msgs.
+func (msgs Messages) ScreenshotPipelineSettingsFailed() string {
+	return Catalog.Format(msgs.locale, "screenshotPipelineSettingsFailed", nil)
+}
+
 // DockSettingsFailed says "无法保存 Dock 图标设置"
 // in the language the app shows.
 func DockSettingsFailed() string { return In(i18n.Locale()).DockSettingsFailed() }
@@ -1876,6 +2124,56 @@ func Copied() string { return In(i18n.Locale()).Copied() }
 // in the language of msgs.
 func (msgs Messages) Copied() string {
 	return Catalog.Format(msgs.locale, "copied", nil)
+}
+
+// CopiedCompressed says "压缩结果已复制到剪贴板"
+// in the language the app shows.
+func CopiedCompressed() string { return In(i18n.Locale()).CopiedCompressed() }
+
+// CopiedCompressed says "压缩结果已复制到剪贴板"
+// in the language of msgs.
+func (msgs Messages) CopiedCompressed() string {
+	return Catalog.Format(msgs.locale, "copiedCompressed", nil)
+}
+
+// ClipboardKept says "压缩期间剪贴板有新内容，已保留未覆盖"
+// in the language the app shows.
+func ClipboardKept() string { return In(i18n.Locale()).ClipboardKept() }
+
+// ClipboardKept says "压缩期间剪贴板有新内容，已保留未覆盖"
+// in the language of msgs.
+func (msgs Messages) ClipboardKept() string {
+	return Catalog.Format(msgs.locale, "clipboardKept", nil)
+}
+
+// CopyMarkdown says "复制为 Markdown 图片"
+// in the language the app shows.
+func CopyMarkdown() string { return In(i18n.Locale()).CopyMarkdown() }
+
+// CopyMarkdown says "复制为 Markdown 图片"
+// in the language of msgs.
+func (msgs Messages) CopyMarkdown() string {
+	return Catalog.Format(msgs.locale, "copyMarkdown", nil)
+}
+
+// CopiedMarkdown says "Markdown 图片链接已复制到剪贴板"
+// in the language the app shows.
+func CopiedMarkdown() string { return In(i18n.Locale()).CopiedMarkdown() }
+
+// CopiedMarkdown says "Markdown 图片链接已复制到剪贴板"
+// in the language of msgs.
+func (msgs Messages) CopiedMarkdown() string {
+	return Catalog.Format(msgs.locale, "copiedMarkdown", nil)
+}
+
+// MarkdownFailed says "无法生成 Markdown 链接"
+// in the language the app shows.
+func MarkdownFailed() string { return In(i18n.Locale()).MarkdownFailed() }
+
+// MarkdownFailed says "无法生成 Markdown 链接"
+// in the language of msgs.
+func (msgs Messages) MarkdownFailed() string {
+	return Catalog.Format(msgs.locale, "markdownFailed", nil)
 }
 
 // BatchFailed says "压缩完成：{done} 张成功，{failed} 张失败"
@@ -3230,6 +3528,16 @@ func (msgs Messages) GoMenuCapture() string {
 	return Catalog.Format(msgs.locale, "goMenuCapture", nil)
 }
 
+// GoMenuCopyLast says "再次复制上一张压缩结果"
+// in the language the app shows.
+func GoMenuCopyLast() string { return In(i18n.Locale()).GoMenuCopyLast() }
+
+// GoMenuCopyLast says "再次复制上一张压缩结果"
+// in the language of msgs.
+func (msgs Messages) GoMenuCopyLast() string {
+	return Catalog.Format(msgs.locale, "goMenuCopyLast", nil)
+}
+
 // GoMenuFile says "文件"
 // in the language the app shows.
 func GoMenuFile() string { return In(i18n.Locale()).GoMenuFile() }
@@ -3912,6 +4220,26 @@ func GoErrWriteClipboard() string { return In(i18n.Locale()).GoErrWriteClipboard
 // in the language of msgs.
 func (msgs Messages) GoErrWriteClipboard() string {
 	return Catalog.Format(msgs.locale, "goErrWriteClipboard", nil)
+}
+
+// GoErrNoLastResult says "还没有可复制的压缩结果"
+// in the language the app shows.
+func GoErrNoLastResult() string { return In(i18n.Locale()).GoErrNoLastResult() }
+
+// GoErrNoLastResult says "还没有可复制的压缩结果"
+// in the language of msgs.
+func (msgs Messages) GoErrNoLastResult() string {
+	return Catalog.Format(msgs.locale, "goErrNoLastResult", nil)
+}
+
+// GoErrMarkdownSave says "无法保存图片，Markdown 链接会失效"
+// in the language the app shows.
+func GoErrMarkdownSave() string { return In(i18n.Locale()).GoErrMarkdownSave() }
+
+// GoErrMarkdownSave says "无法保存图片，Markdown 链接会失效"
+// in the language of msgs.
+func (msgs Messages) GoErrMarkdownSave() string {
+	return Catalog.Format(msgs.locale, "goErrMarkdownSave", nil)
 }
 
 // GoErrCaptureStart says "无法启动截图工具"

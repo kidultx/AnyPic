@@ -100,6 +100,22 @@ export interface Messages {
    */
   copyAfterCapture(): string;
   /**
+   * `截图后自动压缩并复制`
+   */
+  screenshotPipelineLabel(): string;
+  /**
+   * `截图会先复制原图；压缩完成后换成压缩结果，期间可以直接粘贴。`
+   */
+  screenshotPipelineNoteOn(): string;
+  /**
+   * `只按上一项复制原图，压缩结果不会自动进剪贴板。`
+   */
+  screenshotPipelineNoteOff(): string;
+  /**
+   * `先打开「截图后复制到剪贴板」，才能启用这一步；它换的正是那份原图。`
+   */
+  screenshotPipelineNeedsClipboard(): string;
+  /**
    * `无法截图？检查屏幕录制权限`
    */
   checkScreenRecording(): string;
@@ -279,6 +295,82 @@ export interface Messages {
    * `极限压缩`
    */
   qualityExtreme(): string;
+  /**
+   * `每张不超过`
+   */
+  sizeTargetLabel(): string;
+  /**
+   * `不限制`
+   */
+  noSizeLimit(): string;
+  /**
+   * `自定义…`
+   */
+  customSize(): string;
+  /**
+   * `自定义上限`
+   */
+  sizeTargetCustomLabel(): string;
+  /**
+   * `JPG 和 WebP 会自动调整质量以满足上限；PNG 保持无损，可能超出。`
+   */
+  targetAutoQuality(): string;
+  /**
+   * `会自动调整质量以满足上限；透明图片仍存为无损 PNG，可能超出。`
+   */
+  targetLossyNote(): string;
+  /**
+   * `PNG 为无损格式，无法按目标体积调整；在意体积请选择 JPG 或 WebP。`
+   */
+  targetPngNote(): string;
+  /**
+   * `未达目标 · 最小 {size} · {quality}`
+   */
+  targetMissedBadge(size: string, quality: string): string;
+  /**
+   * `无法压到 {target}：已给到最小 {size}（{quality}）`
+   */
+  targetMissedTitle(target: string, size: string, quality: string): string;
+  /**
+   * `质量 {quality}`
+   */
+  targetQualityValue(quality: number): string;
+  /**
+   * `无损`
+   */
+  targetQualityLossless(): string;
+  /**
+   * `保留原图`
+   */
+  targetQualityOriginal(): string;
+  /**
+   * `{n, plural, other {# 张图片未压到目标体积}}`
+   */
+  targetMissedCount(n: number): string;
+  /**
+   * `几乎无差别`
+   */
+  qualityNearlyIdentical(): string;
+  /**
+   * `轻微损失`
+   */
+  qualitySlightLoss(): string;
+  /**
+   * `明显损失`
+   */
+  qualityVisibleLoss(): string;
+  /**
+   * `画质未测量`
+   */
+  qualityNotMeasured(): string;
+  /**
+   * `动图或无法解码的结果不计算 SSIM；动图会保留所有帧。`
+   */
+  qualityNotMeasuredTitle(): string;
+  /**
+   * `画质 SSIM {ssim}`
+   */
+  ssimTitle(ssim: string): string;
   /**
    * `原始`
    */
@@ -704,6 +796,10 @@ export interface Messages {
    */
   autoProcessSettingsFailed(): string;
   /**
+   * `无法保存截图自动处理设置`
+   */
+  screenshotPipelineSettingsFailed(): string;
+  /**
    * `无法保存 Dock 图标设置`
    */
   dockSettingsFailed(): string;
@@ -735,6 +831,26 @@ export interface Messages {
    * `已复制到剪贴板`
    */
   copied(): string;
+  /**
+   * `压缩结果已复制到剪贴板`
+   */
+  copiedCompressed(): string;
+  /**
+   * `压缩期间剪贴板有新内容，已保留未覆盖`
+   */
+  clipboardKept(): string;
+  /**
+   * `复制为 Markdown 图片`
+   */
+  copyMarkdown(): string;
+  /**
+   * `Markdown 图片链接已复制到剪贴板`
+   */
+  copiedMarkdown(): string;
+  /**
+   * `无法生成 Markdown 链接`
+   */
+  markdownFailed(): string;
   /**
    * `压缩完成：{done} 张成功，{failed} 张失败`
    */
@@ -1272,6 +1388,10 @@ export interface Messages {
    */
   goMenuCapture(): string;
   /**
+   * `再次复制上一张压缩结果`
+   */
+  goMenuCopyLast(): string;
+  /**
    * `文件`
    */
   goMenuFile(): string;
@@ -1544,6 +1664,14 @@ export interface Messages {
    */
   goErrWriteClipboard(): string;
   /**
+   * `还没有可复制的压缩结果`
+   */
+  goErrNoLastResult(): string;
+  /**
+   * `无法保存图片，Markdown 链接会失效`
+   */
+  goErrMarkdownSave(): string;
+  /**
    * `无法启动截图工具`
    */
   goErrCaptureStart(): string;
@@ -1685,6 +1813,10 @@ const catalog = createCatalog<Messages>({
     "shortcutButtonTitle": [],
     "shortcutHint": [],
     "copyAfterCapture": [],
+    "screenshotPipelineLabel": [],
+    "screenshotPipelineNoteOn": [],
+    "screenshotPipelineNoteOff": [],
+    "screenshotPipelineNeedsClipboard": [],
     "checkScreenRecording": [],
     "launchAtLogin": [],
     "hideDock": [],
@@ -1730,6 +1862,25 @@ const catalog = createCatalog<Messages>({
     "qualitySmallerFiles": [],
     "qualityStrong": [],
     "qualityExtreme": [],
+    "sizeTargetLabel": [],
+    "noSizeLimit": [],
+    "customSize": [],
+    "sizeTargetCustomLabel": [],
+    "targetAutoQuality": [],
+    "targetLossyNote": [],
+    "targetPngNote": [],
+    "targetMissedBadge": ["size", "quality"],
+    "targetMissedTitle": ["target", "size", "quality"],
+    "targetQualityValue": ["quality"],
+    "targetQualityLossless": [],
+    "targetQualityOriginal": [],
+    "targetMissedCount": ["n"],
+    "qualityNearlyIdentical": [],
+    "qualitySlightLoss": [],
+    "qualityVisibleLoss": [],
+    "qualityNotMeasured": [],
+    "qualityNotMeasuredTitle": [],
+    "ssimTitle": ["ssim"],
     "originalStatLabel": [],
     "compressedStatLabel": [],
     "savedLabel": [],
@@ -1836,6 +1987,7 @@ const catalog = createCatalog<Messages>({
     "resetDone": [],
     "clipboardSettingsFailed": [],
     "autoProcessSettingsFailed": [],
+    "screenshotPipelineSettingsFailed": [],
     "dockSettingsFailed": [],
     "loginItemFailed": [],
     "systemRefused": [],
@@ -1844,6 +1996,11 @@ const catalog = createCatalog<Messages>({
     "shortcutFailed": [],
     "copyFailed": [],
     "copied": [],
+    "copiedCompressed": [],
+    "clipboardKept": [],
+    "copyMarkdown": [],
+    "copiedMarkdown": [],
+    "markdownFailed": [],
     "batchFailed": ["done", "failed"],
     "batchSaved": ["size"],
     "notProcessed": ["n"],
@@ -1978,6 +2135,7 @@ const catalog = createCatalog<Messages>({
     "confirmBody": [],
     "goMenuOpenApp": [],
     "goMenuCapture": [],
+    "goMenuCopyLast": [],
     "goMenuFile": [],
     "goMenuOpenImages": [],
     "goMenuCaptureEllipsis": [],
@@ -2046,6 +2204,8 @@ const catalog = createCatalog<Messages>({
     "goErrSaveItem": ["name"],
     "goErrCopyImage": [],
     "goErrWriteClipboard": [],
+    "goErrNoLastResult": [],
+    "goErrMarkdownSave": [],
     "goErrCaptureStart": [],
     "goErrCaptureSave": [],
     "goErrCaptureQueue": ["path"],
@@ -2100,6 +2260,10 @@ const catalog = createCatalog<Messages>({
       "shortcutButtonTitle": "点击后按下新的组合键；关闭窗口后仍可用",
       "shortcutHint": "按住修饰键再按一个键，Esc 取消",
       "copyAfterCapture": "截图后复制到剪贴板",
+      "screenshotPipelineLabel": "截图后自动压缩并复制",
+      "screenshotPipelineNoteOn": "截图会先复制原图；压缩完成后换成压缩结果，期间可以直接粘贴。",
+      "screenshotPipelineNoteOff": "只按上一项复制原图，压缩结果不会自动进剪贴板。",
+      "screenshotPipelineNeedsClipboard": "先打开「截图后复制到剪贴板」，才能启用这一步；它换的正是那份原图。",
       "checkScreenRecording": "无法截图？检查屏幕录制权限",
       "launchAtLogin": "开机时启动 AnyPic",
       "hideDock": "关闭窗口后隐藏 Dock 图标",
@@ -2145,6 +2309,25 @@ const catalog = createCatalog<Messages>({
       "qualitySmallerFiles": "更小体积",
       "qualityStrong": "强力压缩",
       "qualityExtreme": "极限压缩",
+      "sizeTargetLabel": "每张不超过",
+      "noSizeLimit": "不限制",
+      "customSize": "自定义…",
+      "sizeTargetCustomLabel": "自定义上限",
+      "targetAutoQuality": "JPG 和 WebP 会自动调整质量以满足上限；PNG 保持无损，可能超出。",
+      "targetLossyNote": "会自动调整质量以满足上限；透明图片仍存为无损 PNG，可能超出。",
+      "targetPngNote": "PNG 为无损格式，无法按目标体积调整；在意体积请选择 JPG 或 WebP。",
+      "targetMissedBadge": "未达目标 · 最小 {size} · {quality}",
+      "targetMissedTitle": "无法压到 {target}：已给到最小 {size}（{quality}）",
+      "targetQualityValue": "质量 {quality}",
+      "targetQualityLossless": "无损",
+      "targetQualityOriginal": "保留原图",
+      "targetMissedCount": "{n, plural, other {# 张图片未压到目标体积}}",
+      "qualityNearlyIdentical": "几乎无差别",
+      "qualitySlightLoss": "轻微损失",
+      "qualityVisibleLoss": "明显损失",
+      "qualityNotMeasured": "画质未测量",
+      "qualityNotMeasuredTitle": "动图或无法解码的结果不计算 SSIM；动图会保留所有帧。",
+      "ssimTitle": "画质 SSIM {ssim}",
       "originalStatLabel": "原始",
       "compressedStatLabel": "压缩后",
       "savedLabel": "节省",
@@ -2251,6 +2434,7 @@ const catalog = createCatalog<Messages>({
       "resetDone": "已恢复推荐压缩设置",
       "clipboardSettingsFailed": "无法保存截图剪贴板设置",
       "autoProcessSettingsFailed": "无法保存自动处理设置",
+      "screenshotPipelineSettingsFailed": "无法保存截图自动处理设置",
       "dockSettingsFailed": "无法保存 Dock 图标设置",
       "loginItemFailed": "无法更改「开机时启动」",
       "systemRefused": "系统拒绝了这次更改，开关已恢复原状",
@@ -2259,6 +2443,11 @@ const catalog = createCatalog<Messages>({
       "shortcutFailed": "无法设置快捷键",
       "copyFailed": "无法复制到剪贴板",
       "copied": "已复制到剪贴板",
+      "copiedCompressed": "压缩结果已复制到剪贴板",
+      "clipboardKept": "压缩期间剪贴板有新内容，已保留未覆盖",
+      "copyMarkdown": "复制为 Markdown 图片",
+      "copiedMarkdown": "Markdown 图片链接已复制到剪贴板",
+      "markdownFailed": "无法生成 Markdown 链接",
       "batchFailed": "压缩完成：{done} 张成功，{failed} 张失败",
       "batchSaved": "压缩完成，共省下 {size}",
       "notProcessed": "{n, plural, other {# 张图片未能处理}}",
@@ -2393,6 +2582,7 @@ const catalog = createCatalog<Messages>({
       "confirmBody": "确定要执行此操作吗？",
       "goMenuOpenApp": "打开 AnyPic",
       "goMenuCapture": "截取屏幕区域",
+      "goMenuCopyLast": "再次复制上一张压缩结果",
       "goMenuFile": "文件",
       "goMenuOpenImages": "打开图片…",
       "goMenuCaptureEllipsis": "截取屏幕区域…",
@@ -2461,6 +2651,8 @@ const catalog = createCatalog<Messages>({
       "goErrSaveItem": "保存 {name} 失败",
       "goErrCopyImage": "无法复制图片",
       "goErrWriteClipboard": "无法写入剪贴板",
+      "goErrNoLastResult": "还没有可复制的压缩结果",
+      "goErrMarkdownSave": "无法保存图片，Markdown 链接会失效",
       "goErrCaptureStart": "无法启动截图工具",
       "goErrCaptureSave": "截图已生成，但无法保存",
       "goErrCaptureQueue": "截图已保存到 {path}，但无法加入队列",
@@ -2514,6 +2706,10 @@ const catalog = createCatalog<Messages>({
       "shortcutButtonTitle": "Click, then press a new key combination. It keeps working after the window is closed.",
       "shortcutHint": "Hold a modifier and press a key; Esc cancels",
       "copyAfterCapture": "Copy captures to the clipboard",
+      "screenshotPipelineLabel": "Compress captures and copy the result",
+      "screenshotPipelineNoteOn": "The capture is copied first; the compressed result replaces it when ready, so pasting meanwhile works.",
+      "screenshotPipelineNoteOff": "Only the raw capture is copied; the compressed result stays out of the clipboard.",
+      "screenshotPipelineNeedsClipboard": "Turn on “Copy captures to the clipboard” first; this step replaces that copy.",
       "checkScreenRecording": "Cannot capture? Check screen recording access",
       "launchAtLogin": "Launch AnyPic at login",
       "hideDock": "Hide the Dock icon when the window closes",
@@ -2559,6 +2755,25 @@ const catalog = createCatalog<Messages>({
       "qualitySmallerFiles": "Smaller files",
       "qualityStrong": "Strong compression",
       "qualityExtreme": "Maximum compression",
+      "sizeTargetLabel": "Cap each image at",
+      "noSizeLimit": "No limit",
+      "customSize": "Custom…",
+      "sizeTargetCustomLabel": "Custom cap",
+      "targetAutoQuality": "JPG and WebP adjust quality to meet the cap; PNG stays lossless and may exceed it.",
+      "targetLossyNote": "Quality is adjusted to meet the cap; transparent images stay lossless PNG and may exceed it.",
+      "targetPngNote": "PNG is lossless and cannot be tuned to a size cap. Choose JPG or WebP if the limit matters.",
+      "targetMissedBadge": "Over target · min {size} · {quality}",
+      "targetMissedTitle": "Could not reach {target}: the smallest result is {size} ({quality})",
+      "targetQualityValue": "quality {quality}",
+      "targetQualityLossless": "lossless",
+      "targetQualityOriginal": "original kept",
+      "targetMissedCount": "{n, plural, one {# image missed its target size} other {# images missed their target size}}",
+      "qualityNearlyIdentical": "Nearly identical",
+      "qualitySlightLoss": "Slight loss",
+      "qualityVisibleLoss": "Visible loss",
+      "qualityNotMeasured": "Quality not measured",
+      "qualityNotMeasuredTitle": "SSIM is not measured for animations or results that cannot be decoded; animations keep every frame.",
+      "ssimTitle": "Quality SSIM {ssim}",
       "originalStatLabel": "Original",
       "compressedStatLabel": "Compressed",
       "savedLabel": "Saved",
@@ -2665,6 +2880,7 @@ const catalog = createCatalog<Messages>({
       "resetDone": "Recommended compression settings restored",
       "clipboardSettingsFailed": "Could not save the clipboard setting",
       "autoProcessSettingsFailed": "Could not save the automatic processing setting",
+      "screenshotPipelineSettingsFailed": "Could not save the capture pipeline setting",
       "dockSettingsFailed": "Could not save the Dock icon setting",
       "loginItemFailed": "Could not change “Launch at login”",
       "systemRefused": "The system refused the change; the switch was restored",
@@ -2673,6 +2889,11 @@ const catalog = createCatalog<Messages>({
       "shortcutFailed": "Could not set the shortcut",
       "copyFailed": "Could not copy to the clipboard",
       "copied": "Copied to the clipboard",
+      "copiedCompressed": "Compressed result copied to the clipboard",
+      "clipboardKept": "The clipboard changed during compression; your newer content was kept",
+      "copyMarkdown": "Copy as a Markdown image",
+      "copiedMarkdown": "Markdown image link copied to the clipboard",
+      "markdownFailed": "Could not create the Markdown link",
       "batchFailed": "{done} compressed, {failed} failed",
       "batchSaved": "Compression complete; {size} saved",
       "notProcessed": "{n, plural, one {# image could not be processed} other {# images could not be processed}}",
@@ -2807,6 +3028,7 @@ const catalog = createCatalog<Messages>({
       "confirmBody": "Do you want to continue?",
       "goMenuOpenApp": "Open AnyPic",
       "goMenuCapture": "Capture a screen region",
+      "goMenuCopyLast": "Copy the last compressed result again",
       "goMenuFile": "File",
       "goMenuOpenImages": "Open images…",
       "goMenuCaptureEllipsis": "Capture a screen region…",
@@ -2875,6 +3097,8 @@ const catalog = createCatalog<Messages>({
       "goErrSaveItem": "Could not save {name}",
       "goErrCopyImage": "Could not copy the image",
       "goErrWriteClipboard": "Could not write to the clipboard",
+      "goErrNoLastResult": "There is no compressed result to copy yet",
+      "goErrMarkdownSave": "Could not save the image, so the Markdown link would break",
       "goErrCaptureStart": "Could not start the capture tool",
       "goErrCaptureSave": "The capture was taken but could not be saved",
       "goErrCaptureQueue": "The capture was saved to {path}, but could not be added to the queue",
