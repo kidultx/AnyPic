@@ -279,6 +279,7 @@ func defaultSettings() Settings {
 		AutoProcess:         "on",
 		ScreenshotShortcut:  DefaultScreenshotShortcut,
 		ScreenshotClipboard: "on",
+		ScreenshotPipeline:  "off",
 		HideDockWhenTray:    "on",
 		OpenAtLogin:         "off",
 	}
@@ -327,7 +328,7 @@ func (a *AnyPic) AddPaths(paths []string) (AddResult, error) {
 // the same place screenshots live, and adds it to the queue. An explicit paste
 // is the only moment AnyPic reads the clipboard for images.
 func (a *AnyPic) PasteImage() (AddResult, error) {
-	data := mygo.Clipboard.ReadImage()
+	data := clipboardReadImage()
 	if len(data) == 0 {
 		return AddResult{}, errNoClipboardImage
 	}
@@ -346,6 +347,11 @@ func (a *AnyPic) PasteImage() (AddResult, error) {
 	if err != nil {
 		return AddResult{}, fmt.Errorf("%s: %w", tr().GoErrPastedNotQueued(path), err)
 	}
+	// The pipeline may replace the clipboard with this image's compressed
+	// result later; remember its decoded pixels. There is no ownership lease:
+	// the user, not AnyPic, wrote this image, so pixels are the only identity
+	// that survives Windows/Linux re-encoding.
+	a.rememberClipboardImage(path, data, 0)
 	return result, nil
 }
 
@@ -511,6 +517,9 @@ func (a *AnyPic) Remove(ids []int64) (Snapshot, error) {
 	kept := a.items[:0]
 	for _, item := range a.items {
 		if drop[item.ID] {
+			if a.lastResultID == item.ID {
+				a.lastResultID = 0
+			}
 			a.removeTemp(item)
 			delete(a.byID, item.ID)
 			continue
@@ -535,6 +544,7 @@ func (a *AnyPic) Clear() (Snapshot, error) {
 	a.byID = map[int64]*Item{}
 	a.nextID = 0
 	a.batch = Batch{}
+	a.lastResultID = 0
 	return a.snapshotLocked(), nil
 }
 
@@ -811,6 +821,14 @@ func (a *AnyPic) Compress(s Settings) error {
 	return a.startCompression(s, false)
 }
 
+// CompressIDs starts a pass over just the given ready images. The screenshot
+// pipeline uses it when auto-process is off: compressing a capture must not
+// sweep unrelated files the user deliberately left waiting.
+func (a *AnyPic) CompressIDs(ids []int64, s Settings) error {
+	s = normalizeSettings(s)
+	return a.startCompressionIDs(s, true, ids)
+}
+
 // CompressReady starts a pass over the images that have not been compressed
 // yet. The automatic flow uses it to pick up images added while an earlier
 // pass was running without re-encoding the ones already finished.
@@ -844,14 +862,29 @@ func (a *AnyPic) CompressFailed(s Settings) error {
 
 func (a *AnyPic) startCompression(s Settings, onlyReady bool) error {
 	s = normalizeSettings(s)
+	return a.startCompressionIDs(s, onlyReady, nil)
+}
 
+// startCompressionIDs is the shared body; onlyIDs != nil restricts the pass
+// to those images (the pipeline's scoped pass).
+func (a *AnyPic) startCompressionIDs(s Settings, onlyReady bool, onlyIDs []int64) error {
 	a.mu.Lock()
 	if a.running {
 		a.mu.Unlock()
 		return errors.New(tr().GoErrAlreadyRunning())
 	}
+	var wanted map[int64]bool
+	if onlyIDs != nil {
+		wanted = make(map[int64]bool, len(onlyIDs))
+		for _, id := range onlyIDs {
+			wanted[id] = true
+		}
+	}
 	ids := make([]int64, 0, len(a.items))
 	for _, item := range a.items {
+		if wanted != nil && !wanted[item.ID] {
+			continue
+		}
 		if onlyReady && item.Status != statusReady {
 			continue
 		}
@@ -860,6 +893,7 @@ func (a *AnyPic) startCompression(s Settings, onlyReady bool) error {
 		item.Status = statusReady
 		item.Error = ""
 		item.saved = false
+		item.savedPath = ""
 	}
 	if len(ids) == 0 {
 		a.mu.Unlock()
@@ -1290,7 +1324,7 @@ func (a *AnyPic) ExportAll(ctx context.Context) (ExportResult, error) {
 	}
 
 	result := ExportResult{Folder: folder}
-	saved := make([]int64, 0, len(done))
+	saved := make([]savedCopy, 0, len(done))
 	for _, item := range done {
 		src := item.compressedPath
 		if item.PassedThrough || src == "" {
@@ -1303,7 +1337,7 @@ func (a *AnyPic) ExportAll(ctx context.Context) (ExportResult, error) {
 		}
 		result.Paths = append(result.Paths, dest)
 		result.Count++
-		saved = append(saved, item.ID)
+		saved = append(saved, savedCopy{id: item.ID, path: dest})
 	}
 	a.markResultsSaved(saved)
 	return result, nil
@@ -1338,7 +1372,7 @@ func (a *AnyPic) ExportProcessed(ids []int64) (ExportResult, error) {
 
 	result := ExportResult{}
 	dirs := map[string]bool{}
-	saved := make([]int64, 0, len(done))
+	saved := make([]savedCopy, 0, len(done))
 	for _, item := range done {
 		destDir := item.Dir
 		if mode == "folder" && folder != "" {
@@ -1355,7 +1389,7 @@ func (a *AnyPic) ExportProcessed(ids []int64) (ExportResult, error) {
 		}
 		result.Paths = append(result.Paths, dest)
 		result.Count++
-		saved = append(saved, item.ID)
+		saved = append(saved, savedCopy{id: item.ID, path: dest})
 		if result.Folder == "" {
 			result.Folder = destDir
 		}
@@ -1376,6 +1410,10 @@ var pngSignature = []byte("\x89PNG\r\n\x1a\n")
 // to the original when compression did not finish. The clipboard takes PNG,
 // so results encoded as JPEG or WebP are decoded and re-encoded first.
 func (a *AnyPic) CopyItemToClipboard(id int64) error {
+	return a.copyItemToClipboard(id)
+}
+
+func (a *AnyPic) copyItemToClipboard(id int64) error {
 	a.mu.Lock()
 	item := a.byID[id]
 	if item == nil {
@@ -1397,13 +1435,14 @@ func (a *AnyPic) CopyItemToClipboard(id int64) error {
 		if err != nil {
 			return errors.New(tr().GoErrCopyImage())
 		}
+		img = normalizeDecodedImage(img)
 		var buf bytes.Buffer
 		if err := png.Encode(&buf, img); err != nil {
 			return errors.New(tr().GoErrCopyImage())
 		}
 		data = buf.Bytes()
 	}
-	if err := mygo.Clipboard.WriteImage(data); err != nil {
+	if _, err := clipboardWriteImage(data); err != nil {
 		return errors.New(tr().GoErrWriteClipboard())
 	}
 	return nil
@@ -1453,7 +1492,7 @@ func (a *AnyPic) ExportOne(ctx context.Context, id int64) (ExportResult, error) 
 		// As exporting every image says it (ExportAll).
 		return ExportResult{}, fmt.Errorf("%s: %w", tr().GoErrExportItem(copyItem.Name), err)
 	}
-	a.markResultsSaved([]int64{id})
+	a.markResultsSaved([]savedCopy{{id: id, path: dest}})
 	return ExportResult{Count: 1, Folder: filepath.Dir(dest), Paths: []string{dest}}, nil
 }
 
@@ -1492,15 +1531,24 @@ func (a *AnyPic) Info() AppInfo {
 	}
 }
 
+// savedCopy records one exported result: which item, and where its durable
+// copy landed.
+type savedCopy struct {
+	id   int64
+	path string
+}
+
 // markResultsSaved records that copies of the given items' compressed results
 // now exist outside the session temp directory, so quitting will not lose
-// them (see UnsavedResults).
-func (a *AnyPic) markResultsSaved(ids []int64) {
+// them (see UnsavedResults). The path lets the Markdown copy point at a file
+// that outlives the session.
+func (a *AnyPic) markResultsSaved(copies []savedCopy) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	for _, id := range ids {
-		if item := a.byID[id]; item != nil {
+	for _, copy := range copies {
+		if item := a.byID[copy.id]; item != nil {
 			item.saved = true
+			item.savedPath = copy.path
 		}
 	}
 }
@@ -1584,13 +1632,13 @@ func decodeImage(f *os.File, autoOrientation bool) (image.Image, error) {
 		img, err = imaging.Decode(f)
 	}
 	if err == nil {
-		return img, nil
+		return normalizeDecodedImage(img), nil
 	}
 	if _, seekErr := f.Seek(0, io.SeekStart); seekErr != nil {
 		return nil, err
 	}
 	if img, tiffErr := decodeJPEGTIFF(f); tiffErr == nil {
-		return img, nil
+		return normalizeDecodedImage(img), nil
 	}
 	return nil, err
 }
@@ -1804,6 +1852,16 @@ func normalizeSettings(s Settings) Settings {
 	// Older settings files have no clipboard preference; copy is the default.
 	if s.ScreenshotClipboard != "off" {
 		s.ScreenshotClipboard = "on"
+	}
+	// The capture pipeline is opt-in: anything but an explicit "on" — the
+	// zero value, an older settings file, or a user who turned it off — is
+	// off. It must never write an image the user asked not to copy, so a
+	// disabled capture clipboard forces it off as well.
+	if s.ScreenshotPipeline != "on" {
+		s.ScreenshotPipeline = "off"
+	}
+	if s.ScreenshotClipboard == "off" {
+		s.ScreenshotPipeline = "off"
 	}
 	// Older settings files have no Dock preference; hiding it is the default.
 	if s.HideDockWhenTray != "off" {

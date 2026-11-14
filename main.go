@@ -134,6 +134,7 @@ func main() {
 			Menu: mygo.NewMenu([]*mygo.MenuItem{
 				{Label: t.GoMenuOpenApp(), Click: func(*mygo.MenuItem, *mygo.Window) { showWindow() }},
 				{Label: t.GoMenuCapture(), Click: command("screenshot")},
+				{Label: t.GoMenuCopyLast(), Click: command("copy-last")},
 				mygo.Separator(),
 				{Role: mygo.RoleQuit},
 			}),
@@ -173,6 +174,7 @@ func main() {
 				tray.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
 					{Label: t.GoMenuOpenApp(), Click: func(*mygo.MenuItem, *mygo.Window) { showWindow() }},
 					{Label: t.GoMenuCapture(), Click: command("screenshot")},
+					{Label: t.GoMenuCopyLast(), Click: command("copy-last")},
 					mygo.Separator(),
 					{Role: mygo.RoleQuit},
 				}))

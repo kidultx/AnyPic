@@ -1135,6 +1135,12 @@ body.side-drag * {
   transform: translateX(13px);
 }
 
+/* The capture pipeline is a dependent switch: with "copy after capture" off
+   there is no raw clipboard image for it to replace, so it reads disabled. */
+.switch-input:disabled + .switch {
+  opacity: 0.45;
+}
+
 .switch-input:focus-visible + .switch {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;

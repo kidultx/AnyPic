@@ -98,20 +98,28 @@ func (a *AnyPic) CaptureScreenshot(ctx context.Context) (result AddResult, err e
 	a.mu.Lock()
 	copyToClipboard := a.settings.ScreenshotClipboard != "off"
 	autoProcess := a.settings.AutoProcess == "on"
+	// The pipeline needs the capture on the clipboard to replace it later;
+	// a disabled clipboard preference therefore disables the pipeline too,
+	// even if a stored value says on.
+	pipeline := a.settings.ScreenshotPipeline == "on" && copyToClipboard
 	a.mu.Unlock()
 
-	// Copying is explicit. When the capture tool itself wrote to the
-	// clipboard (Windows/Linux) and the preference is off, clear it again.
-	// A file-based capture never touches the clipboard in the first place.
-	//
-	// With auto-process on, the page copies the compressed result once the
-	// pass finishes, so the capture is not put on the clipboard twice. The
-	// tool-provided copy stays meanwhile as a fallback.
+	// When the capture is headed for the clipboard, put it there now. A paste
+	// during compression then gets the shot itself, never a stale clipboard.
+	// When the capture tool already wrote the same image (Windows/Linux),
+	// writing it again is harmless. A failed write never becomes ownership:
+	// no lease is recorded, so the compressed result will not replace it.
 	copied := false
-	if copyToClipboard && !autoProcess {
-		copied = mygo.Clipboard.WriteImage(data) == nil
-	} else if !copyToClipboard && viaClipboard {
-		mygo.Clipboard.Clear()
+	var lease uint64
+	if copyToClipboard {
+		if token, writeErr := clipboardWriteImage(data); writeErr == nil {
+			copied = true
+			lease = token
+		}
+	} else if viaClipboard {
+		// The user asked not to copy captures; do not leave the capture tool's
+		// image on the clipboard.
+		clipboardClear()
 	}
 
 	path, err := writeScreenshot(data)
@@ -124,11 +132,18 @@ func (a *AnyPic) CaptureScreenshot(ctx context.Context) (result AddResult, err e
 	}
 	result.Copied = copied
 
+	// Remember the write only when it succeeded; a failed write records
+	// nothing, so CopyCaptureResult can never treat some later image as ours.
+	if lease != 0 {
+		a.rememberClipboardImage(path, data, lease)
+	}
+
 	// The shortcut may have fired while the app was behind another window;
-	// bring it forward now that the capture is done. The zero-click flow
-	// leaves the app in the background instead: the user is about to paste,
-	// not to open the queue.
-	if !(autoProcess && copyToClipboard) {
+	// bring it forward now that the capture is done. The zero-click flows —
+	// the pipeline and automatic processing plus copying — leave the app in
+	// the background instead: the user is about to paste, not to open the
+	// queue.
+	if !(pipeline || (autoProcess && copyToClipboard)) {
 		focusScreenshotWindow(ctx)
 	}
 	return result, nil
@@ -301,7 +316,7 @@ func captureToFile(cmd *exec.Cmd, plan screenshotCommand) ([]byte, error) {
 func waitForNewImage(ctx context.Context, baseline [32]byte, timeout time.Duration) []byte {
 	deadline := time.Now().Add(timeout)
 	for {
-		data := mygo.Clipboard.ReadImage()
+		data := clipboardReadImage()
 		if len(data) > 0 && sha256.Sum256(data) != baseline {
 			return data
 		}
@@ -317,7 +332,7 @@ func waitForNewImage(ctx context.Context, baseline [32]byte, timeout time.Durati
 }
 
 func clipboardImageDigest() [32]byte {
-	return sha256.Sum256(mygo.Clipboard.ReadImage())
+	return sha256.Sum256(clipboardReadImage())
 }
 
 // writeScreenshot stores the capture in Pictures/AnyPic, a folder the user

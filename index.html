@@ -42,6 +42,7 @@
       <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" /></symbol>
       <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16" /></symbol>
       <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z" /><path d="M19 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8Z" /></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.5 1.5" /><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.5-1.5" /></symbol>
     </svg>
 
     <div class="app">
@@ -553,6 +554,12 @@
               <input class="switch-input" id="clipboardToggle" type="checkbox" checked />
               <span class="switch" aria-hidden="true"></span>
             </label>
+            <label class="toggle-row">
+              <span data-i18n="screenshotPipelineLabel"></span>
+              <input class="switch-input" id="pipelineToggle" type="checkbox" />
+              <span class="switch" aria-hidden="true"></span>
+            </label>
+            <p class="field-note" id="pipelineNote"></p>
             <button class="text-button screen-permission" id="screenPermissionBtn" type="button" hidden data-i18n="checkScreenRecording"></button>
           </section>
         </div>
@@ -566,6 +573,7 @@
       <button type="button" role="menuitem" data-menu="preview"><svg aria-hidden="true" class="icon"><use href="#i-eye" /></svg><span data-i18n="comparePreview"></span></button>
       <button type="button" role="menuitem" data-menu="decorate"><svg aria-hidden="true" class="icon"><use href="#i-sparkle" /></svg><span data-i18n="beautifyWithCurrent"></span></button>
       <button type="button" role="menuitem" data-menu="export"><svg aria-hidden="true" class="icon"><use href="#i-download" /></svg><span data-i18n="exportLabel"></span></button>
+      <button type="button" role="menuitem" data-menu="markdown"><svg aria-hidden="true" class="icon"><use href="#i-link" /></svg><span data-i18n="copyMarkdown"></span></button>
       <span class="context-sep" role="separator"></span>
       <button type="button" role="menuitem" data-menu="reveal"><svg aria-hidden="true" class="icon"><use href="#i-folder" /></svg><span data-i18n="showInFolder"></span></button>
       <span class="context-sep" role="separator"></span>

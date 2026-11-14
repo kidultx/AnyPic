@@ -112,6 +112,7 @@ async function init() {
     activate: activateItem,
     decorate: (id) => void openPreview(id, "beautify"),
     exportOne: (id) => void exportOne(id),
+    copyMarkdown: (id) => void copyMarkdown(id),
     reveal: revealItem,
     removeSelected: () => void removeSelected(),
     removeOne: (id) => void removeItem(id),
@@ -153,7 +154,7 @@ async function init() {
       applyDemoState();
     }
   } else {
-    applyDemoState();
+    applyDemoState(true);
   }
 
   // Following the system keeps following it: a language change on the
@@ -280,7 +281,7 @@ function applySnapshot(snapshot: Snapshot, includeSettings = true) {
   syncSettingsToUI();
 }
 
-function applyDemoState() {
+function applyDemoState(browserPreview = false) {
   demoMode = true;
   settings = defaultSettings();
   const palettes = [
@@ -330,7 +331,9 @@ function applyDemoState() {
   syncSettingsToUI();
   applyTheme("system");
   aboutVersion = { version: "0.1.0", platform: "", arch: "" };
-  demoVersion = true;
+  // Only the browser preview has no engine version to show; a desktop build
+  // whose engine failed to start still reports its real version.
+  demoVersion = browserPreview;
   renderAboutVersion();
   window.setTimeout(() => showToast(t.demoToast(), "info"), 700);
 }
@@ -1072,13 +1075,23 @@ function bindEvents() {
     if (recordingShortcut) stopShortcutRecording();
     else startShortcutRecording();
   });
-  function bindToggle(id: string, key: "screenshotClipboard" | "autoProcess" | "hideDockWhenTray", failure: string) {
+  function bindToggle(
+    id: string,
+    key: "screenshotClipboard" | "screenshotPipeline" | "autoProcess" | "hideDockWhenTray",
+    failure: string,
+  ) {
     $(id).addEventListener("change", (event) => {
       const on = (event.target as HTMLInputElement).checked;
-      void setSettings({ [key]: on ? "on" : "off" } as Partial<Settings>, undefined, (error) => showError(error, failure));
+      const patch: Partial<Settings> = { [key]: on ? "on" : "off" };
+      // Turning capture copying off also turns off the pipeline that depends
+      // on it, so re-enabling copying does not silently resume clipboard
+      // replacement.
+      if (key === "screenshotClipboard" && !on) patch.screenshotPipeline = "off";
+      void setSettings(patch, undefined, (error) => showError(error, failure));
     });
   }
   bindToggle("#clipboardToggle", "screenshotClipboard", t.clipboardSettingsFailed());
+  bindToggle("#pipelineToggle", "screenshotPipeline", t.screenshotPipelineSettingsFailed());
   bindToggle("#autoProcessToggle", "autoProcess", t.autoProcessSettingsFailed());
   bindToggle("#dockToggle", "hideDockWhenTray", t.dockSettingsFailed());
   $("#openAtLoginToggle").addEventListener("change", (event) => {
@@ -1423,7 +1436,7 @@ async function captureScreenshot() {
     const result = await AnyPic.captureScreenshot();
     // A fresh capture is "ready", so a done/error filter would hide it.
     if (result.added > 0) filter = "all";
-    applyAddResult(result, "clipboard");
+    applyAddResult(result, "capture");
     if (result.copied) showToast(t.captureCopied(), "info");
   } catch (error) {
     // Canceling the region selection, or a second press while the first
@@ -1483,7 +1496,7 @@ async function pasteImage() {
   }
 }
 
-type AddSource = "files" | "clipboard";
+type AddSource = "files" | "clipboard" | "capture";
 
 async function addPaths(paths: string[]) {
   if (demoMode || paths.length === 0) return;
@@ -1519,7 +1532,12 @@ function applyAddResult(
   const known = new Set(items.map((item) => item.id));
   applySnapshot(result.snapshot, false);
   const newIDs = items.filter((item) => !known.has(item.id)).map((item) => item.id);
-  const auto = autoProcessEnabled() && !demoMode && result.added > 0;
+  // A capture can start a compression pass on its own when the screenshot
+  // pipeline is on, even with auto-process off; files and pasted images
+  // still follow the auto-process switch.
+  const capture = source === "capture";
+  const pipeline = capture && screenshotPipelineEnabled();
+  const auto = !demoMode && result.added > 0 && (pipeline || autoProcessEnabled());
 
   if (result.added > 0) {
     // The automatic flow folds the addition into one merged completion
@@ -1543,14 +1561,20 @@ function applyAddResult(
   }
 
   renderAll();
-  if (auto) startAutoRun(newIDs, source === "clipboard");
+  if (auto) {
+    // Only an auto-run result may replace clipboard content: a capture when
+    // the pipeline asked for it, a pasted image while the clipboard setting
+    // is on. Files never have a clipboard copy to replace.
+    const copyResult = capture ? pipeline : source === "clipboard" && settings.screenshotClipboard !== "off";
+    startAutoRun(newIDs, copyResult);
+  }
 }
 
-function startAutoRun(ids: number[], fromClipboard: boolean) {
+function startAutoRun(ids: number[], copyResult: boolean) {
   if (ids.length === 0) return;
   autoRun ??= { ids: new Set<number>(), copyIDs: [] };
   for (const id of ids) autoRun.ids.add(id);
-  if (fromClipboard) autoRun.copyIDs.push(ids[ids.length - 1]!);
+  if (copyResult) autoRun.copyIDs.push(ids[ids.length - 1]!);
   // A pass in progress picks the new images up when it ends; the start
   // guard covers the async gap before the backend call.
   if (batch.running || compressStarting) return;
@@ -1563,7 +1587,17 @@ async function compressAll(auto = false) {
   const ready = items.filter((item) => item.status === "ready");
   if (auto && ready.length === 0) return;
   if (auto && !autoRun) autoRun = { ids: new Set<number>(), copyIDs: [] };
-  if (auto) for (const item of ready) autoRun!.ids.add(item.id);
+  if (auto) {
+    for (const item of ready) {
+      // With auto-process off, an automatic pass exists only because the
+      // capture pipeline asked for one; it must not sweep in files the user
+      // deliberately left waiting.
+      if (autoProcessEnabled() || autoRun!.ids.has(item.id)) autoRun!.ids.add(item.id);
+    }
+  }
+  const targets =
+    auto && !autoProcessEnabled() && autoRun ? ready.filter((item) => autoRun!.ids.has(item.id)) : ready;
+  const total = auto ? targets.length : items.length;
 
   compressStarting = true;
   dirty = false;
@@ -1607,7 +1641,8 @@ async function compressAll(auto = false) {
   batch = { running: true, total, done: 0, failed: 0, canceled: false };
   scheduleRender();
   try {
-    if (auto) await AnyPic.compressReady(settings);
+    if (auto && !autoProcessEnabled() && autoRun) await AnyPic.compressIDs([...autoRun.ids], settings);
+    else if (auto) await AnyPic.compressReady(settings);
     else await AnyPic.compress(settings);
     compressedSignature = runSignature;
     markDirty();
@@ -1813,6 +1848,44 @@ async function exportOne(id: number) {
   }
 }
 
+/* The tray's "copy the last result again": the backend remembers the most
+   recently finished item, so this works even while the window sits in the
+   tray. */
+async function copyLastResult() {
+  if (demoMode) {
+    showToast(t.demoNoClipboard(), "info");
+    return;
+  }
+  if (!items.some((item) => item.status === "done")) {
+    showToast(t.goErrNoLastResult(), "info");
+    return;
+  }
+  try {
+    const outcome = await AnyPic.copyLastResult();
+    showToast(outcome.copied ? t.copiedCompressed() : t.clipboardKept(), "info");
+  } catch (error) {
+    showError(error, t.copyFailed());
+  }
+}
+
+/* The context menu's Markdown copy: the backend makes the result durable on
+   disk first, then puts ![name](local path) on the clipboard. Nothing is
+   uploaded; the link works in docs and issue drafts on this machine. */
+async function copyMarkdown(id: number) {
+  const item = items.find((entry) => entry.id === id);
+  if (!item || item.status !== "done") return;
+  if (demoMode) {
+    showToast(t.demoNoClipboard(), "info");
+    return;
+  }
+  try {
+    await AnyPic.copyItemAsMarkdown(id);
+    showToast(t.copiedMarkdown(), "success");
+  } catch (error) {
+    showError(error, t.markdownFailed());
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* settings                                                            */
 /* ------------------------------------------------------------------ */
@@ -1897,6 +1970,11 @@ function syncSettingsToUI() {
   if (autoToggle) autoToggle.checked = autoProcessEnabled();
   const clipboardToggle = $<HTMLInputElement>("#clipboardToggle");
   if (clipboardToggle) clipboardToggle.checked = settings.screenshotClipboard !== "off";
+  const pipelineToggle = $<HTMLInputElement>("#pipelineToggle");
+  if (pipelineToggle) {
+    pipelineToggle.checked = screenshotPipelineEnabled();
+    pipelineToggle.disabled = settings.screenshotClipboard === "off";
+  }
   const dockToggle = $<HTMLInputElement>("#dockToggle");
   if (dockToggle) dockToggle.checked = settings.hideDockWhenTray !== "off";
   const openAtLoginToggle = $<HTMLInputElement>("#openAtLoginToggle");
@@ -1952,12 +2030,17 @@ function handleBatch(next: Batch) {
       if (next.canceled) {
         autoRun = null;
         showToast(t.compressionCanceled(), "info");
-      } else if (autoProcessEnabled() && items.some((item) => item.status === "ready")) {
-        // Images arrived while the pass ran; fold them into the same
-        // automatic run and save everything once it settles.
-        void compressAll(true);
       } else {
-        void finishAutoRun();
+        // Images that joined the automated pass — a capture arriving while
+        // the previous one ran — are folded into the same run. With
+        // auto-process off the next pass is scoped to those ids, so files
+        // the user left waiting are still not swept in.
+        const autoReady = items.some((item) => item.status === "ready" && autoRun!.ids.has(item.id));
+        if (autoReady) {
+          void compressAll(true);
+        } else {
+          void finishAutoRun();
+        }
       }
     } else {
       showBatchResult(next);
@@ -2009,36 +2092,53 @@ function showBatchResult(next: Batch) {
   const compressed = done.reduce((sum, item) => sum + item.compressedSize, 0);
   const saved = Math.max(0, original - compressed);
   showToast(t.batchSaved(formatBytes(saved)), "success");
+  const missed = done.filter((item) => item.targetMissed).length;
+  if (missed > 0) showToast(t.targetMissedCount(missed), "info");
 }
 
-/* Ends an automatic run: copies the capture (when there was one), saves the
-   results without a dialog, and reports everything in one toast. */
+/* Ends an automatic run: replaces the raw capture on the clipboard when the
+   pipeline asked for it, saves the results without a dialog when auto-process
+   is on, and reports everything in one or two toasts. */
 async function finishAutoRun() {
   const run = autoRun;
   autoRun = null;
   if (!run) return;
-  if (!autoProcessEnabled()) {
-    showBatchResult(batch);
-    return;
-  }
 
   const ids = [...run.ids];
   const idSet = new Set(ids);
   const done = items.filter((item) => idSet.has(item.id) && item.status === "done");
   const failed = items.filter((item) => idSet.has(item.id) && item.status === "error");
+  const missed = done.filter((item) => item.targetMissed).length;
 
+  if (done.length === 0) {
+    if (failed.length > 0) showToast(t.notProcessed(failed.length), "error");
+    return;
+  }
+
+  // The guarded copy: the backend only replaces the clipboard while it still
+  // holds the image AnyPic put there, so something copied during compression
+  // survives. Pasting mid-compression already got the raw capture. A capture
+  // that failed to compress has no result to put there.
   let copied = false;
-  if (run.copyIDs.length > 0 && settings.screenshotClipboard !== "off") {
+  let skipped = false;
+  const copyId = run.copyIDs.length > 0 ? run.copyIDs[run.copyIDs.length - 1]! : null;
+  if (copyId !== null && done.some((item) => item.id === copyId)) {
     try {
-      await AnyPic.copyItemToClipboard(run.copyIDs[run.copyIDs.length - 1]!);
-      copied = true;
+      const outcome = await AnyPic.copyCaptureResult(copyId);
+      copied = outcome.copied;
+      skipped = outcome.skipped;
     } catch (error) {
       showError(error, t.copyFailed());
     }
   }
 
-  if (done.length === 0) {
-    if (failed.length > 0) showToast(t.notProcessed(failed.length), "error");
+  // The pipeline can run with auto-process off: it still copies the result,
+  // but saving stays an explicit action.
+  if (!autoProcessEnabled()) {
+    if (copied) showToast(t.copiedCompressed(), "info");
+    else if (skipped) showToast(t.clipboardKept(), "info");
+    if (missed > 0) showToast(t.targetMissedCount(missed), "info");
+    showBatchResult(batch);
     return;
   }
 
@@ -2062,8 +2162,11 @@ async function finishAutoRun() {
       showToast(t.notProcessed(failed.length), "error");
     } else if (copied) {
       // The footer already reports the save; the copy still earns a nudge.
-      showToast(t.copied(), "info");
+      showToast(t.copiedCompressed(), "info");
+    } else if (skipped) {
+      showToast(t.clipboardKept(), "info");
     }
+    if (missed > 0) showToast(t.targetMissedCount(missed), "info");
     scheduleRender();
   } catch (error) {
     lastSaved = null;
@@ -2351,6 +2454,9 @@ async function handleCommand(command: string) {
       break;
     case "screenshot":
       await captureScreenshot();
+      break;
+    case "copy-last":
+      await copyLastResult();
       break;
     case "compress":
       await compressAll();

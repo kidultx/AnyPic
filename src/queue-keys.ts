@@ -21,6 +21,7 @@ export interface QueueKeysContext {
   activate(id: number): void;
   decorate(id: number): void;
   exportOne(id: number): void;
+  copyMarkdown(id: number): void;
   reveal(id: number): void;
   removeSelected(): void;
   removeOne(id: number): void;
@@ -252,6 +253,9 @@ function bindQueueMenu() {
       case "export":
         ctx.exportOne(id);
         break;
+      case "markdown":
+        ctx.copyMarkdown(id);
+        break;
       case "reveal":
         ctx.reveal(id);
         break;
@@ -314,6 +318,7 @@ function openQueueMenu(id: number, x: number, y: number) {
   enable("preview", item.status === "done");
   enable("decorate", !running && !item.animated && (item.status === "done" || item.status === "ready"));
   enable("export", !running && item.status === "done");
+  enable("markdown", !running && item.status === "done");
   enable("reveal", !!item.path);
   enable("remove", !running);
 
