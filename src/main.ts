@@ -7,7 +7,7 @@ import { ensureQueueFocus, initQueueKeys, queueFocusAfterRemoval, queueRowFocus,
 import { DEFAULT_SHORTCUT, acceleratorFromEvent, formatShortcut, isReservedShortcut, setShortcutPlatform } from "./shortcuts";
 
 function signature(settings: Settings): string {
-  return JSON.stringify([settings.format, settings.quality, settings.maxDimension, settings.suffix]);
+  return JSON.stringify([settings.format, settings.quality, settings.maxDimension, settings.suffix, settings.targetSize]);
 }
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -71,6 +71,8 @@ function defaultSettings(): Settings {
     autoProcess: "on",
     screenshotShortcut: DEFAULT_SHORTCUT,
     screenshotClipboard: "on",
+    screenshotPipeline: "off",
+    targetSize: 0,
     hideDockWhenTray: "on",
     openAtLogin: "off",
   };
@@ -395,18 +397,37 @@ function renderSettings() {
 
   const presets = [60, 82, 95];
   const customQuality = !presets.includes(settings.quality);
+  const targetMode = targetSizeOn();
   $$<HTMLButtonElement>("#qualityPresets button").forEach((button) => {
     const active = Number(button.dataset.quality) === settings.quality;
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", String(active));
-    button.disabled = format === "png" || batch.running;
+    button.disabled = format === "png" || batch.running || targetMode;
   });
   $("#qualityState").textContent = t.custom();
-  $("#qualityState").hidden = !customQuality;
+  $("#qualityState").hidden = targetMode || !customQuality;
+
+  const targetSelect = $<HTMLSelectElement>("#targetSize");
+  const preset = targetPreset();
+  if (document.activeElement !== targetSelect) targetSelect.value = preset;
+  $("#targetCustomRow").hidden = preset !== "custom";
+  const targetCustom = $<HTMLInputElement>("#targetCustomValue");
+  if (document.activeElement !== targetCustom) targetCustom.value = String(targetCustomKB());
+  $("#targetNote").hidden = !targetMode;
+  $("#targetNote").textContent =
+    format === "png" ? t.targetPngNote() : format === "auto" ? t.targetAutoQuality() : t.targetLossyNote();
 
   const autoToggle = $<HTMLInputElement>("#autoProcessToggle");
   if (document.activeElement !== autoToggle) autoToggle.checked = autoProcessEnabled();
   $("#autoProcessNote").textContent = autoProcessEnabled() ? t.autoProcessNoteOn() : t.autoProcessNoteOff();
+  const pipelineToggle = $<HTMLInputElement>("#pipelineToggle");
+  const captureCopyOn = settings.screenshotClipboard !== "off";
+  pipelineToggle.disabled = !captureCopyOn;
+  $("#pipelineNote").textContent = !captureCopyOn
+    ? t.screenshotPipelineNeedsClipboard()
+    : screenshotPipelineEnabled()
+      ? t.screenshotPipelineNoteOn()
+      : t.screenshotPipelineNoteOff();
   $("#emptyTitle").textContent = autoProcessEnabled() ? t.emptyTitleAuto() : t.emptyTitleManual();
   $("#emptyShotKey").textContent = formatShortcut(settings.screenshotShortcut);
   $("#outputInlineLabel").textContent =
@@ -414,8 +435,9 @@ function renderSettings() {
   $("#outputInlineBtn").title = settings.outputMode === "folder" && settings.outputFolder ? settings.outputFolder : t.alongsideOriginal();
 
   const qualityField = quality.closest(".quality-field");
-  qualityField?.classList.toggle("disabled", format === "png");
-  quality.disabled = format === "png" || batch.running;
+  qualityField?.classList.toggle("disabled", format === "png" || targetMode);
+  $("#qualityPresets").closest(".quality-field")?.classList.toggle("disabled", format === "png" || targetMode);
+  quality.disabled = format === "png" || batch.running || targetMode;
 
   const maxDim = $<HTMLSelectElement>("#maxDim");
   if (document.activeElement !== maxDim) maxDim.value = String(settings.maxDimension);
@@ -452,6 +474,56 @@ function qualityLabel(quality: number): string {
 
 function autoProcessEnabled(): boolean {
   return settings.autoProcess !== "off";
+}
+
+function screenshotPipelineEnabled(): boolean {
+  // The pipeline replaces the capture AnyPic itself copied. With capture
+  // copying off there is no raw copy to replace, so it must stay off too.
+  return settings.screenshotPipeline === "on" && settings.screenshotClipboard !== "off";
+}
+
+/* Target-size mode is a cap in bytes; 0 leaves the quality setting in charge. */
+function targetSizeOn(): boolean {
+  return settings.targetSize > 0;
+}
+
+const TARGET_PRESETS: Record<string, number> = {
+  "500": 500 * 1024,
+  "1m": 1024 * 1024,
+  "2m": 2 * 1024 * 1024,
+};
+const TARGET_CUSTOM_DEFAULT_KB = 750;
+
+/* Which option the select shows for the stored byte count; anything that is
+   not one of the four presets is the custom row. */
+function targetPreset(): string {
+  if (!targetSizeOn()) return "0";
+  for (const [preset, bytes] of Object.entries(TARGET_PRESETS)) {
+    if (bytes === settings.targetSize) return preset;
+  }
+  return "custom";
+}
+
+function targetCustomKB(): number {
+  const kb = Math.round(settings.targetSize / 1024);
+  return kb > 0 ? kb : TARGET_CUSTOM_DEFAULT_KB;
+}
+
+/* The quality tiers the queue shows beside the saving figure. SSIM is the
+   measured structural similarity to the source, so the tier says what the
+   compression actually cost instead of trusting the quality number alone.
+   Thresholds are calibrated against testdata/benchmark at quality 82: real
+   screenshots and the transparent logo score 0.999–0.991, real photos
+   0.994–0.987, the synthetic photo 0.933 and a target-sized photo 0.942.
+   0.98 keeps "nearly identical" for the first two clusters without putting a
+   q82 photo on the boundary; 0.92 keeps "slight loss" for the photo cluster
+   with headroom on both sides. A measured zero is a real score and still gets
+   a tier; "not measured" is a separate flag (SSIMMeasured) so it is never
+   hidden as zero. */
+function qualityTier(ssim: number): { label: string; className: string } {
+  if (ssim >= 0.98) return { label: t.qualityNearlyIdentical(), className: "" };
+  if (ssim >= 0.92) return { label: t.qualitySlightLoss(), className: "slight" };
+  return { label: t.qualityVisibleLoss(), className: "visible" };
 }
 
 function renderStage() {
@@ -888,10 +960,12 @@ function renderActions() {
   $$<HTMLButtonElement>("#formatSeg button").forEach((button) => {
     button.disabled = running;
   });
-  $<HTMLInputElement>("#quality").disabled = running || settings.format === "png";
+  $<HTMLInputElement>("#quality").disabled = running || settings.format === "png" || targetSizeOn();
   $$<HTMLButtonElement>("#qualityPresets button").forEach((button) => {
-    button.disabled = running || settings.format === "png";
+    button.disabled = running || settings.format === "png" || targetSizeOn();
   });
+  $<HTMLSelectElement>("#targetSize").disabled = running;
+  $<HTMLInputElement>("#targetCustomValue").disabled = running;
   // Selection follows the removal rules: nothing selectable or removable
   // while a pass owns the queue.
   $<HTMLButtonElement>("#selectAllBtn").disabled = running || visibleItems().length === 0;
@@ -1027,6 +1101,7 @@ function bindEvents() {
       quality: 82,
       maxDimension: 0,
       suffix: "-anypic",
+      targetSize: 0,
     };
     void setSettings(next);
     showToast(t.resetDone(), "success");
@@ -1058,6 +1133,38 @@ function bindEvents() {
 
   $("#maxDim").addEventListener("change", (event) => {
     void setSettings({ maxDimension: Number((event.target as HTMLSelectElement).value) });
+  });
+
+  $("#targetSize").addEventListener("change", (event) => {
+    const preset = (event.target as HTMLSelectElement).value;
+    if (preset === "0") {
+      void setSettings({ targetSize: 0 });
+      return;
+    }
+    if (preset === "custom") {
+      // Entering the custom row while a fixed preset is selected starts from
+      // the custom default; reusing the preset value would make the select
+      // snap straight back to that preset and hide the input.
+      const current = targetPreset() === "custom" ? settings.targetSize : TARGET_CUSTOM_DEFAULT_KB * 1024;
+      void setSettings({ targetSize: current });
+      return;
+    }
+    const bytes = TARGET_PRESETS[preset];
+    if (bytes) void setSettings({ targetSize: bytes });
+  });
+
+  const targetCustom = $<HTMLInputElement>("#targetCustomValue");
+  // Commit on change (blur/Enter), not on every keystroke: "1" on the way to
+  // "150" must not briefly run a 1 KB target or rewrite the field.
+  targetCustom.addEventListener("change", () => {
+    const kb = Math.max(10, Math.min(250000, Math.round(Number(targetCustom.value) || 0)));
+    targetCustom.value = String(kb);
+    void setSettings({ targetSize: kb * 1024 });
+  });
+  targetCustom.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    targetCustom.blur();
   });
 
   const suffix = $<HTMLInputElement>("#suffix");
@@ -1437,9 +1544,13 @@ async function compressAll(auto = false) {
       transparencyKept: false,
       outputFormat: "",
       outputName: "",
+      ssim: 0,
+      ssimMeasured: false,
+      targetBytes: 0,
+      targetQuality: 0,
+      targetMissed: false,
     }));
   }
-  const total = auto ? items.filter((item) => item.status === "ready").length : items.length;
   if (total === 0) {
     compressStarting = false;
     autoRun = null;
@@ -2132,7 +2243,37 @@ async function demoCompress() {
     if (demoCanceled) break;
     item.status = "done";
     item.compressedSize = Math.round(item.originalSize * (0.19 + Math.random() * 0.12));
+    // Mirror the backend's target mode: fit the cap when the encoder can,
+    // and say so honestly when the source is already smaller than the cap,
+    // the format is lossless PNG, or even the lowest lossy quality cannot
+    // reach it. The floor is what makes the last case visible in the demo:
+    // without it every non-PNG cap would look reachable.
+    item.targetBytes = settings.targetSize > 0 ? settings.targetSize : 0;
+    item.targetMissed = false;
+    const demoFloor = Math.max(1024, Math.round(item.originalSize * 0.04));
+    if (settings.targetSize > 0 && item.compressedSize > settings.targetSize) {
+      if (settings.format === "png" || item.originalSize <= settings.targetSize) {
+        item.targetMissed = true;
+      } else if (settings.targetSize < demoFloor) {
+        item.targetMissed = true;
+        item.compressedSize = demoFloor;
+      } else {
+        item.compressedSize = Math.round(settings.targetSize * (0.86 + Math.random() * 0.08));
+      }
+    }
     item.savedPercent = ((item.originalSize - item.compressedSize) / item.originalSize) * 100;
+    // The demo has no encoder to measure, so the quality tier follows the
+    // compression ratio: more aggressive passes read as more loss.
+    item.ssim = Math.min(0.999, Math.max(0.8, 1 - (item.compressedSize / item.originalSize) * 0.16 - Math.random() * 0.01));
+    item.ssimMeasured = true;
+    // A miss that hit the floor was encoded at the lowest quality the search
+    // tries; a reachable cap lands somewhere in the usual range.
+    item.targetQuality =
+      item.targetBytes > 0 && settings.format !== "png"
+        ? item.targetMissed
+          ? 10
+          : Math.round(55 + Math.random() * 30)
+        : 0;
     if (settings.format === "jpeg" && item.hasAlpha) {
       // JPG cannot carry transparency; the demo mirrors the backend, which
       // saves a transparent image as lossless PNG instead (#15).

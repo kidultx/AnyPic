@@ -953,6 +953,27 @@ body.side-drag * {
   cursor: not-allowed;
 }
 
+/* A number field with a fixed unit: the unit is part of the answer, so it
+   sits inside the control rather than in a second column. */
+.number-wrap {
+  position: relative;
+}
+
+.number-wrap .text-input {
+  padding-right: 38px;
+  font-variant-numeric: tabular-nums;
+}
+
+.number-unit {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
 .tip-card {
   display: flex;
   align-items: flex-start;

@@ -91,6 +91,28 @@
                 </div>
               </div>
 
+              <div class="field-row">
+                <label for="targetSize" data-i18n="sizeTargetLabel"></label>
+                <div class="select-wrap">
+                  <select id="targetSize">
+                    <option value="0" data-i18n="noSizeLimit"></option>
+                    <option value="500">500 KB</option>
+                    <option value="1m">1 MB</option>
+                    <option value="2m">2 MB</option>
+                    <option value="custom" data-i18n="customSize"></option>
+                  </select>
+                  <svg aria-hidden="true" class="icon select-chevron"><use href="#i-chevron" /></svg>
+                </div>
+              </div>
+              <div class="field-row" id="targetCustomRow" hidden>
+                <label for="targetCustomValue" data-i18n="sizeTargetCustomLabel"></label>
+                <div class="number-wrap">
+                  <input id="targetCustomValue" class="text-input" type="number" min="10" max="250000" step="10" inputmode="numeric" value="750" />
+                  <span class="number-unit">KB</span>
+                </div>
+              </div>
+              <p class="field-note" id="targetNote" hidden></p>
+
               <div class="field">
                 <div class="field-label">
                   <label data-i18n="outputFormat"></label>

@@ -102,6 +102,33 @@ export interface Item {
    * instead of a still re-encode (#8).
    */
   animated: boolean;
+  /**
+   * SSIM is the structural similarity between the source handed to the
+   * encoder and the decoded result, measured on grayscale at up to
+   * ssimMaxSide pixels. SSIMMeasured separates "not measured" (animations)
+   * from a real score, so a measured 0 is never hidden as unmeasured.
+   */
+  ssim: number;
+  ssimMeasured: boolean;
+  /**
+   * TargetBytes is the per-image cap this result was produced under, or 0
+   * when the pass ran in quality mode. TargetQuality is the quality the
+   * search settled on (or the fixed quality when PNG could only report a
+   * miss). TargetMissed reports that no probed quality could reach it; the
+   * page then says the smallest result and its quality.
+   */
+  targetBytes?: number;
+  targetQuality?: number;
+  targetMissed?: boolean;
+}
+
+/**
+ * MarkdownCopy reports the link that was written to the clipboard and the
+ * file it points at.
+ */
+export interface MarkdownCopy {
+  markdown: string;
+  path: string;
 }
 
 /** Preview holds before and after previews for the comparison view. */
@@ -143,6 +170,22 @@ export interface Settings {
    * clears it again once the image has been read.
    */
   screenshotClipboard: string;
+  /**
+   * ScreenshotPipeline compresses a fresh capture and puts the compressed
+   * result on the clipboard when it finishes: "on" or "off". It is opt-in
+   * (default off) because it overwrites the clipboard the screenshot tool
+   * just filled. With it on, the raw capture is written there first, so
+   * pasting while compression runs still gets the shot; the compressed
+   * result only replaces AnyPic's own copy. Requires ScreenshotClipboard.
+   */
+  screenshotPipeline: string;
+  /**
+   * TargetSize caps each result at this many bytes; 0 leaves the quality
+   * setting in charge. JPEG, WebP and animated WebP search their quality to
+   * meet it. PNG is lossless, so a PNG result can only report that it could
+   * not.
+   */
+  targetSize: number;
   /**
    * HideDockWhenTray removes the Dock icon while the window is hidden to
    * the tray: "on" or "off". macOS only.
