@@ -7,7 +7,7 @@ import { ensureQueueFocus, initQueueKeys, queueFocusAfterRemoval, queueRowFocus,
 import { DEFAULT_SHORTCUT, acceleratorFromEvent, formatShortcut, isReservedShortcut, setShortcutPlatform } from "./shortcuts";
 
 function signature(settings: Settings): string {
-  return JSON.stringify([settings.format, settings.quality, settings.maxDimension, settings.suffix]);
+  return JSON.stringify([settings.format, settings.quality, settings.maxDimension, settings.suffix, settings.targetSize]);
 }
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -71,6 +71,8 @@ function defaultSettings(): Settings {
     autoProcess: "on",
     screenshotShortcut: DEFAULT_SHORTCUT,
     screenshotClipboard: "on",
+    screenshotPipeline: "off",
+    targetSize: 0,
     hideDockWhenTray: "on",
     openAtLogin: "off",
   };
@@ -110,6 +112,7 @@ async function init() {
     activate: activateItem,
     decorate: (id) => void openPreview(id, "beautify"),
     exportOne: (id) => void exportOne(id),
+    copyMarkdown: (id) => void copyMarkdown(id),
     reveal: revealItem,
     removeSelected: () => void removeSelected(),
     removeOne: (id) => void removeItem(id),
@@ -151,7 +154,7 @@ async function init() {
       applyDemoState();
     }
   } else {
-    applyDemoState();
+    applyDemoState(true);
   }
 
   // Following the system keeps following it: a language change on the
@@ -278,7 +281,7 @@ function applySnapshot(snapshot: Snapshot, includeSettings = true) {
   syncSettingsToUI();
 }
 
-function applyDemoState() {
+function applyDemoState(browserPreview = false) {
   demoMode = true;
   settings = defaultSettings();
   const palettes = [
@@ -318,6 +321,9 @@ function applyDemoState() {
       transparencyKept: false,
       savedPercent: ready ? 0 : saved,
       animated: false,
+      ssim: ready ? 0 : 0.978,
+      ssimMeasured: !ready,
+      targetQuality: 0,
     };
   });
   batch = { running: false, total: items.length, done: 2, failed: 0, canceled: false };
@@ -325,7 +331,9 @@ function applyDemoState() {
   syncSettingsToUI();
   applyTheme("system");
   aboutVersion = { version: "0.1.0", platform: "", arch: "" };
-  demoVersion = true;
+  // Only the browser preview has no engine version to show; a desktop build
+  // whose engine failed to start still reports its real version.
+  demoVersion = browserPreview;
   renderAboutVersion();
   window.setTimeout(() => showToast(t.demoToast(), "info"), 700);
 }
@@ -395,18 +403,37 @@ function renderSettings() {
 
   const presets = [60, 82, 95];
   const customQuality = !presets.includes(settings.quality);
+  const targetMode = targetSizeOn();
   $$<HTMLButtonElement>("#qualityPresets button").forEach((button) => {
     const active = Number(button.dataset.quality) === settings.quality;
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", String(active));
-    button.disabled = format === "png" || batch.running;
+    button.disabled = format === "png" || batch.running || targetMode;
   });
   $("#qualityState").textContent = t.custom();
-  $("#qualityState").hidden = !customQuality;
+  $("#qualityState").hidden = targetMode || !customQuality;
+
+  const targetSelect = $<HTMLSelectElement>("#targetSize");
+  const preset = targetPreset();
+  if (document.activeElement !== targetSelect) targetSelect.value = preset;
+  $("#targetCustomRow").hidden = preset !== "custom";
+  const targetCustom = $<HTMLInputElement>("#targetCustomValue");
+  if (document.activeElement !== targetCustom) targetCustom.value = String(targetCustomKB());
+  $("#targetNote").hidden = !targetMode;
+  $("#targetNote").textContent =
+    format === "png" ? t.targetPngNote() : format === "auto" ? t.targetAutoQuality() : t.targetLossyNote();
 
   const autoToggle = $<HTMLInputElement>("#autoProcessToggle");
   if (document.activeElement !== autoToggle) autoToggle.checked = autoProcessEnabled();
   $("#autoProcessNote").textContent = autoProcessEnabled() ? t.autoProcessNoteOn() : t.autoProcessNoteOff();
+  const pipelineToggle = $<HTMLInputElement>("#pipelineToggle");
+  const captureCopyOn = settings.screenshotClipboard !== "off";
+  pipelineToggle.disabled = !captureCopyOn;
+  $("#pipelineNote").textContent = !captureCopyOn
+    ? t.screenshotPipelineNeedsClipboard()
+    : screenshotPipelineEnabled()
+      ? t.screenshotPipelineNoteOn()
+      : t.screenshotPipelineNoteOff();
   $("#emptyTitle").textContent = autoProcessEnabled() ? t.emptyTitleAuto() : t.emptyTitleManual();
   $("#emptyShotKey").textContent = formatShortcut(settings.screenshotShortcut);
   $("#outputInlineLabel").textContent =
@@ -414,8 +441,9 @@ function renderSettings() {
   $("#outputInlineBtn").title = settings.outputMode === "folder" && settings.outputFolder ? settings.outputFolder : t.alongsideOriginal();
 
   const qualityField = quality.closest(".quality-field");
-  qualityField?.classList.toggle("disabled", format === "png");
-  quality.disabled = format === "png" || batch.running;
+  qualityField?.classList.toggle("disabled", format === "png" || targetMode);
+  $("#qualityPresets").closest(".quality-field")?.classList.toggle("disabled", format === "png" || targetMode);
+  quality.disabled = format === "png" || batch.running || targetMode;
 
   const maxDim = $<HTMLSelectElement>("#maxDim");
   if (document.activeElement !== maxDim) maxDim.value = String(settings.maxDimension);
@@ -452,6 +480,56 @@ function qualityLabel(quality: number): string {
 
 function autoProcessEnabled(): boolean {
   return settings.autoProcess !== "off";
+}
+
+function screenshotPipelineEnabled(): boolean {
+  // The pipeline replaces the capture AnyPic itself copied. With capture
+  // copying off there is no raw copy to replace, so it must stay off too.
+  return settings.screenshotPipeline === "on" && settings.screenshotClipboard !== "off";
+}
+
+/* Target-size mode is a cap in bytes; 0 leaves the quality setting in charge. */
+function targetSizeOn(): boolean {
+  return settings.targetSize > 0;
+}
+
+const TARGET_PRESETS: Record<string, number> = {
+  "500": 500 * 1024,
+  "1m": 1024 * 1024,
+  "2m": 2 * 1024 * 1024,
+};
+const TARGET_CUSTOM_DEFAULT_KB = 750;
+
+/* Which option the select shows for the stored byte count; anything that is
+   not one of the four presets is the custom row. */
+function targetPreset(): string {
+  if (!targetSizeOn()) return "0";
+  for (const [preset, bytes] of Object.entries(TARGET_PRESETS)) {
+    if (bytes === settings.targetSize) return preset;
+  }
+  return "custom";
+}
+
+function targetCustomKB(): number {
+  const kb = Math.round(settings.targetSize / 1024);
+  return kb > 0 ? kb : TARGET_CUSTOM_DEFAULT_KB;
+}
+
+/* The quality tiers the queue shows beside the saving figure. SSIM is the
+   measured structural similarity to the source, so the tier says what the
+   compression actually cost instead of trusting the quality number alone.
+   Thresholds are calibrated against testdata/benchmark at quality 82: real
+   screenshots and the transparent logo score 0.999–0.991, real photos
+   0.994–0.987, the synthetic photo 0.933 and a target-sized photo 0.942.
+   0.98 keeps "nearly identical" for the first two clusters without putting a
+   q82 photo on the boundary; 0.92 keeps "slight loss" for the photo cluster
+   with headroom on both sides. A measured zero is a real score and still gets
+   a tier; "not measured" is a separate flag (SSIMMeasured) so it is never
+   hidden as zero. */
+function qualityTier(ssim: number): { label: string; className: string } {
+  if (ssim >= 0.98) return { label: t.qualityNearlyIdentical(), className: "" };
+  if (ssim >= 0.92) return { label: t.qualitySlightLoss(), className: "slight" };
+  return { label: t.qualityVisibleLoss(), className: "visible" };
 }
 
 function renderStage() {
@@ -619,7 +697,11 @@ function createRow(id: number): HTMLElement {
     </div>
     <div class="item-result">
       <div class="result-sizes"></div>
-      <span class="saving-pill"></span>
+      <div class="result-pills">
+        <span class="quality-pill" hidden></span>
+        <span class="saving-pill"></span>
+        <span class="target-badge" hidden></span>
+      </div>
     </div>
     <div class="item-actions">
       <button class="icon-btn" data-action="preview">${icon("eye")}</button>
@@ -756,6 +838,15 @@ function updateRow(row: HTMLElement, item: Item) {
 
   const sizes = row.querySelector<HTMLElement>(".result-sizes")!;
   const pill = row.querySelector<HTMLElement>(".saving-pill")!;
+  const qualityPill = row.querySelector<HTMLElement>(".quality-pill")!;
+  const targetBadge = row.querySelector<HTMLElement>(".target-badge")!;
+  qualityPill.hidden = true;
+  qualityPill.className = "quality-pill";
+  qualityPill.textContent = "";
+  qualityPill.removeAttribute("title");
+  targetBadge.hidden = true;
+  targetBadge.textContent = "";
+  targetBadge.removeAttribute("title");
   pill.className = "saving-pill";
   pill.hidden = false;
 
@@ -776,6 +867,38 @@ function updateRow(row: HTMLElement, item: Item) {
         pill.classList.add("neutral");
         pill.textContent = `+${pct(-savedPct)}`;
       }
+      // The measured quality of this result, not the quality setting: the
+      // row should say what the image actually lost. Unmeasured results
+      // (animations) say so instead of borrowing a tier they did not earn.
+      if (item.ssimMeasured) {
+        const tier = qualityTier(item.ssim);
+        qualityPill.hidden = false;
+        qualityPill.textContent = tier.label;
+        if (tier.className) qualityPill.classList.add(tier.className);
+        qualityPill.title = t.ssimTitle(item.ssim.toFixed(3));
+      } else {
+        qualityPill.hidden = false;
+        qualityPill.textContent = t.qualityNotMeasured();
+        qualityPill.title = t.qualityNotMeasuredTitle();
+      }
+    }
+    // A result can miss its cap even when the original was kept (no smaller
+    // encoding exists); the honesty badge belongs to both cases and names
+    // both the bytes it reached and the quality it used.
+    if (item.targetMissed && (item.targetBytes ?? 0) > 0) {
+      const qualityLabel =
+        item.passedThrough
+          ? t.targetQualityOriginal()
+          : (item.targetQuality ?? 0) > 0
+            ? t.targetQualityValue(item.targetQuality ?? 0)
+            : t.targetQualityLossless();
+      targetBadge.hidden = false;
+      targetBadge.textContent = t.targetMissedBadge(formatBytes(item.compressedSize), qualityLabel);
+      targetBadge.title = t.targetMissedTitle(
+        formatBytes(item.targetBytes ?? 0),
+        formatBytes(item.compressedSize),
+        qualityLabel,
+      );
     }
   } else if (item.status === "working") {
     sizes.innerHTML = `<span>${esc(t.optimizing())}</span>`;
@@ -888,10 +1011,12 @@ function renderActions() {
   $$<HTMLButtonElement>("#formatSeg button").forEach((button) => {
     button.disabled = running;
   });
-  $<HTMLInputElement>("#quality").disabled = running || settings.format === "png";
+  $<HTMLInputElement>("#quality").disabled = running || settings.format === "png" || targetSizeOn();
   $$<HTMLButtonElement>("#qualityPresets button").forEach((button) => {
-    button.disabled = running || settings.format === "png";
+    button.disabled = running || settings.format === "png" || targetSizeOn();
   });
+  $<HTMLSelectElement>("#targetSize").disabled = running;
+  $<HTMLInputElement>("#targetCustomValue").disabled = running;
   // Selection follows the removal rules: nothing selectable or removable
   // while a pass owns the queue.
   $<HTMLButtonElement>("#selectAllBtn").disabled = running || visibleItems().length === 0;
@@ -950,13 +1075,23 @@ function bindEvents() {
     if (recordingShortcut) stopShortcutRecording();
     else startShortcutRecording();
   });
-  function bindToggle(id: string, key: "screenshotClipboard" | "autoProcess" | "hideDockWhenTray", failure: string) {
+  function bindToggle(
+    id: string,
+    key: "screenshotClipboard" | "screenshotPipeline" | "autoProcess" | "hideDockWhenTray",
+    failure: string,
+  ) {
     $(id).addEventListener("change", (event) => {
       const on = (event.target as HTMLInputElement).checked;
-      void setSettings({ [key]: on ? "on" : "off" } as Partial<Settings>, undefined, (error) => showError(error, failure));
+      const patch: Partial<Settings> = { [key]: on ? "on" : "off" };
+      // Turning capture copying off also turns off the pipeline that depends
+      // on it, so re-enabling copying does not silently resume clipboard
+      // replacement.
+      if (key === "screenshotClipboard" && !on) patch.screenshotPipeline = "off";
+      void setSettings(patch, undefined, (error) => showError(error, failure));
     });
   }
   bindToggle("#clipboardToggle", "screenshotClipboard", t.clipboardSettingsFailed());
+  bindToggle("#pipelineToggle", "screenshotPipeline", t.screenshotPipelineSettingsFailed());
   bindToggle("#autoProcessToggle", "autoProcess", t.autoProcessSettingsFailed());
   bindToggle("#dockToggle", "hideDockWhenTray", t.dockSettingsFailed());
   $("#openAtLoginToggle").addEventListener("change", (event) => {
@@ -1027,6 +1162,7 @@ function bindEvents() {
       quality: 82,
       maxDimension: 0,
       suffix: "-anypic",
+      targetSize: 0,
     };
     void setSettings(next);
     showToast(t.resetDone(), "success");
@@ -1058,6 +1194,38 @@ function bindEvents() {
 
   $("#maxDim").addEventListener("change", (event) => {
     void setSettings({ maxDimension: Number((event.target as HTMLSelectElement).value) });
+  });
+
+  $("#targetSize").addEventListener("change", (event) => {
+    const preset = (event.target as HTMLSelectElement).value;
+    if (preset === "0") {
+      void setSettings({ targetSize: 0 });
+      return;
+    }
+    if (preset === "custom") {
+      // Entering the custom row while a fixed preset is selected starts from
+      // the custom default; reusing the preset value would make the select
+      // snap straight back to that preset and hide the input.
+      const current = targetPreset() === "custom" ? settings.targetSize : TARGET_CUSTOM_DEFAULT_KB * 1024;
+      void setSettings({ targetSize: current });
+      return;
+    }
+    const bytes = TARGET_PRESETS[preset];
+    if (bytes) void setSettings({ targetSize: bytes });
+  });
+
+  const targetCustom = $<HTMLInputElement>("#targetCustomValue");
+  // Commit on change (blur/Enter), not on every keystroke: "1" on the way to
+  // "150" must not briefly run a 1 KB target or rewrite the field.
+  targetCustom.addEventListener("change", () => {
+    const kb = Math.max(10, Math.min(250000, Math.round(Number(targetCustom.value) || 0)));
+    targetCustom.value = String(kb);
+    void setSettings({ targetSize: kb * 1024 });
+  });
+  targetCustom.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    targetCustom.blur();
   });
 
   const suffix = $<HTMLInputElement>("#suffix");
@@ -1268,7 +1436,7 @@ async function captureScreenshot() {
     const result = await AnyPic.captureScreenshot();
     // A fresh capture is "ready", so a done/error filter would hide it.
     if (result.added > 0) filter = "all";
-    applyAddResult(result, "clipboard");
+    applyAddResult(result, "capture");
     if (result.copied) showToast(t.captureCopied(), "info");
   } catch (error) {
     // Canceling the region selection, or a second press while the first
@@ -1328,7 +1496,7 @@ async function pasteImage() {
   }
 }
 
-type AddSource = "files" | "clipboard";
+type AddSource = "files" | "clipboard" | "capture";
 
 async function addPaths(paths: string[]) {
   if (demoMode || paths.length === 0) return;
@@ -1364,7 +1532,12 @@ function applyAddResult(
   const known = new Set(items.map((item) => item.id));
   applySnapshot(result.snapshot, false);
   const newIDs = items.filter((item) => !known.has(item.id)).map((item) => item.id);
-  const auto = autoProcessEnabled() && !demoMode && result.added > 0;
+  // A capture can start a compression pass on its own when the screenshot
+  // pipeline is on, even with auto-process off; files and pasted images
+  // still follow the auto-process switch.
+  const capture = source === "capture";
+  const pipeline = capture && screenshotPipelineEnabled();
+  const auto = !demoMode && result.added > 0 && (pipeline || autoProcessEnabled());
 
   if (result.added > 0) {
     // The automatic flow folds the addition into one merged completion
@@ -1388,14 +1561,20 @@ function applyAddResult(
   }
 
   renderAll();
-  if (auto) startAutoRun(newIDs, source === "clipboard");
+  if (auto) {
+    // Only an auto-run result may replace clipboard content: a capture when
+    // the pipeline asked for it, a pasted image while the clipboard setting
+    // is on. Files never have a clipboard copy to replace.
+    const copyResult = capture ? pipeline : source === "clipboard" && settings.screenshotClipboard !== "off";
+    startAutoRun(newIDs, copyResult);
+  }
 }
 
-function startAutoRun(ids: number[], fromClipboard: boolean) {
+function startAutoRun(ids: number[], copyResult: boolean) {
   if (ids.length === 0) return;
   autoRun ??= { ids: new Set<number>(), copyIDs: [] };
   for (const id of ids) autoRun.ids.add(id);
-  if (fromClipboard) autoRun.copyIDs.push(ids[ids.length - 1]!);
+  if (copyResult) autoRun.copyIDs.push(ids[ids.length - 1]!);
   // A pass in progress picks the new images up when it ends; the start
   // guard covers the async gap before the backend call.
   if (batch.running || compressStarting) return;
@@ -1408,7 +1587,17 @@ async function compressAll(auto = false) {
   const ready = items.filter((item) => item.status === "ready");
   if (auto && ready.length === 0) return;
   if (auto && !autoRun) autoRun = { ids: new Set<number>(), copyIDs: [] };
-  if (auto) for (const item of ready) autoRun!.ids.add(item.id);
+  if (auto) {
+    for (const item of ready) {
+      // With auto-process off, an automatic pass exists only because the
+      // capture pipeline asked for one; it must not sweep in files the user
+      // deliberately left waiting.
+      if (autoProcessEnabled() || autoRun!.ids.has(item.id)) autoRun!.ids.add(item.id);
+    }
+  }
+  const targets =
+    auto && !autoProcessEnabled() && autoRun ? ready.filter((item) => autoRun!.ids.has(item.id)) : ready;
+  const total = auto ? targets.length : items.length;
 
   compressStarting = true;
   dirty = false;
@@ -1437,9 +1626,13 @@ async function compressAll(auto = false) {
       transparencyKept: false,
       outputFormat: "",
       outputName: "",
+      ssim: 0,
+      ssimMeasured: false,
+      targetBytes: 0,
+      targetQuality: 0,
+      targetMissed: false,
     }));
   }
-  const total = auto ? items.filter((item) => item.status === "ready").length : items.length;
   if (total === 0) {
     compressStarting = false;
     autoRun = null;
@@ -1448,7 +1641,8 @@ async function compressAll(auto = false) {
   batch = { running: true, total, done: 0, failed: 0, canceled: false };
   scheduleRender();
   try {
-    if (auto) await AnyPic.compressReady(settings);
+    if (auto && !autoProcessEnabled() && autoRun) await AnyPic.compressIDs([...autoRun.ids], settings);
+    else if (auto) await AnyPic.compressReady(settings);
     else await AnyPic.compress(settings);
     compressedSignature = runSignature;
     markDirty();
@@ -1654,6 +1848,44 @@ async function exportOne(id: number) {
   }
 }
 
+/* The tray's "copy the last result again": the backend remembers the most
+   recently finished item, so this works even while the window sits in the
+   tray. */
+async function copyLastResult() {
+  if (demoMode) {
+    showToast(t.demoNoClipboard(), "info");
+    return;
+  }
+  if (!items.some((item) => item.status === "done")) {
+    showToast(t.goErrNoLastResult(), "info");
+    return;
+  }
+  try {
+    const outcome = await AnyPic.copyLastResult();
+    showToast(outcome.copied ? t.copiedCompressed() : t.clipboardKept(), "info");
+  } catch (error) {
+    showError(error, t.copyFailed());
+  }
+}
+
+/* The context menu's Markdown copy: the backend makes the result durable on
+   disk first, then puts ![name](local path) on the clipboard. Nothing is
+   uploaded; the link works in docs and issue drafts on this machine. */
+async function copyMarkdown(id: number) {
+  const item = items.find((entry) => entry.id === id);
+  if (!item || item.status !== "done") return;
+  if (demoMode) {
+    showToast(t.demoNoClipboard(), "info");
+    return;
+  }
+  try {
+    await AnyPic.copyItemAsMarkdown(id);
+    showToast(t.copiedMarkdown(), "success");
+  } catch (error) {
+    showError(error, t.markdownFailed());
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* settings                                                            */
 /* ------------------------------------------------------------------ */
@@ -1738,6 +1970,11 @@ function syncSettingsToUI() {
   if (autoToggle) autoToggle.checked = autoProcessEnabled();
   const clipboardToggle = $<HTMLInputElement>("#clipboardToggle");
   if (clipboardToggle) clipboardToggle.checked = settings.screenshotClipboard !== "off";
+  const pipelineToggle = $<HTMLInputElement>("#pipelineToggle");
+  if (pipelineToggle) {
+    pipelineToggle.checked = screenshotPipelineEnabled();
+    pipelineToggle.disabled = settings.screenshotClipboard === "off";
+  }
   const dockToggle = $<HTMLInputElement>("#dockToggle");
   if (dockToggle) dockToggle.checked = settings.hideDockWhenTray !== "off";
   const openAtLoginToggle = $<HTMLInputElement>("#openAtLoginToggle");
@@ -1793,12 +2030,17 @@ function handleBatch(next: Batch) {
       if (next.canceled) {
         autoRun = null;
         showToast(t.compressionCanceled(), "info");
-      } else if (autoProcessEnabled() && items.some((item) => item.status === "ready")) {
-        // Images arrived while the pass ran; fold them into the same
-        // automatic run and save everything once it settles.
-        void compressAll(true);
       } else {
-        void finishAutoRun();
+        // Images that joined the automated pass — a capture arriving while
+        // the previous one ran — are folded into the same run. With
+        // auto-process off the next pass is scoped to those ids, so files
+        // the user left waiting are still not swept in.
+        const autoReady = items.some((item) => item.status === "ready" && autoRun!.ids.has(item.id));
+        if (autoReady) {
+          void compressAll(true);
+        } else {
+          void finishAutoRun();
+        }
       }
     } else {
       showBatchResult(next);
@@ -1850,36 +2092,53 @@ function showBatchResult(next: Batch) {
   const compressed = done.reduce((sum, item) => sum + item.compressedSize, 0);
   const saved = Math.max(0, original - compressed);
   showToast(t.batchSaved(formatBytes(saved)), "success");
+  const missed = done.filter((item) => item.targetMissed).length;
+  if (missed > 0) showToast(t.targetMissedCount(missed), "info");
 }
 
-/* Ends an automatic run: copies the capture (when there was one), saves the
-   results without a dialog, and reports everything in one toast. */
+/* Ends an automatic run: replaces the raw capture on the clipboard when the
+   pipeline asked for it, saves the results without a dialog when auto-process
+   is on, and reports everything in one or two toasts. */
 async function finishAutoRun() {
   const run = autoRun;
   autoRun = null;
   if (!run) return;
-  if (!autoProcessEnabled()) {
-    showBatchResult(batch);
-    return;
-  }
 
   const ids = [...run.ids];
   const idSet = new Set(ids);
   const done = items.filter((item) => idSet.has(item.id) && item.status === "done");
   const failed = items.filter((item) => idSet.has(item.id) && item.status === "error");
+  const missed = done.filter((item) => item.targetMissed).length;
 
+  if (done.length === 0) {
+    if (failed.length > 0) showToast(t.notProcessed(failed.length), "error");
+    return;
+  }
+
+  // The guarded copy: the backend only replaces the clipboard while it still
+  // holds the image AnyPic put there, so something copied during compression
+  // survives. Pasting mid-compression already got the raw capture. A capture
+  // that failed to compress has no result to put there.
   let copied = false;
-  if (run.copyIDs.length > 0 && settings.screenshotClipboard !== "off") {
+  let skipped = false;
+  const copyId = run.copyIDs.length > 0 ? run.copyIDs[run.copyIDs.length - 1]! : null;
+  if (copyId !== null && done.some((item) => item.id === copyId)) {
     try {
-      await AnyPic.copyItemToClipboard(run.copyIDs[run.copyIDs.length - 1]!);
-      copied = true;
+      const outcome = await AnyPic.copyCaptureResult(copyId);
+      copied = outcome.copied;
+      skipped = outcome.skipped;
     } catch (error) {
       showError(error, t.copyFailed());
     }
   }
 
-  if (done.length === 0) {
-    if (failed.length > 0) showToast(t.notProcessed(failed.length), "error");
+  // The pipeline can run with auto-process off: it still copies the result,
+  // but saving stays an explicit action.
+  if (!autoProcessEnabled()) {
+    if (copied) showToast(t.copiedCompressed(), "info");
+    else if (skipped) showToast(t.clipboardKept(), "info");
+    if (missed > 0) showToast(t.targetMissedCount(missed), "info");
+    showBatchResult(batch);
     return;
   }
 
@@ -1903,8 +2162,11 @@ async function finishAutoRun() {
       showToast(t.notProcessed(failed.length), "error");
     } else if (copied) {
       // The footer already reports the save; the copy still earns a nudge.
-      showToast(t.copied(), "info");
+      showToast(t.copiedCompressed(), "info");
+    } else if (skipped) {
+      showToast(t.clipboardKept(), "info");
     }
+    if (missed > 0) showToast(t.targetMissedCount(missed), "info");
     scheduleRender();
   } catch (error) {
     lastSaved = null;
@@ -2132,7 +2394,37 @@ async function demoCompress() {
     if (demoCanceled) break;
     item.status = "done";
     item.compressedSize = Math.round(item.originalSize * (0.19 + Math.random() * 0.12));
+    // Mirror the backend's target mode: fit the cap when the encoder can,
+    // and say so honestly when the source is already smaller than the cap,
+    // the format is lossless PNG, or even the lowest lossy quality cannot
+    // reach it. The floor is what makes the last case visible in the demo:
+    // without it every non-PNG cap would look reachable.
+    item.targetBytes = settings.targetSize > 0 ? settings.targetSize : 0;
+    item.targetMissed = false;
+    const demoFloor = Math.max(1024, Math.round(item.originalSize * 0.04));
+    if (settings.targetSize > 0 && item.compressedSize > settings.targetSize) {
+      if (settings.format === "png" || item.originalSize <= settings.targetSize) {
+        item.targetMissed = true;
+      } else if (settings.targetSize < demoFloor) {
+        item.targetMissed = true;
+        item.compressedSize = demoFloor;
+      } else {
+        item.compressedSize = Math.round(settings.targetSize * (0.86 + Math.random() * 0.08));
+      }
+    }
     item.savedPercent = ((item.originalSize - item.compressedSize) / item.originalSize) * 100;
+    // The demo has no encoder to measure, so the quality tier follows the
+    // compression ratio: more aggressive passes read as more loss.
+    item.ssim = Math.min(0.999, Math.max(0.8, 1 - (item.compressedSize / item.originalSize) * 0.16 - Math.random() * 0.01));
+    item.ssimMeasured = true;
+    // A miss that hit the floor was encoded at the lowest quality the search
+    // tries; a reachable cap lands somewhere in the usual range.
+    item.targetQuality =
+      item.targetBytes > 0 && settings.format !== "png"
+        ? item.targetMissed
+          ? 10
+          : Math.round(55 + Math.random() * 30)
+        : 0;
     if (settings.format === "jpeg" && item.hasAlpha) {
       // JPG cannot carry transparency; the demo mirrors the backend, which
       // saves a transparent image as lossless PNG instead (#15).
@@ -2162,6 +2454,9 @@ async function handleCommand(command: string) {
       break;
     case "screenshot":
       await captureScreenshot();
+      break;
+    case "copy-last":
+      await copyLastResult();
       break;
     case "compress":
       await compressAll();

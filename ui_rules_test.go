@@ -65,10 +65,12 @@ func TestStyleColorsLiveInTokens(t *testing.T) {
 	}
 }
 
-// The one native <select> allowed: maxDim, wrapped in .select-wrap. A new
+// The native <select>s allowed: maxDim, wrapped in .select-wrap, and
+// targetSize, which offers four fixed caps plus a custom row — the same
+// select-plus-input shape the sidebar already uses for dimensions. A new
 // native select needs its id on this list with the owner's say-so, or its
 // own control built like the app's other dropdowns.
-var nativeSelectsAllowed = []string{"maxDim"}
+var nativeSelectsAllowed = []string{"maxDim", "targetSize"}
 
 // TestNoNewNativeSelects guards it.
 func TestNoNewNativeSelects(t *testing.T) {
@@ -120,17 +122,30 @@ func TestNoNewNativeSelects(t *testing.T) {
 // text node and label now also names its key, and the preferences gained the
 // language control; the message tables themselves live in src/locales.ts
 // (generated) and src/i18n.ts, budgeted here so the lookup layer cannot grow
-// unnoticed. main.ts stayed under its line.
+// unnoticed. main.ts stayed under its line. The 2026-11-13 target-size and
+// capture-pipeline work grew all three again: target caps with their custom
+// row (index.html), the quality-tier and target-missed pills plus the stacked
+// result column (style.css), and in main.ts the target-mode settings sync,
+// SSIM tiers, pipeline-gated auto runs, guarded clipboard replacement and the
+// tray/Markdown copy actions. That is UI state with nowhere smaller to live;
+// the compression math is in quality.go, the clipboard rules in clipboard.go.
+// The review round on 2026-11-13 added the measured/not-measured distinction
+// (an animation's SSIM is unmeasured, a real zero still gets a tier), the
+// target-miss quality label, the PNG warning beside the target selector, and
+// the dependent pipeline switch; the demo then gained an encoder floor so a
+// quality-labelled target miss is visible in the browser demo. main.ts moved
+// from 90,600 to 92,705, so the budget is raised to 93,600 rather than
+// duplicating the render state in a second module.
 var uiBudgets = []struct {
 	file   string
 	budget int
 }{
-	{"src/main.ts", 80_200},
+	{"src/main.ts", 93_600},
 	{"src/shortcuts.ts", 4_200},
 	{"src/queue-keys.ts", 12_300},
 	{"src/i18n.ts", 5_200},
-	{"src/style.css", 64_800},
-	{"index.html", 34_800},
+	{"src/style.css", 66_900},
+	{"index.html", 36_900},
 }
 
 // TestScriptAndStyleBudgets guards them. Sizes are counted with LF line
@@ -542,7 +557,7 @@ func listenerBody(t *testing.T, src, decl string) string {
 func TestIssue26ToggleToastsOnlyOnFailure(t *testing.T) {
 	src := ruleSources(t)["src/main.ts"]
 
-	for _, id := range []string{"clipboardToggle", "autoProcessToggle", "dockToggle"} {
+	for _, id := range []string{"clipboardToggle", "pipelineToggle", "autoProcessToggle", "dockToggle"} {
 		if !strings.Contains(src, `bindToggle("#`+id+`"`) {
 			t.Errorf("src/main.ts: #%s is not bound through the failure-only helper (#26)", id)
 		}

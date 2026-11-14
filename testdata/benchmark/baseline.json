@@ -1,0 +1,197 @@
+{
+  "note": "Recorded by TestBenchmarkSet. Regenerate with: go test -run TestBenchmarkSet -update-benchmark .",
+  "cases": [
+    {
+      "case": "screenshot-synthetic-png",
+      "class": "screenshot",
+      "file": "screenshot.png",
+      "format": "png",
+      "quality": 82,
+      "size": 5619,
+      "ssim": 1,
+      "ssimMeasured": true
+    },
+    {
+      "case": "screenshot-synthetic-webp",
+      "class": "screenshot",
+      "file": "screenshot.png",
+      "format": "webp",
+      "quality": 82,
+      "size": 4300,
+      "ssim": 0.9994477899199026,
+      "ssimMeasured": true
+    },
+    {
+      "case": "screenshot-real-png",
+      "class": "screenshot",
+      "file": "screenshot-real.png",
+      "format": "png",
+      "quality": 82,
+      "size": 111106,
+      "ssim": 1,
+      "ssimMeasured": true
+    },
+    {
+      "case": "screenshot-real-webp",
+      "class": "screenshot",
+      "file": "screenshot-real.png",
+      "format": "webp",
+      "quality": 82,
+      "size": 32438,
+      "ssim": 0.9987194140693157,
+      "ssimMeasured": true
+    },
+    {
+      "case": "photo-synthetic-jpeg",
+      "class": "photo",
+      "file": "photo.jpg",
+      "format": "jpeg",
+      "quality": 82,
+      "size": 155235,
+      "ssim": 0.9789630885261279,
+      "ssimMeasured": true
+    },
+    {
+      "case": "photo-synthetic-webp",
+      "class": "photo",
+      "file": "photo.jpg",
+      "format": "webp",
+      "quality": 82,
+      "size": 65326,
+      "ssim": 0.932886255865803,
+      "ssimMeasured": true
+    },
+    {
+      "case": "photo-synthetic-webp-target",
+      "class": "photo",
+      "file": "photo.jpg",
+      "format": "webp",
+      "quality": 82,
+      "targetBytes": 81920,
+      "targetQuality": 84,
+      "size": 77470,
+      "ssim": 0.94205102898148,
+      "ssimMeasured": true
+    },
+    {
+      "case": "photo-earth-jpeg-passthrough",
+      "class": "photo",
+      "file": "photo-earth.jpg",
+      "format": "jpeg",
+      "quality": 82,
+      "size": 122699,
+      "ssim": 1,
+      "ssimMeasured": true
+    },
+    {
+      "case": "photo-earth-jpeg-q60",
+      "class": "photo",
+      "file": "photo-earth.jpg",
+      "format": "jpeg",
+      "quality": 60,
+      "size": 110398,
+      "ssim": 0.990910817044858,
+      "ssimMeasured": true
+    },
+    {
+      "case": "photo-earth-webp",
+      "class": "photo",
+      "file": "photo-earth.jpg",
+      "format": "webp",
+      "quality": 82,
+      "size": 85826,
+      "ssim": 0.986465966363271,
+      "ssimMeasured": true
+    },
+    {
+      "case": "photo-earth2-jpeg-passthrough",
+      "class": "photo",
+      "file": "photo-earth2.jpg",
+      "format": "jpeg",
+      "quality": 82,
+      "size": 26857,
+      "ssim": 1,
+      "ssimMeasured": true
+    },
+    {
+      "case": "photo-earth2-jpeg-q60",
+      "class": "photo",
+      "file": "photo-earth2.jpg",
+      "format": "jpeg",
+      "quality": 60,
+      "size": 24359,
+      "ssim": 0.9943500021231855,
+      "ssimMeasured": true
+    },
+    {
+      "case": "photo-earth2-webp",
+      "class": "photo",
+      "file": "photo-earth2.jpg",
+      "format": "webp",
+      "quality": 82,
+      "size": 17332,
+      "ssim": 0.9909373667569296,
+      "ssimMeasured": true
+    },
+    {
+      "case": "transparent-synthetic-auto",
+      "class": "transparent",
+      "file": "transparent.png",
+      "format": "auto",
+      "quality": 82,
+      "size": 27379,
+      "ssim": 1,
+      "ssimMeasured": true
+    },
+    {
+      "case": "transparent-synthetic-webp",
+      "class": "transparent",
+      "file": "transparent.png",
+      "format": "webp",
+      "quality": 82,
+      "size": 5524,
+      "ssim": 0.9990663702868715,
+      "ssimMeasured": true
+    },
+    {
+      "case": "transparent-logo-auto",
+      "class": "transparent",
+      "file": "logo.png",
+      "format": "auto",
+      "quality": 82,
+      "size": 54102,
+      "ssim": 1,
+      "ssimMeasured": true
+    },
+    {
+      "case": "transparent-logo-webp",
+      "class": "transparent",
+      "file": "logo.png",
+      "format": "webp",
+      "quality": 82,
+      "size": 9414,
+      "ssim": 0.9907900665009991,
+      "ssimMeasured": true
+    },
+    {
+      "case": "animated-synthetic-auto",
+      "class": "animation",
+      "file": "animated.gif",
+      "format": "auto",
+      "quality": 82,
+      "size": 12538,
+      "ssim": 0,
+      "ssimMeasured": false
+    },
+    {
+      "case": "animated-real-auto",
+      "class": "animation",
+      "file": "animated-real.gif",
+      "format": "auto",
+      "quality": 82,
+      "size": 42441,
+      "ssim": 0,
+      "ssimMeasured": false
+    }
+  ]
+}

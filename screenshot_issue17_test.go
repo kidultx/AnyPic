@@ -26,6 +26,20 @@ func issue17Seams(t *testing.T) {
 	run := runCaptureCommand
 	start := startCaptureCommand
 	focus := focusScreenshotWindow
+	readState := clipboardReadState
+	readImage := clipboardReadImage
+	writeImage := clipboardWriteImage
+	leaseValid := clipboardLeaseValid
+	writeText := clipboardWriteText
+	clearClipboard := clipboardClear
+	// Captures may reach the clipboard now that the pipeline writes the raw
+	// image first; these tests must never touch the developer's real one.
+	clipboardReadState = func() clipboardState { return clipboardState{} }
+	clipboardReadImage = func() []byte { return nil }
+	clipboardWriteImage = func([]byte) (uint64, error) { return 0, nil }
+	clipboardLeaseValid = func(uint64) bool { return false }
+	clipboardWriteText = func(string) {}
+	clipboardClear = func() {}
 	t.Cleanup(func() {
 		screenshotGOOS = goos
 		screenCapturePreflight = preflight
@@ -34,6 +48,12 @@ func issue17Seams(t *testing.T) {
 		runCaptureCommand = run
 		startCaptureCommand = start
 		focusScreenshotWindow = focus
+		clipboardReadState = readState
+		clipboardReadImage = readImage
+		clipboardWriteImage = writeImage
+		clipboardLeaseValid = leaseValid
+		clipboardWriteText = writeText
+		clipboardClear = clearClipboard
 	})
 }
 
@@ -49,10 +69,13 @@ func issue17App(t *testing.T) (*AnyPic, string) {
 		settings: defaultSettings(),
 		thumbSem: make(chan struct{}, 1),
 	}
-	// No clipboard writes and no zero-click flow: the success path is then
-	// deterministic and never reads or writes the real clipboard.
+	// No zero-click flow: the success path is deterministic and focused. With
+	// the pipeline on the app deliberately stays in the background, and the
+	// clipboard replacement has its own tests; #17 is about the plain capture
+	// path.
 	a.settings.AutoProcess = "off"
 	a.settings.ScreenshotClipboard = "off"
+	a.settings.ScreenshotPipeline = "off"
 	return a, pictures
 }
 

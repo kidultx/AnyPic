@@ -296,9 +296,32 @@ func (a *AnyPic) compressAnimated(ctx context.Context, id int64, path, srcFormat
 		resized = true
 	}
 
-	var buf bytes.Buffer
-	if err := webp.EncodeAll(&buf, &webp.WEBP{Image: frames, Delay: delays, LoopCount: loop}, webp.Options{Quality: s.Quality, Method: 4}); err != nil {
-		return compressResult{}, errors.New(tr().GoErrEncodeWebP())
+	target := s.TargetSize
+	if target < 0 {
+		target = 0
+	}
+	encodeAt := func(quality int) ([]byte, error) {
+		var buf bytes.Buffer
+		if err := webp.EncodeAll(&buf, &webp.WEBP{Image: frames, Delay: delays, LoopCount: loop}, webp.Options{Quality: quality, Method: 4}); err != nil {
+			return nil, errors.New(tr().GoErrEncodeWebP())
+		}
+		return buf.Bytes(), nil
+	}
+	var (
+		data    []byte
+		quality int
+		missed  bool
+		err     error
+	)
+	if target > 0 {
+		// Animations can tune WebP quality too, so a target-size cap searches
+		// it like a still — every probe keeps all frames, delays and looping.
+		data, quality, missed, err = searchEncode(ctx, target, encodeAt)
+	} else {
+		data, err = encodeAt(s.Quality)
+	}
+	if err != nil {
+		return compressResult{}, err
 	}
 	if err := ctx.Err(); err != nil {
 		return compressResult{}, err
@@ -308,7 +331,7 @@ func (a *AnyPic) compressAnimated(ctx context.Context, id int64, path, srcFormat
 	if err != nil {
 		return compressResult{}, errors.New(tr().GoErrReadOriginal())
 	}
-	if !resized && int64(buf.Len()) >= info.Size() {
+	if !resized && int64(len(data)) >= info.Size() {
 		return compressResult{
 			path:          path,
 			size:          info.Size(),
@@ -318,6 +341,8 @@ func (a *AnyPic) compressAnimated(ctx context.Context, id int64, path, srcFormat
 			height:        height,
 			hasAlpha:      true,
 			passedThrough: true,
+			targetBytes:   target,
+			targetMissed:  target > 0 && info.Size() > target,
 		}, nil
 	}
 
@@ -331,18 +356,24 @@ func (a *AnyPic) compressAnimated(ctx context.Context, id int64, path, srcFormat
 	}
 	outPath := tmp.Name()
 	tmp.Close()
-	if err := os.WriteFile(outPath, buf.Bytes(), 0o600); err != nil {
+	if err := os.WriteFile(outPath, data, 0o600); err != nil {
 		_ = os.Remove(outPath)
 		return compressResult{}, errors.New(tr().GoErrWriteResult())
 	}
+	if target == 0 {
+		quality = 0
+	}
 	return compressResult{
-		path:       outPath,
-		size:       int64(buf.Len()),
-		format:     "WEBP",
-		outputName: outputFilename(name, s.Suffix, "webp"),
-		width:      width,
-		height:     height,
-		hasAlpha:   true,
+		path:          outPath,
+		size:          int64(len(data)),
+		format:        "WEBP",
+		outputName:    outputFilename(name, s.Suffix, "webp"),
+		width:         width,
+		height:        height,
+		hasAlpha:      true,
+		targetBytes:   target,
+		targetQuality: quality,
+		targetMissed:  missed,
 	}, nil
 }
 

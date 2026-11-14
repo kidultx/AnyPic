@@ -32,6 +32,18 @@ export interface Batch {
   canceled: boolean;
 }
 
+/** CopyOutcome reports what a clipboard copy did. */
+export interface CopyOutcome {
+  copied: boolean;
+  /**
+   * Skipped means the compressed image was not copied because the clipboard
+   * no longer holds the capture AnyPic put there: the user copied something
+   * else while compression ran, and that newer content is kept.
+   */
+  skipped: boolean;
+  name: string;
+}
+
 /** DownloadProgress reports the installer download's byte counts. */
 export interface DownloadProgress {
   received: number;
@@ -102,6 +114,33 @@ export interface Item {
    * instead of a still re-encode (#8).
    */
   animated: boolean;
+  /**
+   * SSIM is the structural similarity between the source handed to the
+   * encoder and the decoded result, measured on grayscale at up to
+   * ssimMaxSide pixels. SSIMMeasured separates "not measured" (animations)
+   * from a real score, so a measured 0 is never hidden as unmeasured.
+   */
+  ssim: number;
+  ssimMeasured: boolean;
+  /**
+   * TargetBytes is the per-image cap this result was produced under, or 0
+   * when the pass ran in quality mode. TargetQuality is the quality the
+   * search settled on (or the fixed quality when PNG could only report a
+   * miss). TargetMissed reports that no probed quality could reach it; the
+   * page then says the smallest result and its quality.
+   */
+  targetBytes?: number;
+  targetQuality?: number;
+  targetMissed?: boolean;
+}
+
+/**
+ * MarkdownCopy reports the link that was written to the clipboard and the
+ * file it points at.
+ */
+export interface MarkdownCopy {
+  markdown: string;
+  path: string;
 }
 
 /** Preview holds before and after previews for the comparison view. */
@@ -143,6 +182,22 @@ export interface Settings {
    * clears it again once the image has been read.
    */
   screenshotClipboard: string;
+  /**
+   * ScreenshotPipeline compresses a fresh capture and puts the compressed
+   * result on the clipboard when it finishes: "on" or "off". It is opt-in
+   * (default off) because it overwrites the clipboard the screenshot tool
+   * just filled. With it on, the raw capture is written there first, so
+   * pasting while compression runs still gets the shot; the compressed
+   * result only replaces AnyPic's own copy. Requires ScreenshotClipboard.
+   */
+  screenshotPipeline: string;
+  /**
+   * TargetSize caps each result at this many bytes; 0 leaves the quality
+   * setting in charge. JPEG, WebP and animated WebP search their quality to
+   * meet it. PNG is lossless, so a PNG result can only report that it could
+   * not.
+   */
+  targetSize: number;
   /**
    * HideDockWhenTray removes the Dock icon while the window is hidden to
    * the tray: "on" or "off". macOS only.
@@ -247,6 +302,14 @@ export const AnyPic = {
     return call("AnyPic.CompressFailed", s);
   },
   /**
+   * CompressIDs starts a pass over just the given ready images. The screenshot
+   * pipeline uses it when auto-process is off: compressing a capture must not
+   * sweep unrelated files the user deliberately left waiting.
+   */
+  compressIDs(ids: number[], s: Settings): Promise<void> {
+    return call("AnyPic.CompressIDs", ids, s);
+  },
+  /**
    * CompressReady starts a pass over the images that have not been compressed
    * yet. The automatic flow uses it to pick up images added while an earlier
    * pass was running without re-encoding the ones already finished.
@@ -255,12 +318,37 @@ export const AnyPic = {
     return call("AnyPic.CompressReady", s);
   },
   /**
+   * CopyCaptureResult replaces the raw capture on the clipboard with its
+   * compressed result — but only while the clipboard still holds an image and
+   * that image is still AnyPic's. Empty and text-only clipboards are never
+   * overwritten.
+   */
+  copyCaptureResult(id: number): Promise<CopyOutcome> {
+    return call("AnyPic.CopyCaptureResult", id);
+  },
+  /**
+   * CopyItemAsMarkdown makes sure the compressed result has a durable copy on
+   * disk (in the configured output folder, or beside the original) and puts
+   * ![name](path) on the clipboard. Nothing is uploaded; the link is a local
+   * path for documents and issue drafts.
+   */
+  copyItemAsMarkdown(id: number): Promise<MarkdownCopy> {
+    return call("AnyPic.CopyItemAsMarkdown", id);
+  },
+  /**
    * CopyItemToClipboard puts a compressed image on the clipboard, falling back
    * to the original when compression did not finish. The clipboard takes PNG,
    * so results encoded as JPEG or WebP are decoded and re-encoded first.
    */
   copyItemToClipboard(id: number): Promise<void> {
     return call("AnyPic.CopyItemToClipboard", id);
+  },
+  /**
+   * CopyLastResult puts the most recently finished compressed result on the
+   * clipboard again, for the tray's "copy the last result" item.
+   */
+  copyLastResult(): Promise<CopyOutcome> {
+    return call("AnyPic.CopyLastResult");
   },
   /**
    * DecorateItem re-renders an image in the queue with the given FrameStyle —

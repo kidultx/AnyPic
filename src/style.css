@@ -953,6 +953,27 @@ body.side-drag * {
   cursor: not-allowed;
 }
 
+/* A number field with a fixed unit: the unit is part of the answer, so it
+   sits inside the control rather than in a second column. */
+.number-wrap {
+  position: relative;
+}
+
+.number-wrap .text-input {
+  padding-right: 38px;
+  font-variant-numeric: tabular-nums;
+}
+
+.number-unit {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
 .tip-card {
   display: flex;
   align-items: flex-start;
@@ -1112,6 +1133,12 @@ body.side-drag * {
 .switch-input:checked + .switch::after {
   background-color: var(--brand-ink);
   transform: translateX(13px);
+}
+
+/* The capture pipeline is a dependent switch: with "copy after capture" off
+   there is no raw clipboard image for it to replace, so it reads disabled. */
+.switch-input:disabled + .switch {
+  opacity: 0.45;
 }
 
 .switch-input:focus-visible + .switch {
@@ -1848,6 +1875,56 @@ body.side-drag * {
 .saving-pill.error {
   background-color: var(--danger-soft);
   color: var(--danger);
+}
+
+/* Savings and the measured quality tier share the result column: the number
+   answers "how much smaller", the tier answers "does it still look right".
+   They stack so a long tier word never squeezes the sizes. */
+.result-pills {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.quality-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background-color: var(--pill);
+  color: var(--ctl-fg);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.quality-pill.slight {
+  background-color: var(--brand-soft);
+  color: var(--brand-foreground);
+}
+
+.quality-pill.visible {
+  background-color: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* A result that could not be squeezed under its target is still a result:
+   the badge says how small it got instead of turning the row into an error. */
+.target-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 18px;
+  align-items: center;
+  padding: 0 7px;
+  border-radius: var(--radius-control);
+  background-color: var(--danger-soft);
+  color: var(--danger);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .item-actions {
