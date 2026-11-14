@@ -1871,6 +1871,56 @@ body.side-drag * {
   color: var(--danger);
 }
 
+/* Savings and the measured quality tier share the result column: the number
+   answers "how much smaller", the tier answers "does it still look right".
+   They stack so a long tier word never squeezes the sizes. */
+.result-pills {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.quality-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background-color: var(--pill);
+  color: var(--ctl-fg);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.quality-pill.slight {
+  background-color: var(--brand-soft);
+  color: var(--brand-foreground);
+}
+
+.quality-pill.visible {
+  background-color: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* A result that could not be squeezed under its target is still a result:
+   the badge says how small it got instead of turning the row into an error. */
+.target-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 18px;
+  align-items: center;
+  padding: 0 7px;
+  border-radius: var(--radius-control);
+  background-color: var(--danger-soft);
+  color: var(--danger);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
 .item-actions {
   display: flex;
   align-items: center;

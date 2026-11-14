@@ -320,6 +320,9 @@ function applyDemoState() {
       transparencyKept: false,
       savedPercent: ready ? 0 : saved,
       animated: false,
+      ssim: ready ? 0 : 0.978,
+      ssimMeasured: !ready,
+      targetQuality: 0,
     };
   });
   batch = { running: false, total: items.length, done: 2, failed: 0, canceled: false };
@@ -691,7 +694,11 @@ function createRow(id: number): HTMLElement {
     </div>
     <div class="item-result">
       <div class="result-sizes"></div>
-      <span class="saving-pill"></span>
+      <div class="result-pills">
+        <span class="quality-pill" hidden></span>
+        <span class="saving-pill"></span>
+        <span class="target-badge" hidden></span>
+      </div>
     </div>
     <div class="item-actions">
       <button class="icon-btn" data-action="preview">${icon("eye")}</button>
@@ -828,6 +835,15 @@ function updateRow(row: HTMLElement, item: Item) {
 
   const sizes = row.querySelector<HTMLElement>(".result-sizes")!;
   const pill = row.querySelector<HTMLElement>(".saving-pill")!;
+  const qualityPill = row.querySelector<HTMLElement>(".quality-pill")!;
+  const targetBadge = row.querySelector<HTMLElement>(".target-badge")!;
+  qualityPill.hidden = true;
+  qualityPill.className = "quality-pill";
+  qualityPill.textContent = "";
+  qualityPill.removeAttribute("title");
+  targetBadge.hidden = true;
+  targetBadge.textContent = "";
+  targetBadge.removeAttribute("title");
   pill.className = "saving-pill";
   pill.hidden = false;
 
@@ -848,6 +864,38 @@ function updateRow(row: HTMLElement, item: Item) {
         pill.classList.add("neutral");
         pill.textContent = `+${pct(-savedPct)}`;
       }
+      // The measured quality of this result, not the quality setting: the
+      // row should say what the image actually lost. Unmeasured results
+      // (animations) say so instead of borrowing a tier they did not earn.
+      if (item.ssimMeasured) {
+        const tier = qualityTier(item.ssim);
+        qualityPill.hidden = false;
+        qualityPill.textContent = tier.label;
+        if (tier.className) qualityPill.classList.add(tier.className);
+        qualityPill.title = t.ssimTitle(item.ssim.toFixed(3));
+      } else {
+        qualityPill.hidden = false;
+        qualityPill.textContent = t.qualityNotMeasured();
+        qualityPill.title = t.qualityNotMeasuredTitle();
+      }
+    }
+    // A result can miss its cap even when the original was kept (no smaller
+    // encoding exists); the honesty badge belongs to both cases and names
+    // both the bytes it reached and the quality it used.
+    if (item.targetMissed && (item.targetBytes ?? 0) > 0) {
+      const qualityLabel =
+        item.passedThrough
+          ? t.targetQualityOriginal()
+          : (item.targetQuality ?? 0) > 0
+            ? t.targetQualityValue(item.targetQuality ?? 0)
+            : t.targetQualityLossless();
+      targetBadge.hidden = false;
+      targetBadge.textContent = t.targetMissedBadge(formatBytes(item.compressedSize), qualityLabel);
+      targetBadge.title = t.targetMissedTitle(
+        formatBytes(item.targetBytes ?? 0),
+        formatBytes(item.compressedSize),
+        qualityLabel,
+      );
     }
   } else if (item.status === "working") {
     sizes.innerHTML = `<span>${esc(t.optimizing())}</span>`;
