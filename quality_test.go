@@ -8,6 +8,8 @@ import (
 	"image/color"
 	"math"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/disintegration/imaging"
@@ -58,6 +60,62 @@ func TestWebPDecodeExpandsLimitedRange(t *testing.T) {
 	}
 	if score, measured := ssimScore(src, normalized); !measured || score < 0.98 {
 		t.Fatalf("q82 WebP of a flat image scored SSIM %.4f (measured %v), want >= 0.98 after range expansion", score, measured)
+	}
+}
+
+// TestWebPRangeExpansionThreeBlocks pins the decode path AnyPic really uses:
+// the registered WebP decoder is gen2brain/webp, whose stills are
+// limited-range *image.NYCbCrA, and normalizeDecodedImage must expand them
+// exactly once. Three solid patches at 0, 32 and 255 catch both directions:
+// a skipped expansion lifts black to 16 and dims the midtone, while a double
+// expansion crushes 32 toward 19 — black stays 0, so a single black probe
+// cannot see that. Flat patches survive lossy WebP closely enough for ±2.
+// If the decoder is ever swapped for one returning *image.YCbCr for opaque
+// files (x/image/webp does), this fails before those wrong values are
+// mistaken for compression damage.
+func TestWebPRangeExpansionThreeBlocks(t *testing.T) {
+	const (
+		width, height = 96, 48
+		blockWidth    = width / 3
+	)
+	src := image.NewNRGBA(image.Rect(0, 0, width, height))
+	tones := []uint8{0, 32, 255}
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			tone := tones[min(x/blockWidth, len(tones)-1)]
+			src.SetNRGBA(x, y, color.NRGBA{R: tone, G: tone, B: tone, A: 255})
+		}
+	}
+	data, err := encodeStill(src, "WEBP", 82)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "tones.webp")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	decoded, err := decodeImage(f, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range tones {
+		x := i*blockWidth + blockWidth/2
+		r, g, b, a := decoded.At(x, height/2).RGBA()
+		for _, got := range []uint32{r >> 8, g >> 8, b >> 8} {
+			if diff := int(got) - int(want); diff < -2 || diff > 2 {
+				t.Errorf("patch %d at (%d,%d) decoded as %d,%d,%d, want %d±2 — limited-range YUV was expanded wrongly",
+					i, x, height/2, r>>8, g>>8, b>>8, want)
+				break
+			}
+		}
+		if a>>8 != 255 {
+			t.Errorf("patch %d decoded with alpha %d, want 255", i, a>>8)
+		}
 	}
 }
 

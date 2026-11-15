@@ -102,6 +102,15 @@ func ssimScore(a, b image.Image) (float64, bool) {
 // out, and SSIM measures the range mismatch instead of the compression. WebP
 // encoders are not the only source of *image.NYCbCrA, but libwebp is the one
 // AnyPic decodes, and its lossy still output is always limited-range BT.601.
+//
+// Only *image.NYCbCrA is expanded. The decoder AnyPic registers is
+// gen2brain/webp: lossy and lossless stills both decode to *image.NYCbCrA;
+// animation frames come back as *image.RGBA. So no *image.YCbCr WebP path
+// reaches here. That matters: JPEG decodes to *image.YCbCr too, but in full
+// range, and expanding it would crush every shadow. If the WebP decoder is
+// ever swapped for one that returns *image.YCbCr for opaque files
+// (x/image/webp does), TestWebPRangeExpansionThreeBlocks turns red until the
+// expansion is extended for WebP sources only.
 func normalizeDecodedImage(img image.Image) image.Image {
 	ycc, ok := img.(*image.NYCbCrA)
 	if !ok {
