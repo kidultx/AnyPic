@@ -13,8 +13,11 @@
 
 ## Source of truth
 
-- [main.go](../../main.go)：`main`、`secondLaunchHandler`、`command`；
-  窗口与托盘选项、关闭/激活/退出回调都在这里。
+- [main.go](../../main.go)：`main`、`beforeQuit`、`secondLaunchHandler`、
+  `command`；窗口与托盘选项、关闭/激活/退出回调都在这里。
+- `AnyPic.quitConfirmed`（[compressor.go](../../compressor.go)）与
+  `AnyPic.QuitNow`（main.go）：页面处理完「有未导出结果」的确认后，用它
+  记录用户的选择并继续退出。
 - [mygo.config.ts](../../mygo.config.ts)：应用名与标识符（`identifier`）——
   单实例锁按「标识符 + 应用名」标识，`mygo dev` 的 `<identifier>.dev` 因此
   与已安装的应用互不相干。
@@ -39,15 +42,25 @@
 3. **关闭窗口**：托盘可用时 `OnClose` 拦下，窗口隐藏、应用留在托盘
    （macOS 另按「偏好设置」决定是否连 Dock 图标一起隐藏）；托盘不可用时
    照常退出，否则窗口关掉就再也找不回来。
-4. **退出**（托盘菜单、`Cmd+Q`、应用菜单、安装更新前）：`OnBeforeQuit`
-   置 `quitting` 并跑 `service.Cleanup()`（删各条目的临时文件，不变量 4）；
-   关闭回调看到 `quitting` 就放行，不再拦截。
+4. **退出**（托盘菜单、`Cmd+Q`、应用菜单、安装更新前）：`OnBeforeQuit` 先
+   问 `beforeQuit`——若 `UnsavedResults() > 0` 且页面还没确认过，就
+   `PreventDefault`、把窗口带回前面，并向页面广播 `quit-unsaved`；页面弹
+   「先导出 / 直接退出 / 取消」（`src/main.ts` 的 `quitWithUnsavedResults`）。
+   用户选「直接退出」或「先导出」成功后，页面调 `AnyPic.QuitNow()`：置
+   `quitConfirmed` 再走一次 `App.Quit()`。确认过的这一次放行，置
+   `quitting` 并跑 `service.Cleanup()`（删各条目的临时文件，不变量 4）；
+   关闭回调看到 `quitting` 就放行，不再拦截。安装更新这条路径在
+   `InstallUpdate` 里直接置 `quitConfirmed`——页面在调它之前已经确认过
+   同样的损失。
 
 ## 状态转换
 
 - `singleInstance.locked`（依赖内）：一个进程一份；退出时释放，
   崩溃留下的死 socket 由下一次启动接管。
 - `quitting`：`OnBeforeQuit` 置 true → 窗口关闭不再被托盘拦下 → 进程结束。
+- `quitConfirmed`（`AnyPic` 上，原子布尔）：页面确认「直接退出」、或
+  「先导出」成功、或 `InstallUpdate` 时置 true；它只影响下一次
+  `OnBeforeQuit` 的判断，从不被重置。
 - `trayReady`：托盘创建成功才为 true；false 时关闭窗口 = 退出应用。
 - `showWindow`：`WhenReady` 里赋值；此前为 nil。`OnOpenFile` 与
   `secondLaunchHandler` 在 `WhenReady` 之前注册，所以都先判 nil——
@@ -68,11 +81,16 @@
 - **退出只能走 `mygo.App.Quit()`**：`Cleanup` 挂在 `OnBeforeQuit` 上，
   绕过它退出就会留下临时文件（不变量 4）。更新器代开安装包后正是走这条路
   （[updater.md](updater.md)）。
+- **有未导出结果时，退出必须先问页面**：`OnBeforeQuit` 是同步的，不能等
+  页面弹窗；所以它先 `PreventDefault`，再广播命令，由页面用 `QuitNow`
+  发起第二次退出。与 `showWindow` 一样，这段回调在 `WhenReady` 之前就
+  注册，页面没准备好时 `UnsavedResults()` 必为 0，不会拦下启动期的退出。
 
 ## 验证命令
 
 ```sh
 go test -race -run 'TestIssue14' .   # 单实例守卫、第二次启动把窗口带回前面
+go test -race -run 'TestQuit' .      # 未导出结果的退出守卫与确认后的放行
 go test -race ./...                  # 全量
 ```
 

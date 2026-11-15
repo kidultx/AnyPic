@@ -334,6 +334,11 @@ func TestIssue14InstallsByOpeningThenQuitting(t *testing.T) {
 	if got := hooks.sequence(); got != "open,quit" {
 		t.Fatalf("installer sequence = %q, want open,quit", got)
 	}
+	// The page already showed the unsaved-results warning before calling
+	// InstallUpdate, so the quit guard must not stop this quit to ask again.
+	if !service.quitConfirmed.Load() {
+		t.Error("InstallUpdate quit without recording the page's confirmation")
+	}
 	// A successful install consumes the pending path: the same path must not
 	// open and request another quit.
 	if err := service.InstallUpdate(result.Path); err == nil {

@@ -345,6 +345,9 @@ func (a *AnyPic) InstallUpdate(path string) error {
 		a.pendingInstaller = ""
 	}
 	a.mu.Unlock()
+	// The page already showed the user what would be lost before it called
+	// InstallUpdate, so the quit guard must not ask a second time.
+	a.quitConfirmed.Store(true)
 	quitApp()
 	return nil
 }

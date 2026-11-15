@@ -231,6 +231,11 @@ type AnyPic struct {
 	downloading      atomic.Bool
 	pendingInstaller string
 
+	// quitConfirmed records that the page resolved an interrupted quit (the
+	// unsaved-results prompt) or already confirmed one on its own (the
+	// update installer), so OnBeforeQuit may let the next quit through.
+	quitConfirmed atomic.Bool
+
 	// Files the OS handed over before the page was ready to listen (#6).
 	pendingOpen  []string
 	pageAttached bool

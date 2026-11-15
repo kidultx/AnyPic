@@ -935,6 +935,37 @@ func TestCopyImageIsReachableFromEveryEntryPoint(t *testing.T) {
 	}
 }
 
+// TestQuitWarnsAboutUnsavedResults guards the 2026-11-15 feature report's
+// A3: quitting with compressed results that exist only in the session temp
+// dir must explain the loss and offer export-first as well as quit-anyway,
+// instead of deleting the results silently.
+func TestQuitWarnsAboutUnsavedResults(t *testing.T) {
+	mainRaw, err := os.ReadFile("src/main.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	main := stripTSComments(string(mainRaw))
+	for _, want := range []string{
+		`case "quit-unsaved":`,
+		"t.unsavedResults(unsaved)",
+		"t.exportThenQuit()",
+		"t.quitAnyway()",
+		"AnyPic.quitNow()",
+	} {
+		if !strings.Contains(main, want) {
+			t.Errorf("src/main.ts: %s is missing; the quit guard's confirmation is unwired (A3)", want)
+		}
+	}
+
+	htmlRaw, err := os.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(htmlRaw), `id="confirmAlt"`) {
+		t.Error("index.html: no #confirmAlt — the confirmation has no third button for \"export first\" (A3)")
+	}
+}
+
 // TestIssue22PreferencesLiveInADialog guards #22: the sidebar answers "how
 // should this batch come out" — quality, output format, where it lands. The
 // application's own preferences (theme, launch at login, the Dock, the capture
