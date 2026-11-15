@@ -749,6 +749,12 @@ func TestIssue24MustReadCopyIsNotFaint(t *testing.T) {
 		`.empty-state p`,
 		`.empty-actions`,
 		`.queue-empty-filter`,
+		// The result column's numbers are the product's answer; "how big was
+		// it before" must not be the faintest text in the row (#24).
+		`.result-sizes`,
+		`.item-meta`,
+		`.batch-percent`,
+		`.summary-foot`,
 	}
 	readable := regexp.MustCompile(`color:\s*var\(--(ctl-fg|text-soft|text)\)`)
 	for _, sel := range rules {
