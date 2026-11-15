@@ -135,17 +135,26 @@ func TestNoNewNativeSelects(t *testing.T) {
 // the dependent pipeline switch; the demo then gained an encoder floor so a
 // quality-labelled target miss is visible in the browser demo. main.ts moved
 // from 90,600 to 92,705, so the budget is raised to 93,600 rather than
-// duplicating the render state in a second module.
+// duplicating the render state in a second module. The 2026-11-15 feature
+// report's three fixes grew main.ts to 97,742: the row/context-menu/preview
+// copy action with its honest payload toast (A1), the quit confirmation that
+// offers export-first or quit-anyway (A3), and the confirmation's third
+// button; the clipboard payload itself is computed in clipboard.go. The copy
+// action is also what grew index.html (sprite symbol, context-menu item,
+// preview button, third confirm button) and style.css (the always-visible
+// primary actions), while ⌘C grew queue-keys.ts to 12,605 and belongs with
+// the row's other manners rather than in main.ts. Budgets are raised to the
+// measured sizes plus ~2% headroom.
 var uiBudgets = []struct {
 	file   string
 	budget int
 }{
-	{"src/main.ts", 93_600},
+	{"src/main.ts", 99_700},
 	{"src/shortcuts.ts", 4_200},
-	{"src/queue-keys.ts", 12_300},
+	{"src/queue-keys.ts", 12_900},
 	{"src/i18n.ts", 5_200},
-	{"src/style.css", 66_900},
-	{"index.html", 36_900},
+	{"src/style.css", 67_500},
+	{"index.html", 37_600},
 }
 
 // TestScriptAndStyleBudgets guards them. Sizes are counted with LF line
@@ -847,6 +856,81 @@ func TestIssue30ActionsColumnFitsTheButtons(t *testing.T) {
 		}
 		if width < need {
 			t.Errorf("src/style.css: actions column is %dpx but the row holds %d × %dpx buttons + %d of gap = %dpx, so they shrink below their size (#30)", width, buttons, size, (buttons-1)*gap, need)
+		}
+	}
+}
+
+// TestRowPrimaryActionsStayVisible guards the 2026-11-15 feature report's B2:
+// copy and export are the row's main actions and must not wait behind hover
+// discovery. Preview, beautify and remove still appear on hover or focus; a
+// device that has no hover shows every action at once.
+func TestRowPrimaryActionsStayVisible(t *testing.T) {
+	raw, err := os.ReadFile("src/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := stripBlockComments(string(raw))
+	if regexp.MustCompile(`(?s)\.item-actions\s*\{[^{}]*opacity:\s*0`).MatchString(css) {
+		t.Error("src/style.css: .item-actions hides the whole group again; primary actions must stay visible (B2)")
+	}
+	if !regexp.MustCompile(`(?s)\.item-actions \.icon-btn\s*\{[^{}]*opacity:\s*0`).MatchString(css) {
+		t.Error("src/style.css: secondary row actions no longer start hidden (B2)")
+	}
+	if !regexp.MustCompile(`(?s)\.item-actions \.icon-btn\.primary[^{}]*\{[^{}]*opacity:\s*1`).MatchString(css) {
+		t.Error("src/style.css: .icon-btn.primary is not permanently visible (B2)")
+	}
+	if !regexp.MustCompile(`(?s)@media \(hover: none\)\s*\{[^{}]*\.item-actions \.icon-btn\s*\{[^{}]*opacity:\s*1`).MatchString(css) {
+		t.Error("src/style.css: no @media (hover: none) rule keeps every action visible on touch screens (B2)")
+	}
+	// The grid renders the same row element; opacity belongs to the shared
+	// per-button rules, not to a view-specific override.
+	if regexp.MustCompile(`(?s)\.queue-list\.grid \.item-actions\s*\{[^{}]*opacity\s*:`).MatchString(css) {
+		t.Error("src/style.css: .queue-list.grid .item-actions sets opacity; grid rows must share the list's rules (B2)")
+	}
+}
+
+// TestCopyImageIsReachableFromEveryEntryPoint guards the 2026-11-15 feature
+// report's A1: the backend copy existed but the page never called it. The
+// row, its context menu, the preview and ⌘C all have to reach it, and the
+// toast has to name the written format and both sizes.
+func TestCopyImageIsReachableFromEveryEntryPoint(t *testing.T) {
+	htmlRaw, err := os.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(htmlRaw)
+	for _, want := range []string{`id="i-copy"`, `data-menu="copy"`, `id="previewCopyBtn"`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("index.html: %s is missing; copy needs a row-menu and preview entry (A1)", want)
+		}
+	}
+
+	mainRaw, err := os.ReadFile("src/main.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	main := stripTSComments(string(mainRaw))
+	for _, want := range []string{
+		`data-action="copy"`,
+		"AnyPic.copyItemToClipboard",
+		"t.copiedImage(",
+		"t.copiedImageAnimated(",
+		"formatBytes(copy.bytes)",
+		"formatBytes(copy.sourceBytes)",
+	} {
+		if !strings.Contains(main, want) {
+			t.Errorf("src/main.ts: %s is missing; the row copy and its honest toast are unwired (A1)", want)
+		}
+	}
+
+	keysRaw, err := os.ReadFile("src/queue-keys.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys := stripTSComments(string(keysRaw))
+	for _, want := range []string{`case "copy":`, "ctx.copyImage(focusId)"} {
+		if !strings.Contains(keys, want) {
+			t.Errorf("src/queue-keys.ts: %s is missing; the context menu or ⌘C cannot copy (A1)", want)
 		}
 	}
 }

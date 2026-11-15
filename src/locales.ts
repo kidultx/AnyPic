@@ -540,9 +540,29 @@ export interface Messages {
    */
   itemWaiting(): string;
   /**
-   * `已是最优`
+   * `未压小`
    */
-  bestAlready(): string;
+  keptOriginal(): string;
+  /**
+   * `重新编码没有更小，保留了原图；这不代表原图已是最优`
+   */
+  keptOriginalTitle(): string;
+  /**
+   * `已在目标内`
+   */
+  bestWithinTarget(): string;
+  /**
+   * `原图已在目标体积内，无需重新编码`
+   */
+  bestWithinTargetTitle(): string;
+  /**
+   * `保留原图`
+   */
+  bestGuardFailed(): string;
+  /**
+   * `无损校验发现重新编码改变了像素，已保留原图`
+   */
+  bestGuardFailedTitle(): string;
   /**
    * `正在优化…`
    */
@@ -828,6 +848,18 @@ export interface Messages {
    */
   copyFailed(): string;
   /**
+   * `复制图片`
+   */
+  copyImage(): string;
+  /**
+   * `已复制 {format} · {size}（原文件 {source}）`
+   */
+  copiedImage(format: string, size: string, source: string): string;
+  /**
+   * `已复制 {format}（动图仅首帧） · {size}（原文件 {source}）`
+   */
+  copiedImageAnimated(format: string, size: string, source: string): string;
+  /**
    * `已复制到剪贴板`
    */
   copied(): string;
@@ -1044,6 +1076,18 @@ export interface Messages {
    */
   unsavedUnknown(): string;
   /**
+   * `还有未导出的压缩结果`
+   */
+  quitUnsavedTitle(): string;
+  /**
+   * `先导出`
+   */
+  exportThenQuit(): string;
+  /**
+   * `直接退出`
+   */
+  quitAnyway(): string;
+  /**
    * `退出并安装`
    */
   quitAndInstall(): string;
@@ -1128,9 +1172,33 @@ export interface Messages {
    */
   nextImage(): string;
   /**
-   * `原图已是最优`
+   * `未压得更小，保留原图`
    */
-  previewAlreadyOptimal(): string;
+  previewKeptOriginal(): string;
+  /**
+   * `ICC`
+   */
+  metadataICCKept(): string;
+  /**
+   * `EXIF`
+   */
+  metadataEXIFKept(): string;
+  /**
+   * `GPS 已移除`
+   */
+  metadataGPSRemoved(): string;
+  /**
+   * `方向已校正`
+   */
+  metadataOrientationReset(): string;
+  /**
+   * `其它元数据已移除`
+   */
+  metadataDropped(): string;
+  /**
+   * `输出文件的元数据：{summary}`
+   */
+  metadataTitle(summary: string): string;
   /**
    * `美化预览`
    */
@@ -1608,6 +1676,10 @@ export interface Messages {
    */
   goErrEncodePNG(): string;
   /**
+   * `无损校验未通过，未写入结果`
+   */
+  goErrLosslessCheckFailed(): string;
+  /**
    * `WebP 编码失败`
    */
   goErrEncodeWebP(): string;
@@ -1923,7 +1995,12 @@ const catalog = createCatalog<Messages>({
     "transparencyKeptOutput": [],
     "transparencyKeptTitle": [],
     "itemWaiting": [],
-    "bestAlready": [],
+    "keptOriginal": [],
+    "keptOriginalTitle": [],
+    "bestWithinTarget": [],
+    "bestWithinTargetTitle": [],
+    "bestGuardFailed": [],
+    "bestGuardFailedTitle": [],
     "optimizing": [],
     "compressingState": [],
     "cannotCompress": [],
@@ -1995,6 +2072,9 @@ const catalog = createCatalog<Messages>({
     "shortcutSet": ["shortcut"],
     "shortcutFailed": [],
     "copyFailed": [],
+    "copyImage": [],
+    "copiedImage": ["format", "size", "source"],
+    "copiedImageAnimated": ["format", "size", "source"],
     "copied": [],
     "copiedCompressed": [],
     "clipboardKept": [],
@@ -2049,6 +2129,9 @@ const catalog = createCatalog<Messages>({
     "installBodyUnsaved": ["note"],
     "unsavedResults": ["n"],
     "unsavedUnknown": [],
+    "quitUnsavedTitle": [],
+    "exportThenQuit": [],
+    "quitAnyway": [],
     "quitAndInstall": [],
     "installerDownloaded": ["path"],
     "checkUpdateFailed": [],
@@ -2070,7 +2153,13 @@ const catalog = createCatalog<Messages>({
     "switchImage": [],
     "previousImage": [],
     "nextImage": [],
-    "previewAlreadyOptimal": [],
+    "previewKeptOriginal": [],
+    "metadataICCKept": [],
+    "metadataEXIFKept": [],
+    "metadataGPSRemoved": [],
+    "metadataOrientationReset": [],
+    "metadataDropped": [],
+    "metadataTitle": ["summary"],
     "beautifyPreviewAlt": [],
     "background": [],
     "backgroundType": [],
@@ -2190,6 +2279,7 @@ const catalog = createCatalog<Messages>({
     "goErrDecodeCorrupt": [],
     "goErrEncodeJPEG": [],
     "goErrEncodePNG": [],
+    "goErrLosslessCheckFailed": [],
     "goErrEncodeWebP": [],
     "goErrUnsupportedOutput": [],
     "goErrCreateTemp": [],
@@ -2370,7 +2460,12 @@ const catalog = createCatalog<Messages>({
       "transparencyKeptOutput": "→ PNG · 保留透明",
       "transparencyKeptTitle": "JPG 不支持透明，已改存为 PNG（无损，质量设置不适用）",
       "itemWaiting": "待处理",
-      "bestAlready": "已是最优",
+      "keptOriginal": "未压小",
+      "keptOriginalTitle": "重新编码没有更小，保留了原图；这不代表原图已是最优",
+      "bestWithinTarget": "已在目标内",
+      "bestWithinTargetTitle": "原图已在目标体积内，无需重新编码",
+      "bestGuardFailed": "保留原图",
+      "bestGuardFailedTitle": "无损校验发现重新编码改变了像素，已保留原图",
       "optimizing": "正在优化…",
       "compressingState": "压缩中",
       "cannotCompress": "未能压缩",
@@ -2442,6 +2537,9 @@ const catalog = createCatalog<Messages>({
       "shortcutSet": "截图快捷键已设为 {shortcut}",
       "shortcutFailed": "无法设置快捷键",
       "copyFailed": "无法复制到剪贴板",
+      "copyImage": "复制图片",
+      "copiedImage": "已复制 {format} · {size}（原文件 {source}）",
+      "copiedImageAnimated": "已复制 {format}（动图仅首帧） · {size}（原文件 {source}）",
       "copied": "已复制到剪贴板",
       "copiedCompressed": "压缩结果已复制到剪贴板",
       "clipboardKept": "压缩期间剪贴板有新内容，已保留未覆盖",
@@ -2496,6 +2594,9 @@ const catalog = createCatalog<Messages>({
       "installBodyUnsaved": "AnyPic 会退出并打开安装程序。{note}",
       "unsavedResults": "{n, plural, other {队列里还有 # 张已压缩但未保存的图片，退出后会丢失。}}",
       "unsavedUnknown": "如果队列里还有未保存的压缩结果，退出后会丢失。",
+      "quitUnsavedTitle": "还有未导出的压缩结果",
+      "exportThenQuit": "先导出",
+      "quitAnyway": "直接退出",
       "quitAndInstall": "退出并安装",
       "installerDownloaded": "安装包已下载到 {path}。安装前请先从托盘退出 AnyPic，再运行安装包。",
       "checkUpdateFailed": "无法检查更新",
@@ -2517,7 +2618,13 @@ const catalog = createCatalog<Messages>({
       "switchImage": "切换图片",
       "previousImage": "上一张（←）",
       "nextImage": "下一张（→）",
-      "previewAlreadyOptimal": "原图已是最优",
+      "previewKeptOriginal": "未压得更小，保留原图",
+      "metadataICCKept": "ICC",
+      "metadataEXIFKept": "EXIF",
+      "metadataGPSRemoved": "GPS 已移除",
+      "metadataOrientationReset": "方向已校正",
+      "metadataDropped": "其它元数据已移除",
+      "metadataTitle": "输出文件的元数据：{summary}",
       "beautifyPreviewAlt": "美化预览",
       "background": "背景",
       "backgroundType": "背景类型",
@@ -2637,6 +2744,7 @@ const catalog = createCatalog<Messages>({
       "goErrDecodeCorrupt": "图片解码失败，可能已损坏",
       "goErrEncodeJPEG": "JPEG 编码失败",
       "goErrEncodePNG": "PNG 编码失败",
+      "goErrLosslessCheckFailed": "无损校验未通过，未写入结果",
       "goErrEncodeWebP": "WebP 编码失败",
       "goErrUnsupportedOutput": "不支持的输出格式",
       "goErrCreateTemp": "无法创建临时文件",
@@ -2816,7 +2924,12 @@ const catalog = createCatalog<Messages>({
       "transparencyKeptOutput": "→ PNG · transparency kept",
       "transparencyKeptTitle": "JPG has no transparency, so this image was saved as PNG (lossless; the quality setting does not apply)",
       "itemWaiting": "Waiting",
-      "bestAlready": "Already optimal",
+      "keptOriginal": "Not smaller",
+      "keptOriginalTitle": "The re-encode was not smaller, so the original was kept — this does not mean it was already optimal",
+      "bestWithinTarget": "Within target",
+      "bestWithinTargetTitle": "The original already fits the target size",
+      "bestGuardFailed": "Original kept",
+      "bestGuardFailedTitle": "The lossless check found changed pixels; the original was kept",
       "optimizing": "Optimizing…",
       "compressingState": "Compressing",
       "cannotCompress": "Not compressed",
@@ -2888,6 +3001,9 @@ const catalog = createCatalog<Messages>({
       "shortcutSet": "Capture shortcut set to {shortcut}",
       "shortcutFailed": "Could not set the shortcut",
       "copyFailed": "Could not copy to the clipboard",
+      "copyImage": "Copy image",
+      "copiedImage": "Copied {format} · {size} (source file {source})",
+      "copiedImageAnimated": "Copied {format} (first frame of an animation) · {size} (source file {source})",
       "copied": "Copied to the clipboard",
       "copiedCompressed": "Compressed result copied to the clipboard",
       "clipboardKept": "The clipboard changed during compression; your newer content was kept",
@@ -2942,6 +3058,9 @@ const catalog = createCatalog<Messages>({
       "installBodyUnsaved": "AnyPic will quit and open the installer. {note}",
       "unsavedResults": "{n, plural, one {# compressed image in the queue is not saved and will be lost.} other {# compressed images in the queue are not saved and will be lost.}}",
       "unsavedUnknown": "Compressed results still in the queue will be lost.",
+      "quitUnsavedTitle": "Unsaved compressed results",
+      "exportThenQuit": "Export first",
+      "quitAnyway": "Quit anyway",
       "quitAndInstall": "Quit and install",
       "installerDownloaded": "The installer was downloaded to {path}. Quit AnyPic from the tray before running it.",
       "checkUpdateFailed": "Could not check for updates",
@@ -2963,7 +3082,13 @@ const catalog = createCatalog<Messages>({
       "switchImage": "Switch image",
       "previousImage": "Previous (←)",
       "nextImage": "Next (→)",
-      "previewAlreadyOptimal": "The original is already optimal",
+      "previewKeptOriginal": "Not smaller — original kept",
+      "metadataICCKept": "ICC",
+      "metadataEXIFKept": "EXIF",
+      "metadataGPSRemoved": "GPS removed",
+      "metadataOrientationReset": "Orientation corrected",
+      "metadataDropped": "Other metadata removed",
+      "metadataTitle": "Metadata in the output: {summary}",
       "beautifyPreviewAlt": "Beautified preview",
       "background": "Background",
       "backgroundType": "Background type",
@@ -3083,6 +3208,7 @@ const catalog = createCatalog<Messages>({
       "goErrDecodeCorrupt": "Could not decode the image; it may be damaged",
       "goErrEncodeJPEG": "JPEG encoding failed",
       "goErrEncodePNG": "PNG encoding failed",
+      "goErrLosslessCheckFailed": "Lossless check failed; no result was written",
       "goErrEncodeWebP": "WebP encoding failed",
       "goErrUnsupportedOutput": "Unsupported output format",
       "goErrCreateTemp": "Could not create a temporary file",

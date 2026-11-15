@@ -1,6 +1,6 @@
 import { AnyPic, events, type AddResult, type Batch, type Item, type Preview, type Settings, type Snapshot, type UpdateInfo } from "./mygo";
 import { isMyGo, onFileDrop, runtime } from "mygo-runtime";
-import { $, $$, closeModal, esc, formatBytes, formatDimensions, icon, openModal, pct, showError, shortenPath, showToast } from "./ui";
+import { $, $$, closeModal, esc, formatBytes, formatDimensions, icon, metadataSummary, openModal, pct, showError, shortenPath, showToast } from "./ui";
 import { errorCodes, language, onSystemLanguageChange, setLanguage, t } from "./i18n";
 import { bindPreview, closePreview, initPreview, invalidatePreview, openPreview, previewSelectedId } from "./preview";
 import { ensureQueueFocus, initQueueKeys, queueFocusAfterRemoval, queueRowFocus, queueRowKeys, queueRowTabIndex } from "./queue-keys";
@@ -56,7 +56,7 @@ let aboutVersion: { version: string; platform: string; arch: string } | null = n
 let demoVersion = false;
 
 const rowCache = new Map<number, HTMLElement>();
-let confirmResolve: ((value: boolean) => void) | null = null;
+let confirmResolve: ((value: "ok" | "cancel" | "alt") => void) | null = null;
 
 function defaultSettings(): Settings {
   return {
@@ -111,6 +111,7 @@ async function init() {
     syncSelection: syncRowSelection,
     activate: activateItem,
     decorate: (id) => void openPreview(id, "beautify"),
+    copyImage: (id) => void copyItem(id),
     exportOne: (id) => void exportOne(id),
     copyMarkdown: (id) => void copyMarkdown(id),
     reveal: revealItem,
@@ -532,6 +533,22 @@ function qualityTier(ssim: number): { label: string; className: string } {
   return { label: t.qualityVisibleLoss(), className: "visible" };
 }
 
+/* A passthrough keeps the original for one of three reasons, and the pill
+   must say which one. "Already optimal" was the old word for all of them; it
+   was a claim about the original, not about this run, and it was wrong
+   whenever another encoder could still beat us. The new words only describe
+   what this run did. */
+function keptOriginalLabel(item: Item): { label: string; title: string } {
+  switch (item.keptOriginalReason) {
+    case "target_met":
+      return { label: t.bestWithinTarget(), title: t.bestWithinTargetTitle() };
+    case "pixels_changed":
+      return { label: t.bestGuardFailed(), title: t.bestGuardFailedTitle() };
+    default:
+      return { label: t.keptOriginal(), title: t.keptOriginalTitle() };
+  }
+}
+
 function renderStage() {
   const done = items.filter((item) => item.status === "done");
 
@@ -705,8 +722,9 @@ function createRow(id: number): HTMLElement {
     </div>
     <div class="item-actions">
       <button class="icon-btn" data-action="preview">${icon("eye")}</button>
+      <button class="icon-btn primary" data-action="copy">${icon("copy")}</button>
       <button class="icon-btn" data-action="decorate">${icon("sparkle")}</button>
-      <button class="icon-btn" data-action="export">${icon("download")}</button>
+      <button class="icon-btn primary" data-action="export">${icon("download")}</button>
       <button class="icon-btn" data-action="remove">${icon("x")}</button>
     </div>`;
 
@@ -726,6 +744,10 @@ function createRow(id: number): HTMLElement {
   row.querySelector<HTMLButtonElement>('[data-action="preview"]')?.addEventListener("click", (event) => {
     event.stopPropagation();
     void openPreview(id);
+  });
+  row.querySelector<HTMLButtonElement>('[data-action="copy"]')?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    void copyItem(id);
   });
   row.querySelector<HTMLButtonElement>('[data-action="decorate"]')?.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -753,6 +775,7 @@ function labelRow(row: HTMLElement) {
   };
   name("input[data-select]", t.selectThisImage(), false);
   name('[data-action="preview"]', t.comparePreview());
+  name('[data-action="copy"]', t.copyImage());
   name('[data-action="decorate"]', t.beautify(), false);
   name('[data-action="export"]', t.exportThis());
   name('[data-action="remove"]', t.remove());
@@ -823,10 +846,16 @@ function updateRow(row: HTMLElement, item: Item) {
       ? `<span class="output-format" title="${esc(t.transparencyKeptTitle())}">${esc(t.transparencyKeptOutput())}</span>`
       : `<span class="output-format">→ ${esc(item.outputFormat)}</span>`
     : "";
+  // What the output kept or dropped from the source's metadata, so stripping
+  // GPS is a visible promise rather than a hidden side effect.
+  const metadata = item.status === "done" ? metadataSummary(item.metadata) : null;
+  const metadataChip = metadata
+    ? `<span class="output-format" title="${esc(metadata.title)}">${esc(metadata.text)}</span>`
+    : "";
   meta.innerHTML = `<span class="format-chip ${esc(formatClass)}">${esc(item.format || "IMG")}</span><span>${formatDimensions(
     item.width,
     item.height,
-  )}</span>${animated}${output}`;
+  )}</span>${animated}${output}${metadataChip}`;
 
   const error = row.querySelector<HTMLElement>(".item-error")!;
   if (item.status === "error" && item.error) {
@@ -849,12 +878,15 @@ function updateRow(row: HTMLElement, item: Item) {
   targetBadge.removeAttribute("title");
   pill.className = "saving-pill";
   pill.hidden = false;
+  pill.removeAttribute("title");
 
   if (item.status === "done") {
     if (item.passedThrough) {
       sizes.innerHTML = `<strong>${formatBytes(item.originalSize)}</strong><span>${esc(t.originalWord())}</span>`;
       pill.classList.add("neutral");
-      pill.textContent = t.bestAlready();
+      const kept = keptOriginalLabel(item);
+      pill.textContent = kept.label;
+      pill.title = kept.title;
     } else {
       const saved = item.originalSize - item.compressedSize;
       const savedPct = item.originalSize > 0 ? (saved / item.originalSize) * 100 : 0;
@@ -916,10 +948,14 @@ function updateRow(row: HTMLElement, item: Item) {
   }
 
   const previewButton = row.querySelector<HTMLButtonElement>('[data-action="preview"]')!;
+  const copyButton = row.querySelector<HTMLButtonElement>('[data-action="copy"]')!;
   const decorateButton = row.querySelector<HTMLButtonElement>('[data-action="decorate"]')!;
   const exportButton = row.querySelector<HTMLButtonElement>('[data-action="export"]')!;
   const removeButton = row.querySelector<HTMLButtonElement>('[data-action="remove"]')!;
   previewButton.disabled = item.status !== "done";
+  // The copy action is always visible (B2), so its unavailable state must be
+  // obvious rather than hidden until hover.
+  copyButton.disabled = item.status !== "done" || batch.running;
   decorateButton.disabled = batch.running || item.animated || (item.status !== "done" && item.status !== "ready");
   decorateButton.title = item.animated ? t.animatedNoBeautify() : t.beautifyWithCurrent();
   exportButton.disabled = item.status !== "done" || batch.running;
@@ -1305,22 +1341,27 @@ function bindEvents() {
 
   $("#previewClose").addEventListener("click", closePreview);
   $("[data-close-modal]").addEventListener("click", closePreview);
+  $("#previewCopyBtn").addEventListener("click", () => {
+    const selected = previewSelectedId();
+    if (selected !== null) void copyItem(selected);
+  });
   $("#previewExportBtn").addEventListener("click", () => {
     const selected = previewSelectedId();
     if (selected !== null) void exportOne(selected);
   });
 
   const confirmModal = $<HTMLElement>("#confirmModal");
-  $("#confirmCancel").addEventListener("click", () => resolveConfirm(false));
-  $("#confirmOk").addEventListener("click", () => resolveConfirm(true));
-  $("[data-close-confirm]").addEventListener("click", () => resolveConfirm(false));
+  $("#confirmCancel").addEventListener("click", () => resolveConfirm("cancel"));
+  $("#confirmAlt").addEventListener("click", () => resolveConfirm("alt"));
+  $("#confirmOk").addEventListener("click", () => resolveConfirm("ok"));
+  $("[data-close-confirm]").addEventListener("click", () => resolveConfirm("cancel"));
 
   const aboutModal = $<HTMLElement>("#aboutModal");
   aboutModal.addEventListener("click", (event) => {
     if (event.target === aboutModal) closeAbout();
   });
   confirmModal.addEventListener("click", (event) => {
-    if (event.target === confirmModal) resolveConfirm(false);
+    if (event.target === confirmModal) resolveConfirm("cancel");
   });
 
   bindPreview();
@@ -1330,7 +1371,7 @@ function bindEvents() {
     if (event.key === "Escape") {
       if (confirmResolve) {
         event.preventDefault();
-        resolveConfirm(false);
+        resolveConfirm("cancel");
       } else if ($("#previewModal").classList.contains("open")) {
         event.preventDefault();
         closePreview();
@@ -1809,23 +1850,28 @@ async function chooseOutputFolder() {
   }
 }
 
-async function exportAll() {
+/* Exports every finished result. Reports whether anything was written, so
+   the quit guard knows an "export first" pass actually saved the queue
+   before it lets the app go. */
+async function exportAll(): Promise<boolean> {
   const done = items.filter((item) => item.status === "done");
-  if (batch.running || done.length === 0) return;
+  if (batch.running || done.length === 0) return false;
   await flushSave();
   if (demoMode) {
     showToast(t.demoExported(done.length), "success");
-    return;
+    return true;
   }
   try {
     const result = await AnyPic.exportAll();
-    if (result.canceled) return;
+    if (result.canceled) return false;
     showToast(t.exported(result.count), "success", {
       label: t.showInFolder(),
       onClick: () => void AnyPic.revealPath(result.folder),
     });
+    return true;
   } catch (error) {
     showError(error, t.exportFailed());
+    return false;
   }
 }
 
@@ -1847,6 +1893,98 @@ async function exportOne(id: number) {
   } catch (error) {
     showError(error, t.exportFailed());
   }
+}
+
+/* Copies one compressed result as an image. The clipboard holds PNG, so a
+   JPEG or WebP result is re-encoded first and usually gets bigger; the toast
+   names the written format and both sizes so the change is never silent. */
+async function copyItem(id: number) {
+  const item = items.find((entry) => entry.id === id);
+  if (!item) return;
+  if (item.status !== "done") {
+    showToast(t.goErrCompressFirst(), "info");
+    return;
+  }
+  if (demoMode) {
+    showToast(t.demoNoClipboard(), "info");
+    return;
+  }
+  if (batch.running) return;
+  try {
+    const copy = await AnyPic.copyItemToClipboard(id);
+    const size = formatBytes(copy.bytes);
+    const source = formatBytes(copy.sourceBytes);
+    // An animation cannot travel as a clipboard image; say that its frames
+    // stayed behind rather than let the PNG look like the whole result.
+    showToast(
+      copy.animated
+        ? t.copiedImageAnimated(copy.format, size, source)
+        : t.copiedImage(copy.format, size, source),
+      "success",
+    );
+  } catch (error) {
+    showError(error, t.copyFailed());
+  }
+}
+
+/* The Go side interrupts a quit that would delete compressed results living
+   only in the session temp dir. The page explains the loss and offers both
+   honest endings: export first, or quit anyway. Dismissing the dialog keeps
+   the app open. */
+async function quitWithUnsavedResults() {
+  if (demoMode) return;
+  let unsaved: number | null = null;
+  try {
+    unsaved = await AnyPic.unsavedResults();
+  } catch {
+    // An unreadable count is still a reason to warn; the update flow treats
+    // it the same way.
+  }
+  if (unsaved === 0) {
+    void AnyPic.quitNow();
+    return;
+  }
+  const choice = await askConfirmChoice(
+    t.quitUnsavedTitle(),
+    unsaved === null ? t.unsavedUnknown() : t.unsavedResults(unsaved),
+    t.quitAnyway(),
+    t.cancel(),
+    t.exportThenQuit(),
+  );
+  if (choice === "ok") {
+    void AnyPic.quitNow();
+    return;
+  }
+  if (choice !== "alt") return;
+  // Images still being compressed are not among the unsaved results yet:
+  // stop that pass, let the queue settle, then export everything finished.
+  if (batch.running) await cancelCompression();
+  await waitForBatchIdle();
+  if (await exportAll()) void AnyPic.quitNow();
+}
+
+/* Resolves when no pass is running, or after a short wait so an interrupted
+   quit can never hang on a backend that stopped reporting. */
+function waitForBatchIdle(timeoutMs = 10000): Promise<void> {
+  if (!batch.running) return Promise.resolve();
+  return new Promise((resolve) => {
+    let settled = false;
+    let off = () => {};
+    let timer = 0;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      off();
+      window.clearTimeout(timer);
+      resolve();
+    };
+    off = events.anypicBatch.on((next) => {
+      if (!next.running) finish();
+    });
+    timer = window.setTimeout(finish, timeoutMs);
+    // The pass may have ended between the caller's check and this listener.
+    if (!batch.running) finish();
+  });
 }
 
 /* The tray's "copy the last result again": the backend remembers the most
@@ -2216,20 +2354,37 @@ function applyTheme(mode: string) {
 /* modals                                                              */
 /* ------------------------------------------------------------------ */
 
+/* The confirmation dialog's answer. Most callers only need "yes": the
+   wrapper below maps every other answer, including a dismissed backdrop or
+   Escape, to no. The quit guard additionally offers a third, middle button
+   so it can offer export, quit anyway, or stay. */
 function askConfirm(title: string, body: string, confirmLabel: string, cancelLabel = t.cancel()): Promise<boolean> {
-  if (confirmResolve) resolveConfirm(false);
+  return askConfirmChoice(title, body, confirmLabel, cancelLabel).then((choice) => choice === "ok");
+}
+
+function askConfirmChoice(
+  title: string,
+  body: string,
+  confirmLabel: string,
+  cancelLabel: string,
+  altLabel?: string,
+): Promise<"ok" | "cancel" | "alt"> {
+  if (confirmResolve) resolveConfirm("cancel");
   $("#confirmTitle").textContent = title;
   $("#confirmBody").textContent = body;
   $("#confirmOk").textContent = confirmLabel;
   $("#confirmCancel").textContent = cancelLabel;
+  const alt = $<HTMLButtonElement>("#confirmAlt");
+  alt.hidden = altLabel === undefined;
+  alt.textContent = altLabel ?? "";
   openModal($("#confirmModal"));
   $("#confirmCancel").focus({ preventScroll: true });
-  return new Promise<boolean>((resolve) => {
+  return new Promise((resolve) => {
     confirmResolve = resolve;
   });
 }
 
-function resolveConfirm(value: boolean) {
+function resolveConfirm(value: "ok" | "cancel" | "alt") {
   closeModal($("#confirmModal"));
   const resolve = confirmResolve;
   confirmResolve = null;
@@ -2458,6 +2613,9 @@ async function handleCommand(command: string) {
       break;
     case "copy-last":
       await copyLastResult();
+      break;
+    case "quit-unsaved":
+      await quitWithUnsavedResults();
       break;
     case "compress":
       await compressAll();

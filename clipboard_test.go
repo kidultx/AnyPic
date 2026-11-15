@@ -135,6 +135,51 @@ func otherClipboardPNG(t *testing.T, width, height int, alpha bool) []byte {
 	return buf.Bytes()
 }
 
+func TestCopyItemToClipboardReportsThePayload(t *testing.T) {
+	service, item, _ := clipboardFixture(t)
+	stub := stubClipboard(t)
+
+	copy, err := service.CopyItemToClipboard(item.ID)
+	if err != nil {
+		t.Fatalf("CopyItemToClipboard: %v", err)
+	}
+	if len(stub.writes) != 1 {
+		t.Fatalf("clipboard writes = %d, want 1", len(stub.writes))
+	}
+	if copy.Format != "PNG" {
+		t.Errorf("format = %q, want PNG (the clipboard's image format)", copy.Format)
+	}
+	if copy.Bytes != len(stub.writes[0]) {
+		t.Errorf("bytes = %d, want the %d bytes written", copy.Bytes, len(stub.writes[0]))
+	}
+	if copy.SourceFormat != "WEBP" {
+		t.Errorf("sourceFormat = %q, want WEBP", copy.SourceFormat)
+	}
+	if copy.SourceBytes != int(item.CompressedSize) {
+		t.Errorf("sourceBytes = %d, want the result's %d bytes", copy.SourceBytes, item.CompressedSize)
+	}
+	// The fixture is a lossy WebP gradient, and the clipboard takes PNG only:
+	// the payload is bigger than its source. The copy must say so rather than
+	// report the compressed file's size as the thing on the clipboard.
+	if copy.Bytes <= copy.SourceBytes {
+		t.Errorf("fixture no longer shows PNG growth (png %d, webp %d); the toast's honesty check needs a lossy result", copy.Bytes, copy.SourceBytes)
+	}
+}
+
+func TestCopyItemToClipboardReportsAnimations(t *testing.T) {
+	service, item, _ := clipboardFixture(t)
+	stubClipboard(t)
+	item.Animated = true
+
+	copy, err := service.CopyItemToClipboard(item.ID)
+	if err != nil {
+		t.Fatalf("CopyItemToClipboard: %v", err)
+	}
+	if !copy.Animated {
+		t.Error("an animated result was reported as a still; the toast would hide that the frames stayed behind")
+	}
+}
+
 func TestCopyCaptureResultReplacesAnyPicsOwnClipboardImage(t *testing.T) {
 	service, item, raw := clipboardFixture(t)
 	stub := stubClipboard(t)

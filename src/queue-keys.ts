@@ -20,6 +20,7 @@ export interface QueueKeysContext {
   /** The same action a click on the row runs (preview / error toast). */
   activate(id: number): void;
   decorate(id: number): void;
+  copyImage(id: number): void;
   exportOne(id: number): void;
   copyMarkdown(id: number): void;
   reveal(id: number): void;
@@ -220,6 +221,15 @@ function bindQueueShortcuts() {
       ctx.syncSelection();
       return;
     }
+    // ⌘C copies the row the keyboard is on. A clipboard image holds one
+    // picture, so this never fans out over a multi-selection; the row that
+    // owns the focus is the one the user means.
+    if (meta && (event.key === "c" || event.key === "C")) {
+      if (focusId === null) return;
+      event.preventDefault();
+      ctx.copyImage(focusId);
+      return;
+    }
     // ⌘⌫ keeps clearing the whole queue in main.ts; only the bare key
     // removes the selection here.
     if (meta) return;
@@ -246,6 +256,9 @@ function bindQueueMenu() {
     switch (button.dataset.menu) {
       case "preview":
         ctx.activate(id);
+        break;
+      case "copy":
+        ctx.copyImage(id);
         break;
       case "decorate":
         ctx.decorate(id);
@@ -316,6 +329,7 @@ function openQueueMenu(id: number, x: number, y: number) {
     $<HTMLButtonElement>(`#queueMenu [data-menu="${name}"]`).disabled = !on;
   };
   enable("preview", item.status === "done");
+  enable("copy", !running && item.status === "done");
   enable("decorate", !running && !item.animated && (item.status === "done" || item.status === "ready"));
   enable("export", !running && item.status === "done");
   enable("markdown", !running && item.status === "done");

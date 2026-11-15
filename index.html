@@ -25,6 +25,7 @@
       <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m7 9.5 5 5 5-5" /></symbol>
       <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" /><circle cx="12" cy="12" r="3" /></symbol>
       <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 21h16" /></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2.5" /><path d="M6 15H5.5a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2H13a2 2 0 0 1 2 2V6" /></symbol>
       <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6.5 7l.9 13h9.2l.9-13M10 11v5M14 11v5" /></symbol>
       <symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></symbol>
       <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 6.5" /></symbol>
@@ -331,6 +332,10 @@
               <button class="preview-tab" data-mode="beautify" role="tab" aria-selected="false" data-i18n="beautify"></button>
             </div>
             <span class="queue-divider" aria-hidden="true"></span>
+            <button class="secondary-btn small" id="previewCopyBtn" type="button">
+              <svg aria-hidden="true" class="icon"><use href="#i-copy" /></svg>
+              <span data-i18n="copyImage"></span>
+            </button>
             <button class="secondary-btn small" id="previewExportBtn" type="button">
               <svg aria-hidden="true" class="icon"><use href="#i-download" /></svg>
               <span data-i18n="exportLabel"></span>
@@ -571,6 +576,7 @@
 
     <div class="context-menu" id="queueMenu" role="menu" data-i18n-aria="imageActions" hidden>
       <button type="button" role="menuitem" data-menu="preview"><svg aria-hidden="true" class="icon"><use href="#i-eye" /></svg><span data-i18n="comparePreview"></span></button>
+      <button type="button" role="menuitem" data-menu="copy"><svg aria-hidden="true" class="icon"><use href="#i-copy" /></svg><span data-i18n="copyImage"></span></button>
       <button type="button" role="menuitem" data-menu="decorate"><svg aria-hidden="true" class="icon"><use href="#i-sparkle" /></svg><span data-i18n="beautifyWithCurrent"></span></button>
       <button type="button" role="menuitem" data-menu="export"><svg aria-hidden="true" class="icon"><use href="#i-download" /></svg><span data-i18n="exportLabel"></span></button>
       <button type="button" role="menuitem" data-menu="markdown"><svg aria-hidden="true" class="icon"><use href="#i-link" /></svg><span data-i18n="copyMarkdown"></span></button>

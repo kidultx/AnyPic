@@ -1406,46 +1406,80 @@ func (a *AnyPic) ExportProcessed(ids []int64) (ExportResult, error) {
 
 var pngSignature = []byte("\x89PNG\r\n\x1a\n")
 
+// ClipboardCopy reports what CopyItemToClipboard put on the clipboard and
+// what it was made from. The clipboard takes PNG only, so a JPEG or WebP
+// result is decoded and re-encoded first — and usually grows. Both sizes
+// are reported so the page's toast can say so instead of hiding the
+// difference.
+type ClipboardCopy struct {
+	// Format is the representation written to the clipboard, always PNG
+	// with MyGo's clipboard image support.
+	Format string `json:"format"`
+	// Bytes is the size of that representation.
+	Bytes int `json:"bytes"`
+	// SourceFormat and SourceBytes describe the file the representation was
+	// made from: the compressed result, or the original for a passthrough.
+	SourceFormat string `json:"sourceFormat"`
+	SourceBytes  int    `json:"sourceBytes"`
+	// Animated reports that the source is an animation. The clipboard image
+	// is one PNG frame, so the toast must say the frames did not come along
+	// (invariant 3: never silently keep only the first frame).
+	Animated bool `json:"animated"`
+}
+
 // CopyItemToClipboard puts a compressed image on the clipboard, falling back
 // to the original when compression did not finish. The clipboard takes PNG,
 // so results encoded as JPEG or WebP are decoded and re-encoded first.
-func (a *AnyPic) CopyItemToClipboard(id int64) error {
+func (a *AnyPic) CopyItemToClipboard(id int64) (ClipboardCopy, error) {
 	return a.copyItemToClipboard(id)
 }
 
-func (a *AnyPic) copyItemToClipboard(id int64) error {
+func (a *AnyPic) copyItemToClipboard(id int64) (ClipboardCopy, error) {
 	a.mu.Lock()
 	item := a.byID[id]
 	if item == nil {
 		a.mu.Unlock()
-		return errors.New(tr().GoErrNoItem())
+		return ClipboardCopy{}, errors.New(tr().GoErrNoItem())
 	}
 	src := item.Path
+	sourceFormat := item.Format
+	animated := item.Animated
 	if item.Status == statusDone && item.compressedPath != "" && !item.PassedThrough {
 		src = item.compressedPath
+		sourceFormat = item.OutputFormat
+		if sourceFormat == "" {
+			sourceFormat = item.Format
+		}
 	}
 	a.mu.Unlock()
 
 	data, err := os.ReadFile(src)
 	if err != nil {
-		return errors.New(tr().GoErrReadImage())
+		return ClipboardCopy{}, errors.New(tr().GoErrReadImage())
+	}
+	out := ClipboardCopy{
+		Format:       "PNG",
+		SourceFormat: strings.ToUpper(sourceFormat),
+		SourceBytes:  len(data),
+		Animated:     animated,
 	}
 	if !bytes.HasPrefix(data, pngSignature) {
 		img, err := imaging.Decode(bytes.NewReader(data), imaging.AutoOrientation(true))
 		if err != nil {
-			return errors.New(tr().GoErrCopyImage())
+			return ClipboardCopy{}, errors.New(tr().GoErrCopyImage())
 		}
 		img = normalizeDecodedImage(img)
 		var buf bytes.Buffer
 		if err := png.Encode(&buf, img); err != nil {
-			return errors.New(tr().GoErrCopyImage())
+			return ClipboardCopy{}, errors.New(tr().GoErrCopyImage())
 		}
 		data = buf.Bytes()
 	}
+	out.Bytes = len(data)
 	if _, err := clipboardWriteImage(data); err != nil {
-		return errors.New(tr().GoErrWriteClipboard())
+		return ClipboardCopy{}, errors.New(tr().GoErrWriteClipboard())
 	}
-	return nil
+	return out, nil
 }
 
 // saveDialog asks where to write one exported image. A package variable so
