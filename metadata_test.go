@@ -575,6 +575,61 @@ func TestRealScreenshotKeepsItsP3Profile(t *testing.T) {
 	}
 }
 
+// TestReportedFalseOptimalFilesAreNowHonest pins the report's two examples.
+// Both used to be labeled “已是最优” because the stdlib encoder could not beat
+// them. logo.png (54,102 bytes) still cannot be beaten even by the §5③
+// filter search, so it passes through with the honest reason not_smaller.
+// screenshot-real.png (111,106 bytes) is now actually compressed, which makes
+// the old claim doubly wrong: the original had headroom all along.
+func TestReportedFalseOptimalFilesAreNowHonest(t *testing.T) {
+	t.Run("logo.png", func(t *testing.T) {
+		src := filepath.Join(benchmarkDir, "logo.png")
+		service := &AnyPic{tempDir: t.TempDir()}
+		result, err := service.compressOne(context.Background(), 9, src, "PNG", "logo.png", false, Settings{
+			Format: "png", Quality: 82, Suffix: "-anypic",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !result.passedThrough {
+			t.Fatalf("expected even the filter search to lose to the original, got %d bytes", result.size)
+		}
+		if result.keptOriginalReason != "not_smaller" {
+			t.Fatalf("reason = %q, want not_smaller — the UI must not claim the original is already optimal", result.keptOriginalReason)
+		}
+		if result.path != src {
+			t.Fatalf("passthrough path = %q, want the original", result.path)
+		}
+		if result.metadata != nil {
+			t.Fatalf("passthrough is the untouched original, so it has no metadata report: %+v", result.metadata)
+		}
+	})
+
+	t.Run("screenshot-real.png", func(t *testing.T) {
+		src := filepath.Join(benchmarkDir, "screenshot-real.png")
+		info, err := os.Stat(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		service := &AnyPic{tempDir: t.TempDir()}
+		result, err := service.compressOne(context.Background(), 10, src, "PNG", "screenshot-real.png", false, Settings{
+			Format: "png", Quality: 82, Suffix: "-anypic",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.passedThrough {
+			t.Fatalf("filter search should now beat the %d-byte original; got passthrough (%s)", info.Size(), result.keptOriginalReason)
+		}
+		if result.size >= info.Size() {
+			t.Fatalf("result is %d bytes, not smaller than the %d-byte original", result.size, info.Size())
+		}
+		if result.metadata == nil || !result.metadata.ICCKept {
+			t.Fatalf("metadata = %+v, want the real screenshot's ICC profile kept", result.metadata)
+		}
+	})
+}
+
 // TestLosslessGuardAcceptsJPEGToPNG keeps the guard from becoming a false
 // alarm: a requested PNG output from a JPEG source is a lossless
 // representation of the decoded pixels, so the baseline encoder must pass the

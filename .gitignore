@@ -8,3 +8,5 @@ anypic.exe
 .claude-scratch/
 .agents/
 .DS_Store
+/testdata/benchmark/*.ff.png
+/testdata/benchmark/*.go.png

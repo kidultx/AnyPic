@@ -1265,16 +1265,16 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 	}, nil
 }
 
-// pngLosslessEncode is the encoder for lossless PNG results. A variable so a
-// test can substitute an encoder that changes pixels and prove the runtime
-// guard refuses its output.
+// pngLosslessEncode is the encoder for lossless PNG results: the pure-Go
+// filter search in png_lossless.go, with the standard-library encoder as its
+// own baseline. A variable so a test can substitute an encoder that changes
+// pixels and prove the runtime guard refuses its output.
 var pngLosslessEncode = func(img image.Image) ([]byte, error) {
-	var buf bytes.Buffer
-	enc := png.Encoder{CompressionLevel: pngCompressionLevel(img.Bounds().Dx() * img.Bounds().Dy())}
-	if err := enc.Encode(&buf, img); err != nil {
+	data, err := encodePNGLossless(img)
+	if err != nil {
 		return nil, errors.New(tr().GoErrEncodePNG())
 	}
-	return buf.Bytes(), nil
+	return data, nil
 }
 
 // encodeStill encodes one still image in its output format. Target-size
@@ -2000,12 +2000,19 @@ func extForFormat(format string) string {
 	return "jpg"
 }
 
+// pngBestCompressionMaxPixels is #10's threshold: up to 16 million pixels
+// (about 4K²) PNG buys the smallest file; above it the default level keeps
+// the output lossless but much faster to produce. The PNG filter search in
+// png_lossless.go shares this cutoff because it multiplies BestCompression's
+// cost by the number of filters.
+const pngBestCompressionMaxPixels = 16 << 20
+
 // pngCompressionLevel picks the deflate effort by pixel count (#10):
 // BestCompression saves a few percent on small images but costs seconds on
 // multi-megapixel ones, where DefaultCompression keeps the output lossless,
 // nearly as small, and much faster to produce.
 func pngCompressionLevel(pixels int) png.CompressionLevel {
-	if pixels <= 16<<20 {
+	if pixels <= pngBestCompressionMaxPixels {
 		return png.BestCompression
 	}
 	return png.DefaultCompression

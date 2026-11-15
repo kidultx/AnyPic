@@ -147,12 +147,49 @@
 `SSIMMeasured=false` 才是「未测量」。改阈值必须同时更新 `src/main.ts` 的
 注释、`testdata/benchmark/README.md` 和本页。
 
+## PNG 无损层
+
+[`png_lossless.go`](../../png_lossless.go) 已接入 PNG 输出路径（报告 §5③）。
+`encodePNGLossless` 先以 `image/png` 在 [`pngCompressionLevel`](../../compressor.go)
+选定的档位编码一份基线，再对 8-bit truecolour 图像尝试自适应与 5 种固定
+filter，取最小者：
+
+- **基线保证不回退**：标准库结果始终是候选之一，所以新编码器不会比它替换
+  掉的编码器更大，灰度 / 调色板 / 16-bit / YCbCr / CMYK 等图像保留标准库
+  自己的表示（8-bit RGB/RGBA 之外的模型展开会改变像素或体积）。
+- **#10 的耗时上限照旧**：超过 1600 万像素时只返回标准库基线，不跑搜索——
+  那个尺寸下单次 BestCompression 已要数秒，6 次不可接受。搜索本身约为
+  单次标准库 BestCompression 的 6 倍 CPU（一次多趟 filter + zlib）。
+- **像素守卫在外层**：搜索出的字节仍要过 `compressOne` 的
+  [`losslessPixelsEqual`](../../metadata.go) 与「严格更小」判定；搜索若
+  改像素或没压小，退回原图并标 `pixels_changed` / `not_smaller`。
+- 不做调色板缩减；那属于另一个机制，`screenshot.png` 的 62.2%（oxipng）
+  大部分来自它，本层拿不到。
+
+基准集实测（`go test -run TestBenchmarkSet -v .`，2026-11-15 重录
+`baseline.json`）：
+
+| 文件 | 旧结果 | 新结果 | 提升 | 说明 |
+| --- | --- | --- | --- | --- |
+| screenshot-real.png | 111,106（原图 passthrough） | 102,946 | −7.34% | 对标准库重编码为 10.2% |
+| transparent.png | 27,379 | 24,597 | −10.16% | Sub filter |
+| screenshot.png | 5,619 | 5,437 | −3.24% | Up filter |
+| logo.png | 54,102（原图） | 54,102（原图） | 0% | 搜索 54,289 仍大于原图，如实 passthrough |
+
+报告的 17.9% 用的是 C zlib；同一份 filter-None 字节流，Python zlib -9 压到
+93,111，Go 1.27.3 的 `compress/flate` 压到 102,599——deflate 实现差距约 10%，
+不是报告 §2.4 估的 4.7%，所以纯 Go filter 搜索只能拿到 3–10%。换掉 deflate
+是另一个决定，本层没有引入 wazero / libdeflate。
+
 ## 验证命令
 
 ```sh
 go test -race -run 'TestIssue15' .
 go test -race -run 'TestTargetSize|TestSSIM|TestBenchmarkSet|TestCopy' .
 go test -race -run 'TestTargetSizeFormatMatrix' .
+go test -race -run 'TestPNGICC|TestJPEGMetadata|TestJPEGIncomplete|TestLosslessGuard|TestPassthroughReasons' .
+go test -run 'TestPNGLossless(Filter|BeatsStdlib|Tiny)' .
+ANYPIC_PNG_FEASIBILITY=1 go test -run 'TestPNGLosslessFeasibility' -v .
 go test -race ./...
 bun run typecheck
 ```
