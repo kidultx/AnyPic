@@ -49,8 +49,14 @@
   展开会把范围错配当成压缩损失（真实照片 q82 WebP 会从 0.986 掉到 0.55）。
 - 诚实结果标记写在 `Item` 上并随 IPC 到页面：
   - [`PassedThrough`](../../compressor.go)：静态图同格式、未缩放且重编码
-    不更小（动图为转码不更小），保留原图，页面显示「已是最优」。
+    不更小（动图为转码不更小），保留原图。
+  - [`KeptOriginalReason`](../../compressor.go)：passthrough 的原因，
+    `not_smaller` / `target_met` / `pixels_changed`。页面据此显示
+    「未压小 / 已在目标内 / 保留原图」，**不再**显示「已是最优」——这句话
+    曾把「我们的编码器没打过原图」说成「原图无法再小」，在 logo.png 与
+    screenshot-real.png 上都是假话。
   - [`Animated`](../../compressor.go)：多帧 GIF/WebP 走 `compressAnimated`。
+  - [`Metadata`](../../compressor.go)：本次输出的元数据报告，见下节。
   - [`TransparencyKept`](../../compressor.go)：仅当「用户选了 JPG、因图带
     透明而改存 PNG」时为真；passthrough 结果同样为真，因为原因相同（#15）。
   - [`SSIM` / `SSIMMeasured` / `TargetBytes` / `TargetQuality` /
@@ -67,8 +73,10 @@
    可选缩放 →（目标体积？`searchEncode`；否则按设置质量 `webp.EncodeAll`）
    → 转码不更小则 passthrough → 写临时文件。静态图走 [`compressOne`](../../compressor.go)。
 3. `compressOne`：解码 → 可选 `MaxDimension` 缩放 → `imageHasAlpha` →
-   `chooseOutputFormat` →（目标体积？`encodeToTarget`；否则 `encodeStill`）
-   → 「同格式 + 未缩放 + 不更小」则 passthrough → SSIM 测量 → 写临时文件。
+   `chooseOutputFormat` →（目标体积？`encodeToTarget`；否则 `encodeStill`，
+   PNG 经 `encodePNGLossless` 做 filter 搜索）
+   → 写回 ICC / 清洗后的 EXIF → 无损 PNG 逐像素校验 → 「同格式 + 未缩放 +
+   不更小」则 passthrough → SSIM 测量 → 写临时文件。
 4. 结果写回 `Item` 的 `OutputFormat` / `OutputName` / `PassedThrough` /
    `TransparencyKept` / `SSIM` / `SSIMMeasured` / `TargetBytes` /
    `TargetQuality` / `TargetMissed`，`ItemChanged` 广播给页面。
@@ -93,6 +101,33 @@
 - 页面据 `TransparencyKept` 把队列行写成「→ PNG · 保留透明」，标题说明
   原因；不新增视觉样式。
 
+## 元数据与无损校验
+
+元数据只由 [`metadata.go`](../../metadata.go) 决定，编码器不参与：
+
+- **ICC 透传**：输出与源同格式时，PNG 把 iCCP chunk 原样插入 IHDR 之后，
+  JPEG 按序拷贝完整的 `ICC_PROFILE` APP2 段；段数不全就整组丢弃（半截
+  profile 比没有更糟）。不做任何色彩转换——profile 是不透明字节。
+- **EXIF 选择性保留**（仅 JPEG）：`sanitizeEXIF` 就地清洗 TIFF 结构——
+  Orientation 改写为 1（像素已由 `imaging.AutoOrientation` 物理旋转，
+  保留原值会让查看器再转一次）；GPS 目录的条目表、内联值和越界 rational
+  全部置零，留下一个合法的空 IFD，坐标字节不残留在文件里。解析不了的
+  EXIF 整块丢弃，绝不把没洗干净的 GPS 带进输出。
+- **跨格式不硬拷**：PNG↔JPEG 转换需要改写 profile 表示，当前不做；残缺
+  ICC、无法解析的 EXIF 同样不携带，全部记入 `MetadataReport.Dropped`。
+  页面按 `ICCKept / EXIFKept / GPSRemoved / OrientationReset / Dropped`
+  显示「ICC · GPS 已移除」之类的短句，悬停给出完整说明。
+- **passthrough 不动元数据**：保留原图就是交付原文件本身，ICC / EXIF /
+  GPS 原样存在；`Metadata` 为 nil，页面只说「未压小 / 已在目标内」，不声称
+  做过任何元数据清洗。清洗只发生在真正重编码的结果上。
+- **目标体积要算上元数据**：`encodeToTarget` 的预算先减去
+  `stillMetadata.size()`，否则一个裸编码刚好达标的结果会在写回 ICC 后超限。
+- **无损运行时不变量**：输出 PNG 时，[`losslessPixelsEqual`](../../metadata.go)
+  解码结果并与送进编码器的图逐像素比对。不一致时，同格式 + 未缩放退回
+  原图（`pixels_changed`）；跨格式或缩放的转换没有「原图」可退，直接
+  报 `GoErrLosslessCheckFailed`，不交付改过像素的文件。这就是更换编码
+  后端仍是可逆决策的原因。
+
 ## 基准集
 
 `testdata/benchmark/` 固定了 19 个用例、`du` 832 KB，四类各至少两张：合成
@@ -112,12 +147,49 @@
 `SSIMMeasured=false` 才是「未测量」。改阈值必须同时更新 `src/main.ts` 的
 注释、`testdata/benchmark/README.md` 和本页。
 
+## PNG 无损层
+
+[`png_lossless.go`](../../png_lossless.go) 已接入 PNG 输出路径（报告 §5③）。
+`encodePNGLossless` 先以 `image/png` 在 [`pngCompressionLevel`](../../compressor.go)
+选定的档位编码一份基线，再对 8-bit truecolour 图像尝试自适应与 5 种固定
+filter，取最小者：
+
+- **基线保证不回退**：标准库结果始终是候选之一，所以新编码器不会比它替换
+  掉的编码器更大，灰度 / 调色板 / 16-bit / YCbCr / CMYK 等图像保留标准库
+  自己的表示（8-bit RGB/RGBA 之外的模型展开会改变像素或体积）。
+- **#10 的耗时上限照旧**：超过 1600 万像素时只返回标准库基线，不跑搜索——
+  那个尺寸下单次 BestCompression 已要数秒，6 次不可接受。搜索本身约为
+  单次标准库 BestCompression 的 6 倍 CPU（一次多趟 filter + zlib）。
+- **像素守卫在外层**：搜索出的字节仍要过 `compressOne` 的
+  [`losslessPixelsEqual`](../../metadata.go) 与「严格更小」判定；搜索若
+  改像素或没压小，退回原图并标 `pixels_changed` / `not_smaller`。
+- 不做调色板缩减；那属于另一个机制，`screenshot.png` 的 62.2%（oxipng）
+  大部分来自它，本层拿不到。
+
+基准集实测（`go test -run TestBenchmarkSet -v .`，2026-11-15 重录
+`baseline.json`）：
+
+| 文件 | 旧结果 | 新结果 | 提升 | 说明 |
+| --- | --- | --- | --- | --- |
+| screenshot-real.png | 111,106（原图 passthrough） | 102,946 | −7.34% | 对标准库重编码为 10.2% |
+| transparent.png | 27,379 | 24,597 | −10.16% | Sub filter |
+| screenshot.png | 5,619 | 5,437 | −3.24% | Up filter |
+| logo.png | 54,102（原图） | 54,102（原图） | 0% | 搜索 54,289 仍大于原图，如实 passthrough |
+
+报告的 17.9% 用的是 C zlib；同一份 filter-None 字节流，Python zlib -9 压到
+93,111，Go 1.27.3 的 `compress/flate` 压到 102,599——deflate 实现差距约 10%，
+不是报告 §2.4 估的 4.7%，所以纯 Go filter 搜索只能拿到 3–10%。换掉 deflate
+是另一个决定，本层没有引入 wazero / libdeflate。
+
 ## 验证命令
 
 ```sh
 go test -race -run 'TestIssue15' .
 go test -race -run 'TestTargetSize|TestSSIM|TestBenchmarkSet|TestCopy' .
 go test -race -run 'TestTargetSizeFormatMatrix' .
+go test -race -run 'TestPNGICC|TestJPEGMetadata|TestJPEGIncomplete|TestLosslessGuard|TestPassthroughReasons' .
+go test -run 'TestPNGLossless(Filter|BeatsStdlib|Tiny)' .
+ANYPIC_PNG_FEASIBILITY=1 go test -run 'TestPNGLosslessFeasibility' -v .
 go test -race ./...
 bun run typecheck
 ```

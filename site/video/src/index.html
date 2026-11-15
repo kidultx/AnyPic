@@ -126,7 +126,7 @@
       <span class="size">1.7 MB</span><span class="arr">→</span><span class="new" data-v="403 KB">—</span><span class="pill" data-v="WEBP −78%">待处理</span></div>
     <div class="row"><div class="thumb" style="background:linear-gradient(160deg,#c7d2fe,#6366f1 55%,#312e81)"></div>
       <div class="meta"><b>logo-final.png</b><span><em>PNG</em>512 × 512</span></div>
-      <span class="size">38 KB</span><span class="arr">→</span><span class="new" data-v="38 KB">—</span><span class="pill" data-v="已是最优" data-same>待处理</span></div>
+      <span class="size">38 KB</span><span class="arr">→</span><span class="new" data-v="38 KB">—</span><span class="pill" data-v="未压小" data-same>待处理</span></div>
   </div>
   <div class="prog"><span>0 / 4 完成</span><div class="bar"><i></i></div></div>
   <p class="note" data-t="note">数字为示意</p>
@@ -135,7 +135,7 @@
 <section class="scene" id="s3">
   <div class="big">−0%</div>
   <p class="sub"><b>8.8 MB</b> → <b>2.4 MB</b></p>
-  <p class="foot" data-t="s3.foot">变大了？那就保留原图，标注「已是最优」。</p>
+  <p class="foot" data-t="s3.foot">没有变小时保留原图，标注「未压小」。</p>
   <p class="note" data-t="note">数字为示意</p>
 </section>
 
@@ -196,7 +196,7 @@
     "s1.sub": "Make images smaller. Hand them to no one.",
     "s2.h": "Drop them in — up to 500 at once",
     "note": "Figures are illustrative",
-    "s3.foot": "Re-encoding made it bigger? AnyPic keeps the original and labels it “Already optimal”.",
+    "s3.foot": "When re-encoding is no smaller, AnyPic keeps the original and labels it “Not smaller”.",
     "s4.h": "Every frame kept. Transparency intact.",
     "s4.anim": "Animated GIF / WebP → animated WebP<small>Frames, timing and looping preserved</small>",
     "s4.alpha": "Transparency preserved<small>Never flattened onto black or white</small>",
@@ -210,8 +210,8 @@
   };
   // Words the queue writes while it runs (scene 2).
   const WORDS = {
-    zh: { pending: "待处理", running: "压缩中…", optimal: "已是最优", done: (n, all) => `${n} / ${all} 完成` },
-    en: { pending: "Pending", running: "Compressing…", optimal: "Already optimal", done: (n, all) => `${n} / ${all} done` },
+    zh: { pending: "待处理", running: "压缩中…", optimal: "未压小", done: (n, all) => `${n} / ${all} 完成` },
+    en: { pending: "Pending", running: "Compressing…", optimal: "Not smaller", done: (n, all) => `${n} / ${all} done` },
   };
   const LANG = new URLSearchParams(location.search).get("lang") === "en" ? "en" : "zh";
   const W = WORDS[LANG];

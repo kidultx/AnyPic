@@ -1451,7 +1451,7 @@ body.side-drag * {
 }
 
 .summary-foot {
-  color: var(--text-faint);
+  color: var(--ctl-fg);
   font-weight: 400;
 }
 
@@ -1627,7 +1627,7 @@ body.side-drag * {
   display: grid;
   height: 32px;
   flex: 0 0 32px;
-  grid-template-columns: 20px 36px minmax(0, 1fr) 208px 118px;
+  grid-template-columns: 20px 36px minmax(0, 1fr) 208px 148px;
   align-items: center;
   gap: 12px;
   padding: 0 14px;
@@ -1655,7 +1655,7 @@ body.side-drag * {
 
 .queue-item {
   display: grid;
-  grid-template-columns: 20px 36px minmax(0, 1fr) 208px 118px;
+  grid-template-columns: 20px 36px minmax(0, 1fr) 208px 148px;
   min-height: 52px;
   align-items: center;
   gap: 12px;
@@ -1771,7 +1771,7 @@ body.side-drag * {
   gap: 8px;
   margin-top: 2px;
   overflow: hidden;
-  color: var(--text-faint);
+  color: var(--ctl-fg);
   font-size: var(--fs-micro);
   white-space: nowrap;
 }
@@ -1824,7 +1824,7 @@ body.side-drag * {
   min-width: 0;
   align-items: center;
   gap: 8px;
-  color: var(--text-faint);
+  color: var(--ctl-fg);
   font-size: var(--fs-micro);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -1927,24 +1927,37 @@ body.side-drag * {
   white-space: nowrap;
 }
 
+/* The row's primary actions — copy and export — are always visible, so the
+   main path never depends on discovering a hover. Preview, beautify and
+   remove stay secondary: they appear when the row is hovered or focused.
+   Without hover (a touch screen, a remote desktop) nothing can appear on
+   demand, so every action stays visible there. TestIssue30... owns the
+   column arithmetic these five buttons need. */
 .item-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 2px;
-  opacity: 0;
-  transition: opacity 0.1s ease;
-}
-
-.queue-item:hover .item-actions,
-.queue-item:focus-within .item-actions {
-  opacity: 1;
 }
 
 .item-actions .icon-btn {
   width: 28px;
   height: var(--control-sm);
   border-radius: var(--radius-control);
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+
+.item-actions .icon-btn.primary,
+.queue-item:hover .item-actions .icon-btn,
+.queue-item:focus-within .item-actions .icon-btn {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .item-actions .icon-btn {
+    opacity: 1;
+  }
 }
 
 .item-actions .icon {
@@ -2012,12 +2025,6 @@ body.side-drag * {
 
 .queue-list.grid .item-actions {
   justify-content: flex-end;
-  opacity: 0;
-}
-
-.queue-list.grid .queue-item:hover .item-actions,
-.queue-list.grid .queue-item:focus-within .item-actions {
-  opacity: 1;
 }
 
 .queue-list.grid .item-actions .icon-btn {
@@ -2067,7 +2074,7 @@ body.side-drag * {
 .batch-percent {
   flex: 0 0 auto;
   min-width: 30px;
-  color: var(--text-faint);
+  color: var(--ctl-fg);
   font-size: var(--fs-small);
   font-weight: 500;
   text-align: right;
@@ -3067,11 +3074,11 @@ body.side-drag * {
   }
 
   .queue-item {
-    grid-template-columns: 20px 36px minmax(0, 1fr) 208px 118px;
+    grid-template-columns: 20px 36px minmax(0, 1fr) 208px 148px;
   }
 
   .queue-columns {
-    grid-template-columns: 20px 36px minmax(0, 1fr) 208px 118px;
+    grid-template-columns: 20px 36px minmax(0, 1fr) 208px 148px;
   }
 
   .summary-foot {

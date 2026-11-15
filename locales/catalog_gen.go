@@ -1382,14 +1382,64 @@ func (msgs Messages) ItemWaiting() string {
 	return Catalog.Format(msgs.locale, "itemWaiting", nil)
 }
 
-// BestAlready says "已是最优"
+// KeptOriginal says "未压小"
 // in the language the app shows.
-func BestAlready() string { return In(i18n.Locale()).BestAlready() }
+func KeptOriginal() string { return In(i18n.Locale()).KeptOriginal() }
 
-// BestAlready says "已是最优"
+// KeptOriginal says "未压小"
 // in the language of msgs.
-func (msgs Messages) BestAlready() string {
-	return Catalog.Format(msgs.locale, "bestAlready", nil)
+func (msgs Messages) KeptOriginal() string {
+	return Catalog.Format(msgs.locale, "keptOriginal", nil)
+}
+
+// KeptOriginalTitle says "重新编码没有更小，保留了原图；这不代表原图已是最优"
+// in the language the app shows.
+func KeptOriginalTitle() string { return In(i18n.Locale()).KeptOriginalTitle() }
+
+// KeptOriginalTitle says "重新编码没有更小，保留了原图；这不代表原图已是最优"
+// in the language of msgs.
+func (msgs Messages) KeptOriginalTitle() string {
+	return Catalog.Format(msgs.locale, "keptOriginalTitle", nil)
+}
+
+// BestWithinTarget says "已在目标内"
+// in the language the app shows.
+func BestWithinTarget() string { return In(i18n.Locale()).BestWithinTarget() }
+
+// BestWithinTarget says "已在目标内"
+// in the language of msgs.
+func (msgs Messages) BestWithinTarget() string {
+	return Catalog.Format(msgs.locale, "bestWithinTarget", nil)
+}
+
+// BestWithinTargetTitle says "原图已在目标体积内，无需重新编码"
+// in the language the app shows.
+func BestWithinTargetTitle() string { return In(i18n.Locale()).BestWithinTargetTitle() }
+
+// BestWithinTargetTitle says "原图已在目标体积内，无需重新编码"
+// in the language of msgs.
+func (msgs Messages) BestWithinTargetTitle() string {
+	return Catalog.Format(msgs.locale, "bestWithinTargetTitle", nil)
+}
+
+// BestGuardFailed says "保留原图"
+// in the language the app shows.
+func BestGuardFailed() string { return In(i18n.Locale()).BestGuardFailed() }
+
+// BestGuardFailed says "保留原图"
+// in the language of msgs.
+func (msgs Messages) BestGuardFailed() string {
+	return Catalog.Format(msgs.locale, "bestGuardFailed", nil)
+}
+
+// BestGuardFailedTitle says "无损校验发现重新编码改变了像素，已保留原图"
+// in the language the app shows.
+func BestGuardFailedTitle() string { return In(i18n.Locale()).BestGuardFailedTitle() }
+
+// BestGuardFailedTitle says "无损校验发现重新编码改变了像素，已保留原图"
+// in the language of msgs.
+func (msgs Messages) BestGuardFailedTitle() string {
+	return Catalog.Format(msgs.locale, "bestGuardFailedTitle", nil)
 }
 
 // Optimizing says "正在优化…"
@@ -2116,6 +2166,40 @@ func (msgs Messages) CopyFailed() string {
 	return Catalog.Format(msgs.locale, "copyFailed", nil)
 }
 
+// CopyImage says "复制图片"
+// in the language the app shows.
+func CopyImage() string { return In(i18n.Locale()).CopyImage() }
+
+// CopyImage says "复制图片"
+// in the language of msgs.
+func (msgs Messages) CopyImage() string {
+	return Catalog.Format(msgs.locale, "copyImage", nil)
+}
+
+// CopiedImage says "已复制 {format} · {size}（原文件 {source}）"
+// in the language the app shows.
+func CopiedImage(format string, size string, source string) string {
+	return In(i18n.Locale()).CopiedImage(format, size, source)
+}
+
+// CopiedImage says "已复制 {format} · {size}（原文件 {source}）"
+// in the language of msgs.
+func (msgs Messages) CopiedImage(format string, size string, source string) string {
+	return Catalog.Format(msgs.locale, "copiedImage", map[string]any{"format": format, "size": size, "source": source})
+}
+
+// CopiedImageAnimated says "已复制 {format}（动图仅首帧） · {size}（原文件 {source}）"
+// in the language the app shows.
+func CopiedImageAnimated(format string, size string, source string) string {
+	return In(i18n.Locale()).CopiedImageAnimated(format, size, source)
+}
+
+// CopiedImageAnimated says "已复制 {format}（动图仅首帧） · {size}（原文件 {source}）"
+// in the language of msgs.
+func (msgs Messages) CopiedImageAnimated(format string, size string, source string) string {
+	return Catalog.Format(msgs.locale, "copiedImageAnimated", map[string]any{"format": format, "size": size, "source": source})
+}
+
 // Copied says "已复制到剪贴板"
 // in the language the app shows.
 func Copied() string { return In(i18n.Locale()).Copied() }
@@ -2664,6 +2748,36 @@ func (msgs Messages) UnsavedUnknown() string {
 	return Catalog.Format(msgs.locale, "unsavedUnknown", nil)
 }
 
+// QuitUnsavedTitle says "还有未导出的压缩结果"
+// in the language the app shows.
+func QuitUnsavedTitle() string { return In(i18n.Locale()).QuitUnsavedTitle() }
+
+// QuitUnsavedTitle says "还有未导出的压缩结果"
+// in the language of msgs.
+func (msgs Messages) QuitUnsavedTitle() string {
+	return Catalog.Format(msgs.locale, "quitUnsavedTitle", nil)
+}
+
+// ExportThenQuit says "先导出"
+// in the language the app shows.
+func ExportThenQuit() string { return In(i18n.Locale()).ExportThenQuit() }
+
+// ExportThenQuit says "先导出"
+// in the language of msgs.
+func (msgs Messages) ExportThenQuit() string {
+	return Catalog.Format(msgs.locale, "exportThenQuit", nil)
+}
+
+// QuitAnyway says "直接退出"
+// in the language the app shows.
+func QuitAnyway() string { return In(i18n.Locale()).QuitAnyway() }
+
+// QuitAnyway says "直接退出"
+// in the language of msgs.
+func (msgs Messages) QuitAnyway() string {
+	return Catalog.Format(msgs.locale, "quitAnyway", nil)
+}
+
 // QuitAndInstall says "退出并安装"
 // in the language the app shows.
 func QuitAndInstall() string { return In(i18n.Locale()).QuitAndInstall() }
@@ -2878,14 +2992,74 @@ func (msgs Messages) NextImage() string {
 	return Catalog.Format(msgs.locale, "nextImage", nil)
 }
 
-// PreviewAlreadyOptimal says "原图已是最优"
+// PreviewKeptOriginal says "未压得更小，保留原图"
 // in the language the app shows.
-func PreviewAlreadyOptimal() string { return In(i18n.Locale()).PreviewAlreadyOptimal() }
+func PreviewKeptOriginal() string { return In(i18n.Locale()).PreviewKeptOriginal() }
 
-// PreviewAlreadyOptimal says "原图已是最优"
+// PreviewKeptOriginal says "未压得更小，保留原图"
 // in the language of msgs.
-func (msgs Messages) PreviewAlreadyOptimal() string {
-	return Catalog.Format(msgs.locale, "previewAlreadyOptimal", nil)
+func (msgs Messages) PreviewKeptOriginal() string {
+	return Catalog.Format(msgs.locale, "previewKeptOriginal", nil)
+}
+
+// MetadataICCKept says "ICC"
+// in the language the app shows.
+func MetadataICCKept() string { return In(i18n.Locale()).MetadataICCKept() }
+
+// MetadataICCKept says "ICC"
+// in the language of msgs.
+func (msgs Messages) MetadataICCKept() string {
+	return Catalog.Format(msgs.locale, "metadataICCKept", nil)
+}
+
+// MetadataEXIFKept says "EXIF"
+// in the language the app shows.
+func MetadataEXIFKept() string { return In(i18n.Locale()).MetadataEXIFKept() }
+
+// MetadataEXIFKept says "EXIF"
+// in the language of msgs.
+func (msgs Messages) MetadataEXIFKept() string {
+	return Catalog.Format(msgs.locale, "metadataEXIFKept", nil)
+}
+
+// MetadataGPSRemoved says "GPS 已移除"
+// in the language the app shows.
+func MetadataGPSRemoved() string { return In(i18n.Locale()).MetadataGPSRemoved() }
+
+// MetadataGPSRemoved says "GPS 已移除"
+// in the language of msgs.
+func (msgs Messages) MetadataGPSRemoved() string {
+	return Catalog.Format(msgs.locale, "metadataGPSRemoved", nil)
+}
+
+// MetadataOrientationReset says "方向已校正"
+// in the language the app shows.
+func MetadataOrientationReset() string { return In(i18n.Locale()).MetadataOrientationReset() }
+
+// MetadataOrientationReset says "方向已校正"
+// in the language of msgs.
+func (msgs Messages) MetadataOrientationReset() string {
+	return Catalog.Format(msgs.locale, "metadataOrientationReset", nil)
+}
+
+// MetadataDropped says "其它元数据已移除"
+// in the language the app shows.
+func MetadataDropped() string { return In(i18n.Locale()).MetadataDropped() }
+
+// MetadataDropped says "其它元数据已移除"
+// in the language of msgs.
+func (msgs Messages) MetadataDropped() string {
+	return Catalog.Format(msgs.locale, "metadataDropped", nil)
+}
+
+// MetadataTitle says "输出文件的元数据：{summary}"
+// in the language the app shows.
+func MetadataTitle(summary string) string { return In(i18n.Locale()).MetadataTitle(summary) }
+
+// MetadataTitle says "输出文件的元数据：{summary}"
+// in the language of msgs.
+func (msgs Messages) MetadataTitle(summary string) string {
+	return Catalog.Format(msgs.locale, "metadataTitle", map[string]any{"summary": summary})
 }
 
 // BeautifyPreviewAlt says "美化预览"
@@ -4080,6 +4254,16 @@ func GoErrEncodePNG() string { return In(i18n.Locale()).GoErrEncodePNG() }
 // in the language of msgs.
 func (msgs Messages) GoErrEncodePNG() string {
 	return Catalog.Format(msgs.locale, "goErrEncodePNG", nil)
+}
+
+// GoErrLosslessCheckFailed says "无损校验未通过，未写入结果"
+// in the language the app shows.
+func GoErrLosslessCheckFailed() string { return In(i18n.Locale()).GoErrLosslessCheckFailed() }
+
+// GoErrLosslessCheckFailed says "无损校验未通过，未写入结果"
+// in the language of msgs.
+func (msgs Messages) GoErrLosslessCheckFailed() string {
+	return Catalog.Format(msgs.locale, "goErrLosslessCheckFailed", nil)
 }
 
 // GoErrEncodeWebP says "WebP 编码失败"

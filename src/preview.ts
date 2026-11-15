@@ -5,7 +5,7 @@
    own it. */
 
 import { AnyPic, type FrameStyle, type Item, type Preview, type Snapshot } from "./mygo";
-import { $, $$, closeModal, formatBytes, formatDimensions, openModal, pct, showError, showToast } from "./ui";
+import { $, $$, closeModal, formatBytes, formatDimensions, metadataSummary, openModal, pct, showError, showToast } from "./ui";
 import { t } from "./i18n";
 
 /* The app shell's live state the modal needs. Getters, not snapshots: the
@@ -122,15 +122,18 @@ export async function openPreview(id: number, mode: "compare" | "beautify" = "co
   $("#previewCompressedSize").textContent = item.passedThrough ? formatBytes(item.originalSize) : formatBytes(item.compressedSize);
   $("#previewSaved").textContent = item.status === "done"
     ? item.passedThrough
-      ? t.previewAlreadyOptimal()
+      ? t.previewKeptOriginal()
       : item.compressedSize <= item.originalSize
         ? `−${pct(item.savedPercent)}`
         : `+${pct((item.compressedSize / Math.max(1, item.originalSize) - 1) * 100)}`
     : t.itemWaiting();
+  // The same metadata sentence the row carries, spelled out in the details.
+  const metadata = item.status === "done" ? metadataSummary(item.metadata) : null;
   $("#previewDetails").textContent = item.status === "done"
-    ? t.previewOutput(item.outputFormat || item.format, item.outputName || item.name)
+    ? t.previewOutput(item.outputFormat || item.format, item.outputName || item.name) + (metadata ? ` · ${metadata.text}` : "")
     : t.itemWaiting();
   $<HTMLButtonElement>("#previewExportBtn").disabled = item.status !== "done";
+  $<HTMLButtonElement>("#previewCopyBtn").disabled = item.status !== "done";
   $("#compareLoading").hidden = false;
   $("#compareFrame").hidden = true;
   // A zoom level belongs to the picture it was set on; the next image starts
@@ -716,9 +719,10 @@ function switchPreviewMode(mode: "compare" | "beautify") {
     button.classList.toggle("active", active);
     button.setAttribute("aria-selected", String(active));
   });
-  // Export works on the compressed result; the beautify tab has its own
-  // apply button instead.
+  // Export and copy work on the compressed result; the beautify tab has its
+  // own apply button instead.
   $<HTMLButtonElement>("#previewExportBtn").hidden = !compare;
+  $<HTMLButtonElement>("#previewCopyBtn").hidden = !compare;
   // Each tab loads its own content on entry: 对比 needs the before/after
   // data (cached after the first load), 美化 renders the tuned style.
   if (compare) void loadCompare();

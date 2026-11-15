@@ -333,16 +333,17 @@ func (a *AnyPic) compressAnimated(ctx context.Context, id int64, path, srcFormat
 	}
 	if !resized && int64(len(data)) >= info.Size() {
 		return compressResult{
-			path:          path,
-			size:          info.Size(),
-			format:        displayFormat(srcFormat),
-			outputName:    outputFilename(name, s.Suffix, extForFormat(srcFormat)),
-			width:         width,
-			height:        height,
-			hasAlpha:      true,
-			passedThrough: true,
-			targetBytes:   target,
-			targetMissed:  target > 0 && info.Size() > target,
+			path:               path,
+			size:               info.Size(),
+			format:             displayFormat(srcFormat),
+			outputName:         outputFilename(name, s.Suffix, extForFormat(srcFormat)),
+			width:              width,
+			height:             height,
+			hasAlpha:           true,
+			passedThrough:      true,
+			keptOriginalReason: "not_smaller",
+			targetBytes:        target,
+			targetMissed:       target > 0 && info.Size() > target,
 		}, nil
 	}
 

@@ -35,7 +35,22 @@ func main() {
 	// Set by a quit started from the tray, Cmd+Q or the app menu, so the
 	// window's close handler lets that close through instead of hiding.
 	var quitting bool
-	app.OnBeforeQuit(func(*mygo.QuitEvent) {
+	// showWindow is nil until the window exists; the quit guard below needs
+	// it to bring the confirmation forward when the window sits in the tray.
+	var showWindow func()
+	app.OnBeforeQuit(func(e *mygo.QuitEvent) {
+		if quitting {
+			return
+		}
+		// Results that exist only in the session temp dir would be deleted by
+		// Cleanup, so a quit that has not been confirmed by the page is held
+		// back and the page asks whether to export first. The page calls
+		// QuitNow to resume a quit the user confirmed.
+		if !beforeQuit(service, showWindow, func(command string) {
+			_ = CommandRequested.Broadcast(command)
+		}, e) {
+			return
+		}
 		quitting = true
 		service.Cleanup()
 	})
@@ -43,7 +58,6 @@ func main() {
 	// Registered before Run so launch-time opens (double-clicked files, Dock
 	// drops, command lines) reach the app; showWindow is nil until the
 	// window exists, and a cold start opens it anyway.
-	var showWindow func()
 	app.OnOpenFile(func(path string) {
 		service.OpenFile(path)
 		if showWindow != nil {
@@ -188,6 +202,32 @@ func main() {
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// beforeQuit is the decision behind main's OnBeforeQuit listener: a quit with
+// compressed results that only exist in the session temp dir may not proceed
+// until the page has asked about them. It reports whether the quit may go
+// ahead; otherwise the window is brought forward and the page is asked to
+// show the unsaved-results confirmation. Split from the listener so tests can
+// drive it without a desktop.
+func beforeQuit(service *AnyPic, show func(), notify func(command string), e *mygo.QuitEvent) bool {
+	if service.quitConfirmed.Load() || service.UnsavedResults() == 0 {
+		return true
+	}
+	e.PreventDefault()
+	if show != nil {
+		show()
+	}
+	notify("quit-unsaved")
+	return false
+}
+
+// QuitNow ends the app after the page resolved an interrupted quit: the user
+// chose to quit without exporting, or the export they asked for succeeded.
+// The confirmed flag lets the next OnBeforeQuit run Cleanup and quit.
+func (a *AnyPic) QuitNow() {
+	a.quitConfirmed.Store(true)
+	quitApp()
 }
 
 // secondLaunchHandler is what the running AnyPic does when it is started

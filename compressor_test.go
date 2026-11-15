@@ -481,21 +481,17 @@ func TestIssue15JPEGWithoutTransparencyStaysJPEG(t *testing.T) {
 }
 
 func TestIssue15PassthroughKeepsTransparency(t *testing.T) {
-	// A transparent PNG already encoded as well as the pipeline can do: the
-	// re-encode cannot beat it, so the original is kept. The output format is
-	// still PNG (the JPG request was overridden) and the flag stays true.
+	// A transparent PNG already encoded by the production lossless encoder:
+	// the re-encode cannot beat it, so the original is kept. The output format
+	// is still PNG (the JPG request was overridden) and the flag stays true.
 	dir := t.TempDir()
 	src := filepath.Join(dir, "logo.png")
 	img := logoImage(400, 300)
-	f, err := os.Create(src)
+	data, err := encodePNGLossless(img)
 	if err != nil {
 		t.Fatal(err)
 	}
-	enc := png.Encoder{CompressionLevel: pngCompressionLevel(img.Bounds().Dx() * img.Bounds().Dy())}
-	if err := enc.Encode(f, img); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.Close(); err != nil {
+	if err := os.WriteFile(src, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
 

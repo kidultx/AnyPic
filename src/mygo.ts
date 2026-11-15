@@ -32,6 +32,35 @@ export interface Batch {
   canceled: boolean;
 }
 
+/**
+ * ClipboardCopy reports what CopyItemToClipboard put on the clipboard and
+ * what it was made from. The clipboard takes PNG only, so a JPEG or WebP
+ * result is decoded and re-encoded first — and usually grows. Both sizes
+ * are reported so the page's toast can say so instead of hiding the
+ * difference.
+ */
+export interface ClipboardCopy {
+  /**
+   * Format is the representation written to the clipboard, always PNG
+   * with MyGo's clipboard image support.
+   */
+  format: string;
+  /** Bytes is the size of that representation. */
+  bytes: number;
+  /**
+   * SourceFormat and SourceBytes describe the file the representation was
+   * made from: the compressed result, or the original for a passthrough.
+   */
+  sourceFormat: string;
+  sourceBytes: number;
+  /**
+   * Animated reports that the source is an animation. The clipboard image
+   * is one PNG frame, so the toast must say the frames did not come along
+   * (invariant 3: never silently keep only the first frame).
+   */
+  animated: boolean;
+}
+
 /** CopyOutcome reports what a clipboard copy did. */
 export interface CopyOutcome {
   copied: boolean;
@@ -102,6 +131,20 @@ export interface Item {
   hasAlpha: boolean;
   passedThrough: boolean;
   /**
+   * KeptOriginalReason says why a passthrough result kept the original
+   * instead of the re-encode: "target_met" (the original already fits the
+   * target), "not_smaller" (the re-encode was not smaller) or
+   * "pixels_changed" (the lossless check caught a re-encode that changed
+   * pixels). Empty when the result is a real re-encode. The page uses it so
+   * a passthrough never claims more than "we did not make it smaller".
+   */
+  keptOriginalReason?: string;
+  /**
+   * Metadata reports what happened to the source's ICC profile and EXIF.
+   * Nil when the source had no metadata worth reporting.
+   */
+  metadata?: MetadataReport;
+  /**
    * TransparencyKept reports that the user chose JPG but the image has
    * transparency, so the output was saved as PNG instead of being
    * flattened onto a background (#15). Passthrough results carry it too,
@@ -141,6 +184,32 @@ export interface Item {
 export interface MarkdownCopy {
   markdown: string;
   path: string;
+}
+
+/**
+ * MetadataReport says what the output kept, changed or dropped from the
+ * source's metadata. Every field only speaks about metadata that was present
+ * in the source, so the page never claims to have removed something that was
+ * not there.
+ */
+export interface MetadataReport {
+  /** ICCKept: the source's ICC colour profile is in the output unchanged. */
+  iccKept: boolean;
+  /** EXIFKept: the source's EXIF is in the output (JPEG only), minus GPS. */
+  exifKept: boolean;
+  /** GPSRemoved: the EXIF GPS directory was emptied. */
+  gpsRemoved: boolean;
+  /**
+   * OrientationReset: EXIF Orientation was rewritten to 1 because the
+   * pixels had already been rotated by AutoOrientation.
+   */
+  orientationReset: boolean;
+  /**
+   * Dropped: metadata the source carried but the output could not keep
+   * (XMP, IPTC, comments, PNG text chunks, or EXIF/ICC when the output
+   * format cannot hold the source's representation).
+   */
+  dropped: boolean;
 }
 
 /** Preview holds before and after previews for the comparison view. */
@@ -340,7 +409,7 @@ export const AnyPic = {
    * to the original when compression did not finish. The clipboard takes PNG,
    * so results encoded as JPEG or WebP are decoded and re-encoded first.
    */
-  copyItemToClipboard(id: number): Promise<void> {
+  copyItemToClipboard(id: number): Promise<ClipboardCopy> {
     return call("AnyPic.CopyItemToClipboard", id);
   },
   /**
@@ -462,6 +531,14 @@ export const AnyPic = {
    */
   previewDecorated(id: number, style: FrameStyle): Promise<string> {
     return call("AnyPic.PreviewDecorated", id, style);
+  },
+  /**
+   * QuitNow ends the app after the page resolved an interrupted quit: the user
+   * chose to quit without exporting, or the export they asked for succeeded.
+   * The confirmed flag lets the next OnBeforeQuit run Cleanup and quit.
+   */
+  quitNow(): Promise<void> {
+    return call("AnyPic.QuitNow");
   },
   /** RegisterScreenshotShortcut binds the stored shortcut once the app is ready. */
   registerScreenshotShortcut(): Promise<void> {

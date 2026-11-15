@@ -23,7 +23,8 @@
   Windows/macOS 上写出的路径；`InstallUpdate` 只接受它。新一轮下载开始
   时清空。
 - 未保存结果:`Item.saved`（进程内状态，不落盘）与 `UnsavedResults()`
-  ——已压缩、非「已是最优」直通、且没有任何一次导出写过副本的结果数。
+  ——已压缩、非 passthrough（`PassedThrough` 为假，含「未压小」「已在
+  目标内」「保留原图」三种原因）、且没有任何一次导出写过副本的结果数。
 - 网络端点:`releaseAPIBase` 包级变量，默认 `https://api.github.com`，
   测试指向回环服务器。
 - 平台判断:`installerPlatform` 包级变量，默认 `runtime.GOOS`，测试因此

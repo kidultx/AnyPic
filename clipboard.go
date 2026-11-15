@@ -192,7 +192,7 @@ func (a *AnyPic) CopyCaptureResult(id int64) (CopyOutcome, error) {
 		// never overrides this.
 		return CopyOutcome{Skipped: true, Name: name}, nil
 	}
-	if err := a.copyItemToClipboard(id); err != nil {
+	if _, err := a.copyItemToClipboard(id); err != nil {
 		return CopyOutcome{}, err
 	}
 	return CopyOutcome{Copied: true, Name: name}, nil
@@ -247,7 +247,7 @@ func (a *AnyPic) CopyLastResult() (CopyOutcome, error) {
 	name := item.OutputName
 	a.mu.Unlock()
 
-	if err := a.copyItemToClipboard(id); err != nil {
+	if _, err := a.copyItemToClipboard(id); err != nil {
 		return CopyOutcome{}, err
 	}
 	return CopyOutcome{Copied: true, Name: name}, nil

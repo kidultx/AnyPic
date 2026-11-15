@@ -7,7 +7,7 @@
       "file": "screenshot.png",
       "format": "png",
       "quality": 82,
-      "size": 5619,
+      "size": 5437,
       "ssim": 1,
       "ssimMeasured": true
     },
@@ -27,7 +27,7 @@
       "file": "screenshot-real.png",
       "format": "png",
       "quality": 82,
-      "size": 111106,
+      "size": 102946,
       "ssim": 1,
       "ssimMeasured": true
     },
@@ -139,7 +139,7 @@
       "file": "transparent.png",
       "format": "auto",
       "quality": 82,
-      "size": 27379,
+      "size": 24597,
       "ssim": 1,
       "ssimMeasured": true
     },

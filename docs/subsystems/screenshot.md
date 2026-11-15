@@ -36,12 +36,17 @@
   不等时即使租约仍显示有效也跳过（Windows 的释放回调可能滞后）。截图原始
   写入失败时租约 token 为 0，`rememberClipboardImage` 不记录任何所有权，
   之后绝不会覆盖剪贴板。
+- 单张复制（行内「复制图片」、右键菜单、预览窗口、当前行 ⌘C / Ctrl+C）走
+  `CopyItemToClipboard`：读压缩结果，未完成时读原图。剪贴板只接受 PNG，
+  JPEG / WebP 结果会先解码再 PNG 编码（通常变大）——这是格式限制，不是
+  压缩结果变大。返回的 `ClipboardCopy` 带写入格式/字节数、源文件格式/
+  字节数与是否动图，页面 toast 据此如实说「已复制 PNG · 945 KB（原文件
+  166 KB）」；动图只进首帧，提示语会说明帧没有跟来。
 - 托盘「再次复制上一张压缩结果」读 `AnyPic.lastResultID`（最近一次成功
-  压缩的条目）→ `CopyLastResult` → `copyItemToClipboard`（非 PNG 结果
-  先解码重编码为 PNG）。右键菜单「复制为 Markdown 图片」走
-  `CopyItemAsMarkdown`：先确保结果在磁盘上有耐久副本（已导出则用
-  `savedPath`，否则写到原图旁或输出目录），再把 `![名称](本地路径)` 写进
-  剪贴板；不上传任何内容。
+  压缩的条目）→ `CopyLastResult` → `copyItemToClipboard`。右键菜单「复制为
+  Markdown 图片」走 `CopyItemAsMarkdown`：先确保结果在磁盘上有耐久副本
+  （已导出则用 `savedPath`，否则写到原图旁或输出目录），再把
+  `![名称](本地路径)` 写进剪贴板；不上传任何内容。
 - 美化样式:`FrameStyle`(decorate.go),六个旋钮——背景(无/纯色 hex/
   渐变预设/day-card 图案)、圆角四档、描边、投影两档、边距三档、画布比例
   (只外扩不裁切)。图案 id 是闭集(patterns.go),非法值回落 `teal`。

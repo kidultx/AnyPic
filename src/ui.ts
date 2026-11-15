@@ -4,6 +4,7 @@
    accessors for the few words it formats (#32). */
 
 import { t } from "./i18n";
+import type { Item } from "./mygo";
 
 export const $ = <T extends HTMLElement = HTMLElement>(selector: string): T => {
   const el = document.querySelector<T>(selector);
@@ -33,6 +34,23 @@ export function formatBytes(bytes: number): string {
 }
 
 export const pct = (value: number) => `${Math.round(Math.max(0, value))}%`;
+
+/* metadataSummary turns the structured report into the shortest honest
+   sentence: which profile/EXIF the output kept, and what was removed. It is
+   shared by the queue row and the preview details so both tell the same
+   story. */
+export function metadataSummary(report: Item["metadata"]): { text: string; title: string } | null {
+  if (!report) return null;
+  const parts: string[] = [];
+  if (report.iccKept) parts.push(t.metadataICCKept());
+  if (report.exifKept) parts.push(t.metadataEXIFKept());
+  if (report.gpsRemoved) parts.push(t.metadataGPSRemoved());
+  if (report.orientationReset) parts.push(t.metadataOrientationReset());
+  if (report.dropped) parts.push(t.metadataDropped());
+  if (parts.length === 0) return null;
+  const summary = parts.join(" · ");
+  return { text: summary, title: t.metadataTitle(summary) };
+}
 
 export function formatDimensions(width: number, height: number): string {
   if (!width || !height) return t.unknownDimensions();
