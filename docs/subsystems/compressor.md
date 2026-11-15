@@ -101,6 +101,33 @@
 - 页面据 `TransparencyKept` 把队列行写成「→ PNG · 保留透明」，标题说明
   原因；不新增视觉样式。
 
+## 元数据与无损校验
+
+元数据只由 [`metadata.go`](../../metadata.go) 决定，编码器不参与：
+
+- **ICC 透传**：输出与源同格式时，PNG 把 iCCP chunk 原样插入 IHDR 之后，
+  JPEG 按序拷贝完整的 `ICC_PROFILE` APP2 段；段数不全就整组丢弃（半截
+  profile 比没有更糟）。不做任何色彩转换——profile 是不透明字节。
+- **EXIF 选择性保留**（仅 JPEG）：`sanitizeEXIF` 就地清洗 TIFF 结构——
+  Orientation 改写为 1（像素已由 `imaging.AutoOrientation` 物理旋转，
+  保留原值会让查看器再转一次）；GPS 目录的条目表、内联值和越界 rational
+  全部置零，留下一个合法的空 IFD，坐标字节不残留在文件里。解析不了的
+  EXIF 整块丢弃，绝不把没洗干净的 GPS 带进输出。
+- **跨格式不硬拷**：PNG↔JPEG 转换需要改写 profile 表示，当前不做；残缺
+  ICC、无法解析的 EXIF 同样不携带，全部记入 `MetadataReport.Dropped`。
+  页面按 `ICCKept / EXIFKept / GPSRemoved / OrientationReset / Dropped`
+  显示「ICC · GPS 已移除」之类的短句，悬停给出完整说明。
+- **passthrough 不动元数据**：保留原图就是交付原文件本身，ICC / EXIF /
+  GPS 原样存在；`Metadata` 为 nil，页面只说「未压小 / 已在目标内」，不声称
+  做过任何元数据清洗。清洗只发生在真正重编码的结果上。
+- **目标体积要算上元数据**：`encodeToTarget` 的预算先减去
+  `stillMetadata.size()`，否则一个裸编码刚好达标的结果会在写回 ICC 后超限。
+- **无损运行时不变量**：输出 PNG 时，[`losslessPixelsEqual`](../../metadata.go)
+  解码结果并与送进编码器的图逐像素比对。不一致时，同格式 + 未缩放退回
+  原图（`pixels_changed`）；跨格式或缩放的转换没有「原图」可退，直接
+  报 `GoErrLosslessCheckFailed`，不交付改过像素的文件。这就是更换编码
+  后端仍是可逆决策的原因。
+
 ## 基准集
 
 `testdata/benchmark/` 固定了 19 个用例、`du` 832 KB，四类各至少两张：合成

@@ -72,6 +72,9 @@ type Item struct {
 	// pixels). Empty when the result is a real re-encode. The page uses it so
 	// a passthrough never claims more than "we did not make it smaller".
 	KeptOriginalReason string `json:"keptOriginalReason,omitempty"`
+	// Metadata reports what happened to the source's ICC profile and EXIF.
+	// Nil when the source had no metadata worth reporting.
+	Metadata *MetadataReport `json:"metadata,omitempty"`
 	// TransparencyKept reports that the user chose JPG but the image has
 	// transparency, so the output was saved as PNG instead of being
 	// flattened onto a background (#15). Passthrough results carry it too,
@@ -746,6 +749,7 @@ func (a *AnyPic) DecorateItem(id int64, style FrameStyle) (Snapshot, error) {
 	item.OutputName = ""
 	item.PassedThrough = false
 	item.KeptOriginalReason = ""
+	item.Metadata = nil
 	item.TransparencyKept = false
 	item.SavedPercent = 0
 	item.CompressedSize = 0
@@ -995,6 +999,7 @@ func (a *AnyPic) compressItem(ctx context.Context, id int64, s Settings) {
 	item.Error = ""
 	item.PassedThrough = false
 	item.KeptOriginalReason = ""
+	item.Metadata = nil
 	item.TransparencyKept = false
 	item.SavedPercent = 0
 	item.CompressedSize = 0
@@ -1032,6 +1037,7 @@ func (a *AnyPic) compressItem(ctx context.Context, id int64, s Settings) {
 		item.HasAlpha = result.hasAlpha
 		item.PassedThrough = result.passedThrough
 		item.KeptOriginalReason = result.keptOriginalReason
+		item.Metadata = result.metadata
 		item.TransparencyKept = result.transparencyKept
 		item.SSIM = result.ssim
 		item.SSIMMeasured = result.ssimMeasured
@@ -1068,6 +1074,7 @@ type compressResult struct {
 	hasAlpha           bool
 	passedThrough      bool
 	keptOriginalReason string
+	metadata           *MetadataReport
 	transparencyKept   bool
 	// ssim is 0 when the result was not measured (animations); ssimMeasured
 	// keeps a real zero distinct from "not measured". A passed-through result
@@ -1098,6 +1105,10 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 		f.Close()
 		return compressResult{}, errors.New(tr().GoErrDecodeCorrupt())
 	}
+	// The source's colour profile and EXIF are read from the file header;
+	// the pixels above were already auto-oriented, which the EXIF handling
+	// accounts for.
+	meta := readSourceMetadata(f, srcFormat)
 	f.Close()
 
 	resized := false
@@ -1124,6 +1135,17 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 	target := s.TargetSize
 	if target < 0 {
 		target = 0
+	}
+	// Metadata travels with the re-encode, so the target budget has to pay
+	// for it; otherwise a result that fits the cap without its ICC profile
+	// would overshoot once the profile is written back.
+	attachment, metadataReport := meta.prepare(outFormat, srcFormat)
+	encodeTarget := target
+	if encodeTarget > 0 {
+		encodeTarget -= int64(attachment.size())
+		if encodeTarget < 1 {
+			encodeTarget = 1
+		}
 	}
 
 	// A file that is already within the target is the best possible result
@@ -1155,15 +1177,12 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 	missed := false
 	switch {
 	case target > 0 && (outFormat == "JPEG" || outFormat == "WEBP"):
-		data, quality, missed, err = encodeToTarget(ctx, img, outFormat, target)
+		data, quality, missed, err = encodeToTarget(ctx, img, outFormat, encodeTarget)
 	case outFormat == "JPEG" || outFormat == "WEBP" || outFormat == "PNG":
 		data, err = encodeStill(img, outFormat, s.Quality)
 		if outFormat != "PNG" {
 			quality = s.Quality
 		}
-		// PNG has no quality knob; it can only report that the lossless
-		// result itself is larger than the target.
-		missed = target > 0 && int64(len(data)) > target
 	default:
 		return compressResult{}, errors.New(tr().GoErrUnsupportedOutput())
 	}
@@ -1172,6 +1191,12 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 	}
 	if err := ctx.Err(); err != nil {
 		return compressResult{}, err
+	}
+	data = attachment.apply(data)
+	// PNG has no quality knob; it can only report that the lossless result,
+	// metadata included, is larger than the target.
+	if target > 0 {
+		missed = missed || int64(len(data)) > target
 	}
 
 	// Lossless mode's runtime invariant: the decoded result must be
@@ -1230,6 +1255,7 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 		width:            b.Dx(),
 		height:           b.Dy(),
 		hasAlpha:         hasAlpha,
+		metadata:         metadataReport,
 		transparencyKept: transparencyKept,
 		ssim:             ssim,
 		ssimMeasured:     ssimMeasured,
