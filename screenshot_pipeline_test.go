@@ -93,6 +93,74 @@ func TestScreenshotPipelineNeedsClipboardPermission(t *testing.T) {
 	}
 }
 
+// TestScreenshotClipboardWriteFailureFallsBackFromPipeline: the pipeline
+// replaces the raw capture on the clipboard, so a failed raw write must
+// switch it off. The app comes forward like a plain capture instead of
+// staying in the background, and Copied=false keeps the page from starting a
+// replacement pass — and from later claiming the user copied something else
+// during compression.
+func TestScreenshotClipboardWriteFailureFallsBackFromPipeline(t *testing.T) {
+	issue17Seams(t)
+	a, _ := issue17App(t)
+	a.settings.ScreenshotPipeline = "on"
+	a.settings.ScreenshotClipboard = "on"
+	screenshotGOOS = "darwin"
+	screenCapturePreflight = func() (bool, error) { return true, nil }
+	screenCaptureRequestAccess = func() {}
+	png := issue17PNG(t)
+	screenshotPlanFor = issue17Plan
+	runCaptureCommand = issue17Runner(png)
+	focused := 0
+	focusScreenshotWindow = func(context.Context) { focused++ }
+	stub := stubClipboard(t)
+	stub.writeErr = errors.New("clipboard unavailable")
+
+	result, err := a.CaptureScreenshot(context.Background())
+	if err != nil {
+		t.Fatalf("CaptureScreenshot: %v", err)
+	}
+	if result.Copied {
+		t.Fatal("Copied is true after the raw write failed")
+	}
+	if focused != 1 {
+		t.Fatalf("window focus calls = %d after a failed raw write, want 1: the pipeline has nothing to replace and must fall back", focused)
+	}
+}
+
+// TestScreenshotClipboardWriteWithoutLeaseIsNotACopy: a writer that reports
+// success but hands back no lease token proves nothing about ownership. The
+// capture must not count as copied, or the pipeline would arm on a clipboard
+// it can never verify and later blame the user for copying something else.
+func TestScreenshotClipboardWriteWithoutLeaseIsNotACopy(t *testing.T) {
+	issue17Seams(t)
+	a, _ := issue17App(t)
+	a.settings.ScreenshotPipeline = "on"
+	a.settings.ScreenshotClipboard = "on"
+	screenshotGOOS = "darwin"
+	screenCapturePreflight = func() (bool, error) { return true, nil }
+	screenCaptureRequestAccess = func() {}
+	png := issue17PNG(t)
+	screenshotPlanFor = issue17Plan
+	runCaptureCommand = issue17Runner(png)
+	focused := 0
+	focusScreenshotWindow = func(context.Context) { focused++ }
+	clipboardWriteImage = func([]byte) (uint64, error) { return 0, nil }
+
+	result, err := a.CaptureScreenshot(context.Background())
+	if err != nil {
+		t.Fatalf("CaptureScreenshot: %v", err)
+	}
+	if result.Copied {
+		t.Fatal("Copied is true although the write returned no lease, so ownership is unverifiable")
+	}
+	if focused != 1 {
+		t.Fatalf("window focus calls = %d without a lease, want 1: the pipeline must fall back", focused)
+	}
+	if a.items[0].clipboardLease != 0 {
+		t.Fatalf("clipboard lease = %d, want 0 without a token", a.items[0].clipboardLease)
+	}
+}
+
 // TestScreenshotClipboardWriteFailureRecordsNoOwnership: if the raw write
 // fails, the compressed result must never think the clipboard is ours.
 func TestScreenshotClipboardWriteFailureRecordsNoOwnership(t *testing.T) {

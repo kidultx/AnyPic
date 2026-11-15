@@ -1,4 +1,4 @@
-import { AnyPic, events, type Batch, type Item, type Preview, type Settings, type Snapshot, type UpdateInfo } from "./mygo";
+import { AnyPic, events, type AddResult, type Batch, type Item, type Preview, type Settings, type Snapshot, type UpdateInfo } from "./mygo";
 import { isMyGo, onFileDrop, runtime } from "mygo-runtime";
 import { $, $$, closeModal, esc, formatBytes, formatDimensions, icon, openModal, pct, showError, shortenPath, showToast } from "./ui";
 import { errorCodes, language, onSystemLanguageChange, setLanguage, t } from "./i18n";
@@ -1525,10 +1525,7 @@ function queueOpenedPaths(paths: string[]) {
   }, 60);
 }
 
-function applyAddResult(
-  result: { snapshot: Snapshot; added: number; skipped: { name: string; reason: string }[] },
-  source: AddSource = "files",
-): void {
+function applyAddResult(result: AddResult, source: AddSource = "files"): void {
   const known = new Set(items.map((item) => item.id));
   applySnapshot(result.snapshot, false);
   const newIDs = items.filter((item) => !known.has(item.id)).map((item) => item.id);
@@ -1536,7 +1533,11 @@ function applyAddResult(
   // pipeline is on, even with auto-process off; files and pasted images
   // still follow the auto-process switch.
   const capture = source === "capture";
-  const pipeline = capture && screenshotPipelineEnabled();
+  // The pipeline replaces the raw capture on the clipboard, so it can only
+  // run when the backend actually put it there (copied). A failed write
+  // leaves nothing to replace and must not end in "the clipboard changed
+  // during compression" — no replacement pass, no wrong attribution.
+  const pipeline = capture && screenshotPipelineEnabled() && result.copied;
   const auto = !demoMode && result.added > 0 && (pipeline || autoProcessEnabled());
 
   if (result.added > 0) {

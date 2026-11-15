@@ -108,11 +108,13 @@ func (a *AnyPic) CaptureScreenshot(ctx context.Context) (result AddResult, err e
 	// during compression then gets the shot itself, never a stale clipboard.
 	// When the capture tool already wrote the same image (Windows/Linux),
 	// writing it again is harmless. A failed write never becomes ownership:
-	// no lease is recorded, so the compressed result will not replace it.
+	// no lease is recorded, so the compressed result will not replace it. A
+	// writer that reports success but hands back no lease proves nothing
+	// about ownership either, so it counts as no copy at all.
 	copied := false
 	var lease uint64
 	if copyToClipboard {
-		if token, writeErr := clipboardWriteImage(data); writeErr == nil {
+		if token, writeErr := clipboardWriteImage(data); writeErr == nil && token != 0 {
 			copied = true
 			lease = token
 		}
@@ -121,6 +123,12 @@ func (a *AnyPic) CaptureScreenshot(ctx context.Context) (result AddResult, err e
 		// image on the clipboard.
 		clipboardClear()
 	}
+	// The pipeline replaces the raw capture on the clipboard, so a failed
+	// write leaves it nothing to replace. Fall back to a plain capture: the
+	// window comes forward below, and the page keys its replacement pass on
+	// Copied, so it never reports "the clipboard changed during compression"
+	// for a copy that never happened.
+	pipeline = pipeline && copied
 
 	path, err := writeScreenshot(data)
 	if err != nil {

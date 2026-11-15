@@ -1299,3 +1299,21 @@ func TestIssue23TypeAndRadiusLadders(t *testing.T) {
 		}
 	}
 }
+
+// TestCapturePipelineWaitsForTheRawCopy guards the fallback in
+// CaptureScreenshot: the page starts the replacement pass only when the
+// backend reported that the raw capture really reached the clipboard. A
+// settings-only check still compressed after a failed clipboard write and
+// ended in "the clipboard changed during compression" — blame for a copy
+// that never happened.
+func TestCapturePipelineWaitsForTheRawCopy(t *testing.T) {
+	src := ruleSources(t)["src/main.ts"]
+	body, _, _, ok := functionBody(src, "applyAddResult")
+	if !ok {
+		t.Fatal("src/main.ts: no applyAddResult function")
+	}
+	want := regexp.MustCompile(`const pipeline = capture && screenshotPipelineEnabled\(\) && result\.copied;`)
+	if !want.MatchString(body) {
+		t.Error("src/main.ts: the capture pipeline is armed without result.copied — a failed clipboard write would still attempt the guarded replacement and report a phantom clipboard change")
+	}
+}
