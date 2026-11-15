@@ -49,8 +49,14 @@
   展开会把范围错配当成压缩损失（真实照片 q82 WebP 会从 0.986 掉到 0.55）。
 - 诚实结果标记写在 `Item` 上并随 IPC 到页面：
   - [`PassedThrough`](../../compressor.go)：静态图同格式、未缩放且重编码
-    不更小（动图为转码不更小），保留原图，页面显示「已是最优」。
+    不更小（动图为转码不更小），保留原图。
+  - [`KeptOriginalReason`](../../compressor.go)：passthrough 的原因，
+    `not_smaller` / `target_met` / `pixels_changed`。页面据此显示
+    「未压小 / 已在目标内 / 保留原图」，**不再**显示「已是最优」——这句话
+    曾把「我们的编码器没打过原图」说成「原图无法再小」，在 logo.png 与
+    screenshot-real.png 上都是假话。
   - [`Animated`](../../compressor.go)：多帧 GIF/WebP 走 `compressAnimated`。
+  - [`Metadata`](../../compressor.go)：本次输出的元数据报告，见下节。
   - [`TransparencyKept`](../../compressor.go)：仅当「用户选了 JPG、因图带
     透明而改存 PNG」时为真；passthrough 结果同样为真，因为原因相同（#15）。
   - [`SSIM` / `SSIMMeasured` / `TargetBytes` / `TargetQuality` /
@@ -67,8 +73,10 @@
    可选缩放 →（目标体积？`searchEncode`；否则按设置质量 `webp.EncodeAll`）
    → 转码不更小则 passthrough → 写临时文件。静态图走 [`compressOne`](../../compressor.go)。
 3. `compressOne`：解码 → 可选 `MaxDimension` 缩放 → `imageHasAlpha` →
-   `chooseOutputFormat` →（目标体积？`encodeToTarget`；否则 `encodeStill`）
-   → 「同格式 + 未缩放 + 不更小」则 passthrough → SSIM 测量 → 写临时文件。
+   `chooseOutputFormat` →（目标体积？`encodeToTarget`；否则 `encodeStill`，
+   PNG 经 `encodePNGLossless` 做 filter 搜索）
+   → 写回 ICC / 清洗后的 EXIF → 无损 PNG 逐像素校验 → 「同格式 + 未缩放 +
+   不更小」则 passthrough → SSIM 测量 → 写临时文件。
 4. 结果写回 `Item` 的 `OutputFormat` / `OutputName` / `PassedThrough` /
    `TransparencyKept` / `SSIM` / `SSIMMeasured` / `TargetBytes` /
    `TargetQuality` / `TargetMissed`，`ItemChanged` 广播给页面。

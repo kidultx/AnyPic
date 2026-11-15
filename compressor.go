@@ -65,6 +65,13 @@ type Item struct {
 	Thumb          string `json:"thumb,omitempty"`
 	HasAlpha       bool   `json:"hasAlpha"`
 	PassedThrough  bool   `json:"passedThrough"`
+	// KeptOriginalReason says why a passthrough result kept the original
+	// instead of the re-encode: "target_met" (the original already fits the
+	// target), "not_smaller" (the re-encode was not smaller) or
+	// "pixels_changed" (the lossless check caught a re-encode that changed
+	// pixels). Empty when the result is a real re-encode. The page uses it so
+	// a passthrough never claims more than "we did not make it smaller".
+	KeptOriginalReason string `json:"keptOriginalReason,omitempty"`
 	// TransparencyKept reports that the user chose JPG but the image has
 	// transparency, so the output was saved as PNG instead of being
 	// flattened onto a background (#15). Passthrough results carry it too,
@@ -738,6 +745,7 @@ func (a *AnyPic) DecorateItem(id int64, style FrameStyle) (Snapshot, error) {
 	item.OutputFormat = ""
 	item.OutputName = ""
 	item.PassedThrough = false
+	item.KeptOriginalReason = ""
 	item.TransparencyKept = false
 	item.SavedPercent = 0
 	item.CompressedSize = 0
@@ -986,6 +994,7 @@ func (a *AnyPic) compressItem(ctx context.Context, id int64, s Settings) {
 	item.Status = statusWorking
 	item.Error = ""
 	item.PassedThrough = false
+	item.KeptOriginalReason = ""
 	item.TransparencyKept = false
 	item.SavedPercent = 0
 	item.CompressedSize = 0
@@ -1022,6 +1031,7 @@ func (a *AnyPic) compressItem(ctx context.Context, id int64, s Settings) {
 		item.Height = result.height
 		item.HasAlpha = result.hasAlpha
 		item.PassedThrough = result.passedThrough
+		item.KeptOriginalReason = result.keptOriginalReason
 		item.TransparencyKept = result.transparencyKept
 		item.SSIM = result.ssim
 		item.SSIMMeasured = result.ssimMeasured
@@ -1049,15 +1059,16 @@ func (a *AnyPic) compressItem(ctx context.Context, id int64, s Settings) {
 }
 
 type compressResult struct {
-	path             string
-	size             int64
-	format           string
-	outputName       string
-	width            int
-	height           int
-	hasAlpha         bool
-	passedThrough    bool
-	transparencyKept bool
+	path               string
+	size               int64
+	format             string
+	outputName         string
+	width              int
+	height             int
+	hasAlpha           bool
+	passedThrough      bool
+	keptOriginalReason string
+	transparencyKept   bool
 	// ssim is 0 when the result was not measured (animations); ssimMeasured
 	// keeps a real zero distinct from "not measured". A passed-through result
 	// scores 1 because the original is unchanged.
@@ -1083,10 +1094,11 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 		return compressResult{}, errors.New(tr().GoErrReadOriginal())
 	}
 	img, err := decodeImage(f, true)
-	f.Close()
 	if err != nil {
+		f.Close()
 		return compressResult{}, errors.New(tr().GoErrDecodeCorrupt())
 	}
+	f.Close()
 
 	resized := false
 	if s.MaxDimension > 0 {
@@ -1116,21 +1128,26 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 
 	// A file that is already within the target is the best possible result
 	// while it keeps its own format and size: no re-encode can beat it.
-	if target > 0 && !resized && strings.EqualFold(outFormat, srcFormat) && info.Size() <= target {
+	passThrough := func(reason string) compressResult {
 		return compressResult{
-			path:             path,
-			size:             info.Size(),
-			format:           displayFormat(strings.ToLower(srcFormat)),
-			outputName:       outputFilename(name, s.Suffix, extForFormat(srcFormat)),
-			width:            b.Dx(),
-			height:           b.Dy(),
-			hasAlpha:         hasAlpha,
-			passedThrough:    true,
-			transparencyKept: transparencyKept,
-			ssim:             1,
-			ssimMeasured:     true,
-			targetBytes:      target,
-		}, nil
+			path:               path,
+			size:               info.Size(),
+			format:             displayFormat(strings.ToLower(srcFormat)),
+			outputName:         outputFilename(name, s.Suffix, extForFormat(srcFormat)),
+			width:              b.Dx(),
+			height:             b.Dy(),
+			hasAlpha:           hasAlpha,
+			passedThrough:      true,
+			keptOriginalReason: reason,
+			transparencyKept:   transparencyKept,
+			ssim:               1,
+			ssimMeasured:       true,
+			targetBytes:        target,
+			targetMissed:       target > 0 && info.Size() > target,
+		}
+	}
+	if target > 0 && !resized && strings.EqualFold(outFormat, srcFormat) && info.Size() <= target {
+		return passThrough("target_met"), nil
 	}
 
 	var data []byte
@@ -1157,24 +1174,22 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 		return compressResult{}, err
 	}
 
+	// Lossless mode's runtime invariant: the decoded result must be
+	// pixel-identical to the image handed to the encoder. A future encoder
+	// that loses a bit is then never allowed to ship; the original is kept
+	// when its format matches, otherwise the item fails honestly.
+	if outFormat == "PNG" && !losslessPixelsEqual(img, data) {
+		if !resized && strings.EqualFold(outFormat, srcFormat) {
+			return passThrough("pixels_changed"), nil
+		}
+		return compressResult{}, errors.New(tr().GoErrLosslessCheckFailed())
+	}
+
 	// Never make a file larger when the format stays the same and no resize
-	// was requested: the original is already better.
+	// was requested: the original is already better. "Winning" means
+	// strictly smaller — equality is not a win.
 	if !resized && strings.EqualFold(outFormat, srcFormat) && int64(len(data)) >= info.Size() {
-		return compressResult{
-			path:             path,
-			size:             info.Size(),
-			format:           displayFormat(strings.ToLower(srcFormat)),
-			outputName:       outputFilename(name, s.Suffix, extForFormat(srcFormat)),
-			width:            b.Dx(),
-			height:           b.Dy(),
-			hasAlpha:         hasAlpha,
-			passedThrough:    true,
-			transparencyKept: transparencyKept,
-			ssim:             1,
-			ssimMeasured:     true,
-			targetBytes:      target,
-			targetMissed:     target > 0 && info.Size() > target,
-		}, nil
+		return passThrough("not_smaller"), nil
 	}
 
 	// The score is measured against the image handed to the encoder, so a
@@ -1224,6 +1239,18 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 	}, nil
 }
 
+// pngLosslessEncode is the encoder for lossless PNG results. A variable so a
+// test can substitute an encoder that changes pixels and prove the runtime
+// guard refuses its output.
+var pngLosslessEncode = func(img image.Image) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := png.Encoder{CompressionLevel: pngCompressionLevel(img.Bounds().Dx() * img.Bounds().Dy())}
+	if err := enc.Encode(&buf, img); err != nil {
+		return nil, errors.New(tr().GoErrEncodePNG())
+	}
+	return buf.Bytes(), nil
+}
+
 // encodeStill encodes one still image in its output format. Target-size
 // passes call it repeatedly while they search for a quality.
 func encodeStill(img image.Image, outFormat string, quality int) ([]byte, error) {
@@ -1234,10 +1261,7 @@ func encodeStill(img image.Image, outFormat string, quality int) ([]byte, error)
 			return nil, errors.New(tr().GoErrEncodeJPEG())
 		}
 	case "PNG":
-		enc := png.Encoder{CompressionLevel: pngCompressionLevel(img.Bounds().Dx() * img.Bounds().Dy())}
-		if err := enc.Encode(&buf, img); err != nil {
-			return nil, errors.New(tr().GoErrEncodePNG())
-		}
+		return pngLosslessEncode(img)
 	case "WEBP":
 		opts := webp.Options{Quality: quality, Method: 4}
 		if err := webp.Encode(&buf, img, opts); err != nil {

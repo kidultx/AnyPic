@@ -1438,3 +1438,47 @@ func TestCapturePipelineWaitsForTheRawCopy(t *testing.T) {
 		t.Error("src/main.ts: the capture pipeline is armed without result.copied — a failed clipboard write would still attempt the guarded replacement and report a phantom clipboard change")
 	}
 }
+
+// TestPassthroughCopyDoesNotClaimAlreadyOptimal guards the honesty fix for
+// passthrough results. "已是最优" was a claim about the original, not about
+// the run, and it was false whenever another encoder could still beat us
+// (testdata/benchmark/logo.png and screenshot-real.png). The UI now names
+// the run's reason: not smaller, already within the target, or kept by the
+// lossless guard.
+func TestPassthroughCopyDoesNotClaimAlreadyOptimal(t *testing.T) {
+	claimed := regexp.MustCompile(`:\s*"(已是最优|Already optimal)"`)
+	for _, path := range []string{"locales/zh-Hans.json", "locales/en.json"} {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if claimed.Match(raw) {
+			t.Errorf("%s still labels a result \"已是最优 / Already optimal\"; a passthrough only knows that this run did not beat it", path)
+		}
+		if bytes.Contains(raw, []byte(`"bestAlready"`)) || bytes.Contains(raw, []byte(`"previewAlreadyOptimal"`)) {
+			t.Errorf("%s still carries the old already-optimal keys", path)
+		}
+	}
+	main, err := os.ReadFile("src/main.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(main, []byte("bestAlready")) {
+		t.Error("src/main.ts still calls bestAlready(); use keptOriginalLabel(item) so the pill names the actual reason")
+	}
+	src := stripTSComments(string(main))
+	for _, want := range []string{"keptOriginalLabel", "keptOriginal()", "bestWithinTarget()", "bestGuardFailed()"} {
+		if !strings.Contains(src, want) {
+			t.Errorf("src/main.ts is missing %s; a passthrough must say why the original was kept", want)
+		}
+	}
+	compressor, err := os.ReadFile("compressor.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, reason := range []string{`"not_smaller"`, `"target_met"`, `"pixels_changed"`} {
+		if !bytes.Contains(compressor, []byte(reason)) {
+			t.Errorf("compressor.go never sets keptOriginalReason %s", reason)
+		}
+	}
+}
