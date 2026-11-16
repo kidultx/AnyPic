@@ -63,52 +63,97 @@ func (s pngFilterStrategy) String() string {
 // / paletted / 16-bit images keep the compact representation the standard
 // library picks for them. For 8-bit truecolour images within the #10 pixel
 // budget it also tries the adaptive policy and all five fixed filters and
-// returns the smallest result.
+// returns the smallest result; the second result is false (no fast mode).
 //
 // The search costs several full BestCompression passes (measured: about 6x
-// one standard-library pass). Above the #10 threshold the standard library
-// answer is returned unchanged: that is the size range where a single pass
-// already costs seconds, and six would be unacceptable.
-func encodePNGLossless(img image.Image) ([]byte, error) {
-	pixels := img.Bounds().Dx() * img.Bounds().Dy()
+// one standard-library pass). Above the #10 threshold a pixel count alone is
+// a poor predictor of that cost: a 6K UI screenshot recompresses in ~0.6s
+// while a 6K photo takes ~30s for a 9% gain (measured on the round-2
+// fixtures). So above the budget the decision is made from the baseline's
+// own compression ratio: content that compressed to at most 1/50 of its raw
+// RGB(A) stream (flat UI, gradients, screenshots) is cheap to search again
+// and gets one Paeth pass at BestCompression; anything denser keeps the
+// baseline and reports fast mode so the page can say the file may not be the
+// smallest possible (round-2 P0-C).
+func encodePNGLossless(img image.Image) ([]byte, bool, error) {
+	b := img.Bounds()
+	pixels := b.Dx() * b.Dy()
 	baseline, err := encodePNGStdlib(img, pngCompressionLevel(pixels))
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
+	searchable := pngSearchable(img)
+	if pixels <= pngBestCompressionMaxPixels {
+		if !searchable {
+			return baseline, false, nil
+		}
+		best := baseline
+		strategies := []pngFilterStrategy{
+			pngFilterAdaptive,
+			pngFilterNone,
+			pngFilterSub,
+			pngFilterUp,
+			pngFilterAverage,
+			pngFilterPaeth,
+		}
+		for _, strategy := range strategies {
+			data, err := encodePNGWithFilter(img, strategy)
+			if err != nil {
+				return nil, false, err
+			}
+			if len(data) < len(best) {
+				best = data
+			}
+		}
+		return best, false, nil
+	}
+
+	if !pngCheapToSearchAgain(img, b, len(baseline)) {
+		return baseline, true, nil
+	}
+	var candidate []byte
+	if searchable {
+		candidate, err = encodePNGWithFilter(img, pngFilterPaeth)
+	} else {
+		candidate, err = encodePNGStdlib(img, png.BestCompression)
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	if len(candidate) < len(baseline) {
+		return candidate, false, nil
+	}
+	return baseline, false, nil
+}
+
+// pngSearchable reports whether the custom filter search can reproduce this
+// image's pixels. It writes 8-bit RGB/RGBA only; greyscale, palette, 16-bit
+// and foreign models (YCbCr, CMYK) keep image/png's own representation.
+func pngSearchable(img image.Image) bool {
 	switch img.ColorModel() {
 	case color.RGBAModel, color.NRGBAModel, color.AlphaModel:
-		// 8-bit truecolour: the same representation encodePNGWithFilter
-		// writes, so its pixels can be preserved exactly.
-	default:
-		// Greyscale, palette, 16-bit and anything else (YCbCr, CMYK, custom
-		// models) keep image/png's own representation. The filter search only
-		// writes 8-bit RGB/RGBA; expanding those images would usually lose
-		// size, and for 16-bit sources it would also change pixels and trip
-		// the §5① guard.
-		return baseline, nil
+		return true
 	}
-	if pixels > pngBestCompressionMaxPixels {
-		return baseline, nil
+	return false
+}
+
+// pngCheapSearchRatio is how much of the raw stream the baseline may take
+// and still be treated as cheap to compress again: 1/50 = 2%. Measured 6K
+// fixtures sit far apart — flat UI 0.5%, gradients 0.6%, a real photo 10%,
+// sensor-like noise 48% — so the split is not near either cluster's edge.
+const pngCheapSearchRatio = 50
+
+// pngCheapToSearchAgain predicts whether another BestCompression pass will
+// finish in well under a second: content that already compressed to at most
+// 2% of its raw bytes did so because it has long runs and few matches, which
+// is exactly the case where zlib's highest level stays cheap.
+func pngCheapToSearchAgain(img image.Image, b image.Rectangle, baselineSize int) bool {
+	bpp := 3
+	if !imageIsOpaque(img) {
+		bpp = 4
 	}
-	best := baseline
-	strategies := []pngFilterStrategy{
-		pngFilterAdaptive,
-		pngFilterNone,
-		pngFilterSub,
-		pngFilterUp,
-		pngFilterAverage,
-		pngFilterPaeth,
-	}
-	for _, strategy := range strategies {
-		data, err := encodePNGWithFilter(img, strategy)
-		if err != nil {
-			return nil, err
-		}
-		if len(data) < len(best) {
-			best = data
-		}
-	}
-	return best, nil
+	raw := int64(b.Dx()) * int64(b.Dy()) * int64(bpp)
+	return int64(baselineSize)*pngCheapSearchRatio <= raw
 }
 
 // encodePNGStdlib is the candidate that preserves image/png's own choice of

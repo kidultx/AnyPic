@@ -12,33 +12,42 @@ import (
 	"image/gif"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/disintegration/imaging"
 	"github.com/gen2brain/webp"
 )
 
-// animationFrameCount reports how many frames a GIF or WebP file holds by
-// walking its file structure — block headers for GIF, RIFF chunks for WebP —
-// without decoding any pixels (issue #7). The old detection decoded every
-// frame just to count them, which stalled AddPaths on folders of animations.
-// Any structural surprise falls back to the decoders, so a miscount is never
-// worse than the old behavior.
+// animationFrameCount reports how many frames a GIF, WebP or APNG file holds
+// by walking its file structure — block headers for GIF, RIFF chunks for
+// WebP, PNG chunks for APNG — without decoding any pixels (issue #7). The old
+// detection decoded every frame just to count them, which stalled AddPaths on
+// folders of animations.
+//
+// Detection is by content, never by extension: a five-frame GIF renamed to
+// .png must still take the animation path instead of being flattened to one
+// frame (round-2 P0-A). Any structural surprise falls back to the decoders,
+// so a miscount is never worse than the old behavior.
 func animationFrameCount(path string) (int, error) {
-	if _, err := os.Stat(path); err != nil {
+	f, err := os.Open(path)
+	if err != nil {
 		return 0, err
 	}
-	switch strings.ToLower(path[strings.LastIndexByte(path, '.'):]) {
-	case ".gif":
-		if n, err := countGIFFrames(path); err == nil {
-			return n, nil
+	var header [12]byte
+	n, _ := io.ReadFull(f, header[:])
+	f.Close()
+	switch {
+	case n >= 6 && string(header[:3]) == "GIF":
+		if frames, err := countGIFFrames(path); err == nil {
+			return frames, nil
 		}
 		return countGIFFramesByDecoding(path)
-	case ".webp":
-		if n, err := countWebPFrames(path); err == nil {
-			return n, nil
+	case n >= 12 && string(header[:4]) == "RIFF" && string(header[8:12]) == "WEBP":
+		if frames, err := countWebPFrames(path); err == nil {
+			return frames, nil
 		}
 		return countWebPFramesByDecoding(path)
+	case n >= 8 && bytes.Equal(header[:8], pngSignature):
+		return countAPNGFrames(path)
 	}
 	return 1, nil
 }
@@ -232,6 +241,54 @@ func countWebPFrames(path string) (int, error) {
 	return frames, nil
 }
 
+// countAPNGFrames walks PNG chunks looking for acTL, the animation control
+// chunk. A static PNG has none and is one frame; an APNG's acTL declares the
+// frame count. The scan is deliberately lenient: a chunk stream this code
+// cannot follow returns 1, and image.DecodeConfig later decides whether the
+// file is usable at all.
+func countAPNGFrames(path string) (int, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+	r := bufio.NewReader(f)
+
+	sig := make([]byte, len(pngSignature))
+	if _, err := io.ReadFull(r, sig); err != nil || !bytes.Equal(sig, pngSignature) {
+		return 0, errors.New("not a PNG")
+	}
+	for {
+		var head [8]byte
+		if _, err := io.ReadFull(r, head[:]); err != nil {
+			return 1, nil
+		}
+		length := int64(binary.BigEndian.Uint32(head[:4]))
+		typ := string(head[4:8])
+		switch typ {
+		case "acTL":
+			// acTL: num_frames (4), num_plays (4), CRC (4).
+			if length != 8 {
+				return 1, nil
+			}
+			var body [12]byte
+			if _, err := io.ReadFull(r, body[:]); err != nil {
+				return 1, nil
+			}
+			frames := int(binary.BigEndian.Uint32(body[0:4]))
+			if frames < 1 {
+				return 1, nil
+			}
+			return frames, nil
+		case "IDAT", "IEND":
+			return 1, nil
+		}
+		if _, err := io.CopyN(io.Discard, r, length+4); err != nil {
+			return 1, nil
+		}
+	}
+}
+
 // compressAnimated converts an animated GIF or WebP into animated WebP,
 // preserving frames, delays, loop count and transparency (#8). Like the
 // still pipeline it is honest about the result: an output that would be
@@ -239,6 +296,17 @@ func countWebPFrames(path string) (int, error) {
 func (a *AnyPic) compressAnimated(ctx context.Context, id int64, path, srcFormat, name string, s Settings) (compressResult, error) {
 	if err := ctx.Err(); err != nil {
 		return compressResult{}, err
+	}
+
+	// The re-encoded container is fresh, so an animated WebP's ICC profile
+	// cannot travel with it. Read the source header now and report the drop
+	// on the result (P0-F); a passthrough keeps the original untouched.
+	meta := sourceMetadata{}
+	if displayFormat(srcFormat) == "WEBP" {
+		if f, err := os.Open(path); err == nil {
+			meta = readSourceMetadata(f, "WEBP")
+			f.Close()
+		}
 	}
 
 	var frames []image.Image
@@ -364,6 +432,7 @@ func (a *AnyPic) compressAnimated(ctx context.Context, id int64, path, srcFormat
 	if target == 0 {
 		quality = 0
 	}
+	_, metadataReport := meta.prepare("WEBP", srcFormat, "RGB")
 	return compressResult{
 		path:          outPath,
 		size:          int64(len(data)),
@@ -372,6 +441,7 @@ func (a *AnyPic) compressAnimated(ctx context.Context, id int64, path, srcFormat
 		width:         width,
 		height:        height,
 		hasAlpha:      true,
+		metadata:      metadataReport,
 		targetBytes:   target,
 		targetQuality: quality,
 		targetMissed:  missed,

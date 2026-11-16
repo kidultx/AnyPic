@@ -9,6 +9,13 @@ export interface AddResult {
   snapshot: Snapshot;
   added: number;
   skipped: SkippedFile[];
+  /**
+   * Overflow is how many supported images were not added because one add
+   * is capped at maxBatchSize. One aggregate number is reported instead of
+   * one SkippedFile per image: a 520-file drop should say "20 over the
+   * limit", not omit them (round-2 P0-D).
+   */
+  overflow: number;
   /** Copied reports that a screenshot was put on the clipboard. */
   copied: boolean;
 }
@@ -166,6 +173,13 @@ export interface Item {
   ssim: number;
   ssimMeasured: boolean;
   /**
+   * LargeImageFastMode reports that a PNG above the pixel budget used the
+   * fast encoding path because a full filter search would cost seconds on
+   * this content. The row says so instead of silently delivering a larger
+   * file (P0-C).
+   */
+  largeImageFastMode: boolean;
+  /**
    * TargetBytes is the per-image cap this result was produced under, or 0
    * when the pass ran in quality mode. TargetQuality is the quality the
    * search settled on (or the fixed quality when PNG could only report a
@@ -204,6 +218,23 @@ export interface MetadataReport {
    * pixels had already been rotated by AutoOrientation.
    */
   orientationReset: boolean;
+  /**
+   * ICCDroppedIncompatible: the source carried an ICC profile whose data
+   * colour space does not match the pixels the output format writes (a
+   * CMYK profile on a 3-channel JPEG, an RGB profile on a grayscale one).
+   * Such a profile was dropped rather than attached to pixels it does not
+   * describe, which would make colour-managed viewers reject or misrender
+   * the file. ICCColorSpace names the source profile's space ("CMYK",
+   * "RGB", "GRAY", ...).
+   */
+  iccDroppedIncompatible: boolean;
+  iccColorSpace?: string;
+  /**
+   * ICCDroppedUnsupported: the source carried an ICC profile but the
+   * output container cannot store one yet (WebP, P0-F). The profile was
+   * dropped and is reported instead of vanishing silently.
+   */
+  iccDroppedUnsupported: boolean;
   /**
    * Dropped: metadata the source carried but the output could not keep
    * (XMP, IPTC, comments, PNG text chunks, or EXIF/ICC when the output

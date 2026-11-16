@@ -1402,6 +1402,46 @@ func (msgs Messages) KeptOriginalTitle() string {
 	return Catalog.Format(msgs.locale, "keptOriginalTitle", nil)
 }
 
+// KeptAnimatedPNG says "APNG 保留原图"
+// in the language the app shows.
+func KeptAnimatedPNG() string { return In(i18n.Locale()).KeptAnimatedPNG() }
+
+// KeptAnimatedPNG says "APNG 保留原图"
+// in the language of msgs.
+func (msgs Messages) KeptAnimatedPNG() string {
+	return Catalog.Format(msgs.locale, "keptAnimatedPNG", nil)
+}
+
+// KeptAnimatedPNGTitle says "动图 PNG（APNG）暂不支持转为动画 WebP，已保留原图，帧数与动画均未改动"
+// in the language the app shows.
+func KeptAnimatedPNGTitle() string { return In(i18n.Locale()).KeptAnimatedPNGTitle() }
+
+// KeptAnimatedPNGTitle says "动图 PNG（APNG）暂不支持转为动画 WebP，已保留原图，帧数与动画均未改动"
+// in the language of msgs.
+func (msgs Messages) KeptAnimatedPNGTitle() string {
+	return Catalog.Format(msgs.locale, "keptAnimatedPNGTitle", nil)
+}
+
+// KeptColorSpace says "CMYK 保留原图"
+// in the language the app shows.
+func KeptColorSpace() string { return In(i18n.Locale()).KeptColorSpace() }
+
+// KeptColorSpace says "CMYK 保留原图"
+// in the language of msgs.
+func (msgs Messages) KeptColorSpace() string {
+	return Catalog.Format(msgs.locale, "keptColorSpace", nil)
+}
+
+// KeptColorSpaceTitle says "CMYK 色彩空间暂不支持在本机安全转换，已保留原图（含其色彩配置），颜色未改动"
+// in the language the app shows.
+func KeptColorSpaceTitle() string { return In(i18n.Locale()).KeptColorSpaceTitle() }
+
+// KeptColorSpaceTitle says "CMYK 色彩空间暂不支持在本机安全转换，已保留原图（含其色彩配置），颜色未改动"
+// in the language of msgs.
+func (msgs Messages) KeptColorSpaceTitle() string {
+	return Catalog.Format(msgs.locale, "keptColorSpaceTitle", nil)
+}
+
 // BestWithinTarget says "已在目标内"
 // in the language the app shows.
 func BestWithinTarget() string { return In(i18n.Locale()).BestWithinTarget() }
@@ -1644,6 +1684,26 @@ func (msgs Messages) SavedPercent(pct string) string {
 	return Catalog.Format(msgs.locale, "savedPercent", map[string]any{"pct": pct})
 }
 
+// LargeImageFastMode says "大图快速模式"
+// in the language the app shows.
+func LargeImageFastMode() string { return In(i18n.Locale()).LargeImageFastMode() }
+
+// LargeImageFastMode says "大图快速模式"
+// in the language of msgs.
+func (msgs Messages) LargeImageFastMode() string {
+	return Catalog.Format(msgs.locale, "largeImageFastMode", nil)
+}
+
+// LargeImageFastModeTitle says "PNG 超过 1600 …"
+// in the language the app shows.
+func LargeImageFastModeTitle() string { return In(i18n.Locale()).LargeImageFastModeTitle() }
+
+// LargeImageFastModeTitle says "PNG 超过 1600 …"
+// in the language of msgs.
+func (msgs Messages) LargeImageFastModeTitle() string {
+	return Catalog.Format(msgs.locale, "largeImageFastModeTitle", nil)
+}
+
 // GrewPercent says "增大 {pct}%"
 // in the language the app shows.
 func GrewPercent(pct string) string { return In(i18n.Locale()).GrewPercent(pct) }
@@ -1758,6 +1818,30 @@ func AddedWithSkipped(n int, skipped int) string {
 // in the language of msgs.
 func (msgs Messages) AddedWithSkipped(n int, skipped int) string {
 	return Catalog.Format(msgs.locale, "addedWithSkipped", map[string]any{"n": n, "skipped": skipped})
+}
+
+// SkippedSummary says "{n, plural, other {# 个文件未添加：{reasons}}}"
+// in the language the app shows.
+func SkippedSummary(n int, reasons string) string {
+	return In(i18n.Locale()).SkippedSummary(n, reasons)
+}
+
+// SkippedSummary says "{n, plural, other {# 个文件未添加：{reasons}}}"
+// in the language of msgs.
+func (msgs Messages) SkippedSummary(n int, reasons string) string {
+	return Catalog.Format(msgs.locale, "skippedSummary", map[string]any{"n": n, "reasons": reasons})
+}
+
+// SkippedReasonCount says "「{reason}」×{count}"
+// in the language the app shows.
+func SkippedReasonCount(reason string, count int) string {
+	return In(i18n.Locale()).SkippedReasonCount(reason, count)
+}
+
+// SkippedReasonCount says "「{reason}」×{count}"
+// in the language of msgs.
+func (msgs Messages) SkippedReasonCount(reason string, count int) string {
+	return Catalog.Format(msgs.locale, "skippedReasonCount", map[string]any{"reason": reason, "count": count})
 }
 
 // SkippedFile says "{name}：{reason}"
@@ -3012,6 +3096,28 @@ func (msgs Messages) MetadataICCKept() string {
 	return Catalog.Format(msgs.locale, "metadataICCKept", nil)
 }
 
+// MetadataICCDroppedIncompatible says "不兼容的 {space} ICC 已移除"
+// in the language the app shows.
+func MetadataICCDroppedIncompatible(space string) string {
+	return In(i18n.Locale()).MetadataICCDroppedIncompatible(space)
+}
+
+// MetadataICCDroppedIncompatible says "不兼容的 {space} ICC 已移除"
+// in the language of msgs.
+func (msgs Messages) MetadataICCDroppedIncompatible(space string) string {
+	return Catalog.Format(msgs.locale, "metadataICCDroppedIncompatible", map[string]any{"space": space})
+}
+
+// MetadataICCDroppedUnsupported says "ICC 未写入（WebP）"
+// in the language the app shows.
+func MetadataICCDroppedUnsupported() string { return In(i18n.Locale()).MetadataICCDroppedUnsupported() }
+
+// MetadataICCDroppedUnsupported says "ICC 未写入（WebP）"
+// in the language of msgs.
+func (msgs Messages) MetadataICCDroppedUnsupported() string {
+	return Catalog.Format(msgs.locale, "metadataICCDroppedUnsupported", nil)
+}
+
 // MetadataEXIFKept says "EXIF"
 // in the language the app shows.
 func MetadataEXIFKept() string { return In(i18n.Locale()).MetadataEXIFKept() }
@@ -3910,6 +4016,16 @@ func GoSkippedTooMany() string { return In(i18n.Locale()).GoSkippedTooMany() }
 // in the language of msgs.
 func (msgs Messages) GoSkippedTooMany() string {
 	return Catalog.Format(msgs.locale, "goSkippedTooMany", nil)
+}
+
+// GoSkippedTooManyCount says "{n, plural, other {# 张超出单次 500 张上限}}"
+// in the language the app shows.
+func GoSkippedTooManyCount(n int) string { return In(i18n.Locale()).GoSkippedTooManyCount(n) }
+
+// GoSkippedTooManyCount says "{n, plural, other {# 张超出单次 500 张上限}}"
+// in the language of msgs.
+func (msgs Messages) GoSkippedTooManyCount(n int) string {
+	return Catalog.Format(msgs.locale, "goSkippedTooManyCount", map[string]any{"n": n})
 }
 
 // GoSkippedUnreadable says "无法读取文件"
