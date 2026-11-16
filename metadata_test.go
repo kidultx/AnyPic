@@ -245,6 +245,7 @@ func TestPNGICCProfileSurvivesReencode(t *testing.T) {
 	for i := range profile {
 		profile[i] = byte(i * 7)
 	}
+	copy(profile[16:20], "RGB ") // valid ICC header: RGB data colour space
 	sourceChunk := writePNGWithICC(t, src, gradientImage(320, 240, false), profile)
 
 	service := &AnyPic{tempDir: t.TempDir()}
@@ -281,6 +282,7 @@ func TestJPEGMetadataSelective(t *testing.T) {
 	for i := range profile {
 		profile[i] = byte(255 - i)
 	}
+	copy(profile[16:20], "RGB ")
 	_, sourceICC, gpsValues := writeJPEGWithEXIFAndICC(t, src, gradientImage(640, 480, false), 95, 6, profile)
 
 	service := &AnyPic{tempDir: t.TempDir()}
@@ -413,23 +415,23 @@ func TestLosslessGuardKeepsOriginalWhenPixelsChange(t *testing.T) {
 
 	original := pngLosslessEncode
 	defer func() { pngLosslessEncode = original }()
-	pngLosslessEncode = func(img image.Image) ([]byte, error) {
+	pngLosslessEncode = func(img image.Image) ([]byte, bool, error) {
 		var encoded bytes.Buffer
 		if err := png.Encode(&encoded, img); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		decoded, err := png.Decode(bytes.NewReader(encoded.Bytes()))
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		changed := image.NewNRGBA(decoded.Bounds())
 		draw.Draw(changed, changed.Bounds(), decoded, decoded.Bounds().Min, draw.Src)
 		changed.SetNRGBA(0, 0, color.NRGBA{R: 255, G: 0, B: 255, A: 255})
 		encoded.Reset()
 		if err := png.Encode(&encoded, changed); err != nil {
-			return nil, err
+			return nil, false, err
 		}
-		return encoded.Bytes(), nil
+		return encoded.Bytes(), false, nil
 	}
 
 	service := &AnyPic{tempDir: t.TempDir()}
@@ -454,23 +456,23 @@ func TestLosslessGuardFailsCrossFormatHonestly(t *testing.T) {
 
 	original := pngLosslessEncode
 	defer func() { pngLosslessEncode = original }()
-	pngLosslessEncode = func(img image.Image) ([]byte, error) {
+	pngLosslessEncode = func(img image.Image) ([]byte, bool, error) {
 		var encoded bytes.Buffer
 		if err := png.Encode(&encoded, img); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		decoded, err := png.Decode(bytes.NewReader(encoded.Bytes()))
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		changed := image.NewNRGBA(decoded.Bounds())
 		draw.Draw(changed, changed.Bounds(), decoded, decoded.Bounds().Min, draw.Src)
 		changed.SetNRGBA(0, 0, color.NRGBA{R: 1, G: 2, B: 3, A: 255})
 		encoded.Reset()
 		if err := png.Encode(&encoded, changed); err != nil {
-			return nil, err
+			return nil, false, err
 		}
-		return encoded.Bytes(), nil
+		return encoded.Bytes(), false, nil
 	}
 
 	service := &AnyPic{tempDir: t.TempDir()}
@@ -518,7 +520,7 @@ func TestPassthroughReasons(t *testing.T) {
 
 func TestLosslessGuardAcceptsExactPixels(t *testing.T) {
 	src := gradientImage(64, 48, true)
-	data, err := pngLosslessEncode(src)
+	data, _, err := pngLosslessEncode(src)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -661,6 +663,7 @@ func TestJPEGTargetBudgetIncludesMetadata(t *testing.T) {
 	for i := range profile {
 		profile[i] = byte(i)
 	}
+	copy(profile[16:20], "RGB ")
 	writeJPEGWithEXIFAndICC(t, src, gradientImage(640, 480, false), 95, 1, profile)
 
 	const target = 40 << 10

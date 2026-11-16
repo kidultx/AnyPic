@@ -15,6 +15,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"compress/zlib"
 	"encoding/binary"
 	"image"
 	"image/color"
@@ -38,6 +39,19 @@ type MetadataReport struct {
 	// OrientationReset: EXIF Orientation was rewritten to 1 because the
 	// pixels had already been rotated by AutoOrientation.
 	OrientationReset bool `json:"orientationReset"`
+	// ICCDroppedIncompatible: the source carried an ICC profile whose data
+	// colour space does not match the pixels the output format writes (a
+	// CMYK profile on a 3-channel JPEG, an RGB profile on a grayscale one).
+	// Such a profile was dropped rather than attached to pixels it does not
+	// describe, which would make colour-managed viewers reject or misrender
+	// the file. ICCColorSpace names the source profile's space ("CMYK",
+	// "RGB", "GRAY", ...).
+	ICCDroppedIncompatible bool   `json:"iccDroppedIncompatible"`
+	ICCColorSpace          string `json:"iccColorSpace,omitempty"`
+	// ICCDroppedUnsupported: the source carried an ICC profile but the
+	// output container cannot store one yet (WebP, P0-F). The profile was
+	// dropped and is reported instead of vanishing silently.
+	ICCDroppedUnsupported bool `json:"iccDroppedUnsupported"`
 	// Dropped: metadata the source carried but the output could not keep
 	// (XMP, IPTC, comments, PNG text chunks, or EXIF/ICC when the output
 	// format cannot hold the source's representation).
@@ -57,10 +71,16 @@ type jpegICCSegment struct {
 type sourceMetadata struct {
 	pngICCChunk []byte
 	jpegICC     []jpegICCSegment
-	exif        []byte
-	hadEXIF     bool
-	hadICC      bool
-	hadOther    bool
+	webpICC     []byte
+	// iccSpace is the data colour space declared by the ICC profile header
+	// ("RGB", "GRAY", "CMYK", ...), or "" when the profile is absent or its
+	// header cannot be read. Output pixels must describe the same space
+	// before the profile is carried over (P0-B).
+	iccSpace string
+	exif     []byte
+	hadEXIF  bool
+	hadICC   bool
+	hadOther bool
 }
 
 // stillMetadata is the part of the source's metadata that will be written
@@ -84,6 +104,8 @@ func readSourceMetadata(f *os.File, srcFormat string) sourceMetadata {
 		return readPNGMetadata(f)
 	case "JPEG":
 		return readJPEGMetadata(f)
+	case "WEBP":
+		return readWebPMetadata(f)
 	}
 	return sourceMetadata{}
 }
@@ -127,6 +149,7 @@ func readPNGMetadata(r io.Reader) sourceMetadata {
 			chunk = append(chunk, data...)
 			chunk = append(chunk, crc[:]...)
 			meta.pngICCChunk = chunk
+			meta.iccSpace = pngICCColorSpace(chunk)
 			meta.hadICC = true
 			continue
 		}
@@ -148,6 +171,87 @@ func readPNGMetadata(r io.Reader) sourceMetadata {
 			return meta
 		}
 	}
+}
+
+// pngICCColorSpace decompresses an iCCP chunk just far enough to read the
+// ICC header's data colour space. The chunk is stored deflated (name\0
+// method\0 profile), so the header bytes are not visible in the file. A
+// profile this code cannot open yields "", which makes prepare drop it.
+func pngICCColorSpace(chunk []byte) string {
+	if len(chunk) < 12 || string(chunk[4:8]) != "iCCP" {
+		return ""
+	}
+	data := chunk[8 : len(chunk)-4]
+	nameEnd := bytes.IndexByte(data, 0)
+	if nameEnd < 1 || nameEnd+2 > len(data) || data[nameEnd+1] != 0 {
+		return ""
+	}
+	zr, err := zlib.NewReader(bytes.NewReader(data[nameEnd+2:]))
+	if err != nil {
+		return ""
+	}
+	defer zr.Close()
+	var header [20]byte
+	if _, err := io.ReadFull(zr, header[:]); err != nil {
+		return ""
+	}
+	return iccColorSpace(header[:])
+}
+
+// readWebPMetadata walks the RIFF chunk list. The encoder writes a fresh
+// container, so ICC/EXIF/XMP chunks are never copied into the output; this
+// scan exists so the drop is reported (P0-F) instead of silent.
+func readWebPMetadata(r io.Reader) sourceMetadata {
+	var meta sourceMetadata
+	header := make([]byte, 12)
+	if _, err := io.ReadFull(r, header); err != nil || string(header[:4]) != "RIFF" || string(header[8:12]) != "WEBP" {
+		return meta
+	}
+	payload := int64(binary.LittleEndian.Uint32(header[4:8])) - 4
+	var pos int64
+	for pos+8 <= payload {
+		var head [8]byte
+		if _, err := io.ReadFull(r, head[:]); err != nil {
+			return meta
+		}
+		id := string(head[:4])
+		size := int64(binary.LittleEndian.Uint32(head[4:8]))
+		pos += 8
+		if size < 0 || pos+size > payload {
+			return meta
+		}
+		padded := size + size%2
+		switch id {
+		case "ICCP":
+			meta.hadICC = true
+			if size <= 16<<20 {
+				data := make([]byte, size)
+				if _, err := io.ReadFull(r, data); err != nil {
+					return meta
+				}
+				meta.webpICC = data
+				meta.iccSpace = iccColorSpace(data)
+				if size%2 == 1 {
+					if _, err := io.CopyN(io.Discard, r, 1); err != nil {
+						return meta
+					}
+				}
+			} else if _, err := io.CopyN(io.Discard, r, padded); err != nil {
+				return meta
+			}
+		case "EXIF", "XMP ":
+			meta.hadOther = true
+			if _, err := io.CopyN(io.Discard, r, padded); err != nil {
+				return meta
+			}
+		default:
+			if _, err := io.CopyN(io.Discard, r, padded); err != nil {
+				return meta
+			}
+		}
+		pos += padded
+	}
+	return meta
 }
 
 // readJPEGMetadata walks the marker segments before the scan data. APP1
@@ -221,6 +325,9 @@ func readJPEGMetadata(r io.Reader) sourceMetadata {
 			if seg, ok := parseICCSegment(payload, lb); ok {
 				meta.hadICC = true
 				meta.jpegICC = append(meta.jpegICC, seg)
+				if seg.seq == 1 {
+					meta.iccSpace = jpegICCColorSpace(seg.raw)
+				}
 			} else {
 				meta.hadOther = true
 			}
@@ -248,19 +355,82 @@ func parseICCSegment(payload []byte, length [2]byte) (jpegICCSegment, bool) {
 	}, true
 }
 
+// jpegICCColorSpace reads the ICC header from the first APP2 segment: marker
+// (2) + length (2) + "ICC_PROFILE\0" (12) + sequence (1) + total (1), then
+// the profile itself.
+func jpegICCColorSpace(raw []byte) string {
+	const profileStart = 4 + 12 + 2
+	if len(raw) < profileStart+20 {
+		return ""
+	}
+	return iccColorSpace(raw[profileStart : profileStart+20])
+}
+
+// iccColorSpace reads the data colour space signature at bytes 16–20 of an
+// ICC profile header. An unrecognised space is returned trimmed so the report
+// can still name it; a missing header returns "".
+func iccColorSpace(profile []byte) string {
+	if len(profile) < 20 {
+		return ""
+	}
+	switch string(profile[16:20]) {
+	case "RGB ":
+		return "RGB"
+	case "GRAY":
+		return "GRAY"
+	case "CMYK":
+		return "CMYK"
+	}
+	return strings.TrimSpace(string(profile[16:20]))
+}
+
+// outputColorSpace names the colour space the encoder will write for img. It
+// must mirror what the encoders actually produce: only a grayscale image
+// stays grayscale; image/png keeps paletted images in RGB, and every other
+// model goes through the 8-bit RGB/RGBA path (png_lossless.go) or YCbCr
+// (image/jpeg). A profile is carried only when its space equals this one.
+func outputColorSpace(outFormat string, img image.Image) string {
+	switch outFormat {
+	case "PNG":
+		switch img.(type) {
+		case *image.Gray, *image.Gray16:
+			return "GRAY"
+		}
+		return "RGB"
+	case "JPEG":
+		// image/jpeg writes single-channel data only for *image.Gray.
+		if _, ok := img.(*image.Gray); ok {
+			return "GRAY"
+		}
+		return "RGB"
+	case "WEBP":
+		return "RGB"
+	}
+	return ""
+}
+
 // prepare decides what the output format can keep from the source. Only
 // same-format re-encodes copy the source's representation; converting
 // between PNG and JPEG would need a colour-space-aware profile rewrite, and
 // silently inventing one is worse than reporting the drop.
-func (m sourceMetadata) prepare(outFormat, srcFormat string) (stillMetadata, *MetadataReport) {
+//
+// outputSpace is the colour space the encoded pixels will carry. An ICC
+// profile whose own space differs is dropped and reported: attaching a CMYK
+// profile to 3-channel YCbCr writes a file colour-managed viewers cannot
+// render (P0-B), and the same rule covers grayscale sources carrying an RGB
+// profile.
+func (m sourceMetadata) prepare(outFormat, srcFormat, outputSpace string) (stillMetadata, *MetadataReport) {
 	var out stillMetadata
 	report := MetadataReport{}
 	same := strings.EqualFold(outFormat, srcFormat)
+	iccCompatible := m.iccSpace != "" && strings.EqualFold(m.iccSpace, outputSpace)
 
 	switch {
 	case outFormat == "PNG" && same:
-		out.pngICCChunk = m.pngICCChunk
-		report.ICCKept = len(out.pngICCChunk) > 0
+		if iccCompatible {
+			out.pngICCChunk = m.pngICCChunk
+			report.ICCKept = len(out.pngICCChunk) > 0
+		}
 	case outFormat == "JPEG" && same:
 		if len(m.exif) > 0 {
 			// An EXIF block we cannot parse is dropped whole: keeping it
@@ -272,14 +442,24 @@ func (m sourceMetadata) prepare(outFormat, srcFormat string) (stillMetadata, *Me
 				report.OrientationReset = orientation
 			}
 		}
-		if segments, ok := completeICC(m.jpegICC); ok {
+		if segments, ok := completeICC(m.jpegICC); ok && iccCompatible {
 			out.jpegSegments = segments
 			report.ICCKept = len(segments) > 0
 		}
+	case outFormat == "WEBP":
+		// The encoder writes a fresh RIFF container and AnyPic does not
+		// rewrite metadata chunks into it, so a source ICC cannot travel
+		// (P0-F). It is reported below instead of disappearing silently.
 	}
 
-	if !report.ICCKept && m.hadICC {
+	if m.hadICC && !report.ICCKept {
 		report.Dropped = true
+		if outFormat == "WEBP" {
+			report.ICCDroppedUnsupported = true
+		} else if m.iccSpace != "" && !iccCompatible {
+			report.ICCDroppedIncompatible = true
+			report.ICCColorSpace = m.iccSpace
+		}
 	}
 	if !report.EXIFKept && m.hadEXIF {
 		report.Dropped = true

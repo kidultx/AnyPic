@@ -487,7 +487,7 @@ func TestIssue15PassthroughKeepsTransparency(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "logo.png")
 	img := logoImage(400, 300)
-	data, err := encodePNGLossless(img)
+	data, _, err := encodePNGLossless(img)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -592,17 +592,17 @@ func TestCollectImagesRecursesAndSkips(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	paths, skipped := collectImages([]string{dir})
+	paths, skipped, overflow := collectImages([]string{dir})
 	if len(paths) != 2 {
 		t.Fatalf("got %d images: %v", len(paths), paths)
 	}
-	if len(skipped) != 0 {
-		t.Fatalf("unexpected skipped files: %v", skipped)
+	if len(skipped) != 0 || overflow != 0 {
+		t.Fatalf("unexpected skipped files: %v (overflow %d)", skipped, overflow)
 	}
 
-	paths, skipped = collectImages([]string{filepath.Join(dir, "notes.txt")})
-	if len(paths) != 0 || len(skipped) != 1 {
-		t.Fatalf("paths=%v skipped=%v", paths, skipped)
+	paths, skipped, overflow = collectImages([]string{filepath.Join(dir, "notes.txt")})
+	if len(paths) != 0 || len(skipped) != 1 || overflow != 0 {
+		t.Fatalf("paths=%v skipped=%v overflow=%d", paths, skipped, overflow)
 	}
 }
 

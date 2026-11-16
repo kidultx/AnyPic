@@ -324,6 +324,7 @@ function applyDemoState(browserPreview = false) {
       animated: false,
       ssim: ready ? 0 : 0.978,
       ssimMeasured: !ready,
+      largeImageFastMode: false,
       targetQuality: 0,
     };
   });
@@ -533,7 +534,7 @@ function qualityTier(ssim: number): { label: string; className: string } {
   return { label: t.qualityVisibleLoss(), className: "visible" };
 }
 
-/* A passthrough keeps the original for one of three reasons, and the pill
+/* A passthrough keeps the original for one of five reasons, and the pill
    must say which one. "Already optimal" was the old word for all of them; it
    was a claim about the original, not about this run, and it was wrong
    whenever another encoder could still beat us. The new words only describe
@@ -544,6 +545,10 @@ function keptOriginalLabel(item: Item): { label: string; title: string } {
       return { label: t.bestWithinTarget(), title: t.bestWithinTargetTitle() };
     case "pixels_changed":
       return { label: t.bestGuardFailed(), title: t.bestGuardFailedTitle() };
+    case "animated_png":
+      return { label: t.keptAnimatedPNG(), title: t.keptAnimatedPNGTitle() };
+    case "color_space":
+      return { label: t.keptColorSpace(), title: t.keptColorSpaceTitle() };
     default:
       return { label: t.keptOriginal(), title: t.keptOriginalTitle() };
   }
@@ -852,10 +857,17 @@ function updateRow(row: HTMLElement, item: Item) {
   const metadataChip = metadata
     ? `<span class="output-format" title="${esc(metadata.title)}">${esc(metadata.text)}</span>`
     : "";
+  // A large PNG can have skipped the full filter search because it would cost
+  // seconds; the row says so rather than letting the user believe this is the
+  // smallest possible file (P0-C).
+  const fastModeChip =
+    item.status === "done" && item.largeImageFastMode
+      ? `<span class="output-format" title="${esc(t.largeImageFastModeTitle())}">${esc(t.largeImageFastMode())}</span>`
+      : "";
   meta.innerHTML = `<span class="format-chip ${esc(formatClass)}">${esc(item.format || "IMG")}</span><span>${formatDimensions(
     item.width,
     item.height,
-  )}</span>${animated}${output}${metadataChip}`;
+  )}</span>${animated}${output}${metadataChip}${fastModeChip}`;
 
   const error = row.querySelector<HTMLElement>(".item-error")!;
   if (item.status === "error" && item.error) {
@@ -1566,6 +1578,26 @@ function queueOpenedPaths(paths: string[]) {
   }, 60);
 }
 
+/* A skipped-file toast used to name only skipped[0]; dropping 520 files then
+   looked like a one-file problem, and a few hundred identical reasons buried
+   the detail anyway. Count by reason, add the aggregate overflow count, and
+   say the whole story (P0-D/P0-E). */
+function notAddedSummary(result: AddResult): string {
+  const counts = new Map<string, number>();
+  for (const skip of result.skipped) {
+    counts.set(skip.reason, (counts.get(skip.reason) ?? 0) + 1);
+  }
+  const parts = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([reason, count]) => (count > 1 ? t.skippedReasonCount(reason, count) : reason));
+  if (result.overflow > 0) parts.push(t.goSkippedTooManyCount(result.overflow));
+  if (result.skipped.length === 1 && result.overflow === 0) {
+    const only = result.skipped[0]!;
+    return t.skippedFile(only.name, only.reason);
+  }
+  return t.skippedSummary(result.skipped.length + result.overflow, parts.join(" · "));
+}
+
 function applyAddResult(result: AddResult, source: AddSource = "files"): void {
   const known = new Set(items.map((item) => item.id));
   applySnapshot(result.snapshot, false);
@@ -1580,26 +1612,22 @@ function applyAddResult(result: AddResult, source: AddSource = "files"): void {
   // during compression" — no replacement pass, no wrong attribution.
   const pipeline = capture && screenshotPipelineEnabled() && result.copied;
   const auto = !demoMode && result.added > 0 && (pipeline || autoProcessEnabled());
+  const notAdded = result.skipped.length + result.overflow;
 
   if (result.added > 0) {
     // The automatic flow folds the addition into one merged completion
     // toast; a separate "added" toast on top would just be noise.
     if (!auto) {
-      showToast(
-        result.skipped.length ? t.addedWithSkipped(result.added, result.skipped.length) : t.added(result.added),
-        "success",
-      );
+      showToast(notAdded ? t.addedWithSkipped(result.added, notAdded) : t.added(result.added), "success");
     }
-    if (result.skipped.length > 0) {
-      const first = result.skipped[0]!;
-      showToast(t.skippedFile(first.name, first.reason), "info");
+    if (notAdded > 0) {
+      showToast(notAddedSummary(result), "info");
     }
     if (!auto) {
       setTimeout(() => $("#queueScroll").scrollTo({ top: $("#queueScroll").scrollHeight, behavior: "smooth" }), 100);
     }
-  } else if (result.skipped.length > 0) {
-    const first = result.skipped[0]!;
-    showToast(t.skippedFile(first.name, first.reason), "error");
+  } else if (notAdded > 0) {
+    showToast(notAddedSummary(result), "error");
   }
 
   renderAll();

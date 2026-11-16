@@ -35,7 +35,7 @@ func TestPNGLosslessBeatsStdlibOnBenchmark(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			got, err := encodePNGLossless(img)
+			got, _, err := encodePNGLossless(img)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -87,7 +87,7 @@ func TestPNGLosslessTinyImagesDoNotPanic(t *testing.T) {
 		cases[3].img.(*image.NRGBA).SetNRGBA(0, y, color.NRGBA{R: uint8(y), G: 0, B: 0, A: 0xFF})
 	}
 	for _, c := range cases {
-		data, err := encodePNGLossless(c.img)
+		data, _, err := encodePNGLossless(c.img)
 		if err != nil {
 			t.Fatalf("%s: %v", c.name, err)
 		}
@@ -199,7 +199,7 @@ func TestPNGLosslessFeasibility(t *testing.T) {
 			}
 		}
 		saved := float64(baselineSize-bestSize) / float64(baselineSize) * 100
-		best, err := encodePNGLossless(img)
+		best, _, err := encodePNGLossless(img)
 		if err != nil {
 			t.Fatal(err)
 		}

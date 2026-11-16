@@ -548,6 +548,22 @@ export interface Messages {
    */
   keptOriginalTitle(): string;
   /**
+   * `APNG 保留原图`
+   */
+  keptAnimatedPNG(): string;
+  /**
+   * `动图 PNG（APNG）暂不支持转为动画 WebP，已保留原图，帧数与动画均未改动`
+   */
+  keptAnimatedPNGTitle(): string;
+  /**
+   * `CMYK 保留原图`
+   */
+  keptColorSpace(): string;
+  /**
+   * `CMYK 色彩空间暂不支持在本机安全转换，已保留原图（含其色彩配置），颜色未改动`
+   */
+  keptColorSpaceTitle(): string;
+  /**
    * `已在目标内`
    */
   bestWithinTarget(): string;
@@ -644,6 +660,14 @@ export interface Messages {
    */
   savedPercent(pct: string): string;
   /**
+   * `大图快速模式`
+   */
+  largeImageFastMode(): string;
+  /**
+   * `PNG 超过 1600 万像素且内容不易压缩，已采用快速编码（压缩级别较低、跳过过滤器搜索）；体积可能不是最小`
+   */
+  largeImageFastModeTitle(): string;
+  /**
    * `增大 {pct}%`
    */
   grewPercent(pct: string): string;
@@ -687,6 +711,14 @@ export interface Messages {
    * `{n, plural, other {已添加 # 张图片}}{skipped, plural, other {，跳过 # 个文件}}`
    */
   addedWithSkipped(n: number, skipped: number): string;
+  /**
+   * `{n, plural, other {# 个文件未添加：{reasons}}}`
+   */
+  skippedSummary(n: number, reasons: string): string;
+  /**
+   * `「{reason}」×{count}`
+   */
+  skippedReasonCount(reason: string, count: number): string;
   /**
    * `{name}：{reason}`
    */
@@ -1180,6 +1212,14 @@ export interface Messages {
    */
   metadataICCKept(): string;
   /**
+   * `不兼容的 {space} ICC 已移除`
+   */
+  metadataICCDroppedIncompatible(space: string): string;
+  /**
+   * `ICC 未写入（WebP）`
+   */
+  metadataICCDroppedUnsupported(): string;
+  /**
    * `EXIF`
    */
   metadataEXIFKept(): string;
@@ -1539,6 +1579,10 @@ export interface Messages {
    * `一次最多添加 500 张图片`
    */
   goSkippedTooMany(): string;
+  /**
+   * `{n, plural, other {# 张超出单次 500 张上限}}`
+   */
+  goSkippedTooManyCount(n: number): string;
   /**
    * `无法读取文件`
    */
@@ -1997,6 +2041,10 @@ const catalog = createCatalog<Messages>({
     "itemWaiting": [],
     "keptOriginal": [],
     "keptOriginalTitle": [],
+    "keptAnimatedPNG": [],
+    "keptAnimatedPNGTitle": [],
+    "keptColorSpace": [],
+    "keptColorSpaceTitle": [],
     "bestWithinTarget": [],
     "bestWithinTargetTitle": [],
     "bestGuardFailed": [],
@@ -2021,6 +2069,8 @@ const catalog = createCatalog<Messages>({
     "ready": [],
     "compressingProgress": ["done", "total"],
     "savedPercent": ["pct"],
+    "largeImageFastMode": [],
+    "largeImageFastModeTitle": [],
     "grewPercent": ["pct"],
     "savedTo": ["count", "target", "savings"],
     "savedAlongside": ["count", "savings"],
@@ -2032,6 +2082,8 @@ const catalog = createCatalog<Messages>({
     "imageActions": [],
     "added": ["n"],
     "addedWithSkipped": ["n", "skipped"],
+    "skippedSummary": ["n", "reasons"],
+    "skippedReasonCount": ["reason", "count"],
     "skippedFile": ["name", "reason"],
     "unableOpenFolder": [],
     "screenshotShortcutInactive": ["shortcut"],
@@ -2155,6 +2207,8 @@ const catalog = createCatalog<Messages>({
     "nextImage": [],
     "previewKeptOriginal": [],
     "metadataICCKept": [],
+    "metadataICCDroppedIncompatible": ["space"],
+    "metadataICCDroppedUnsupported": [],
     "metadataEXIFKept": [],
     "metadataGPSRemoved": [],
     "metadataOrientationReset": [],
@@ -2245,6 +2299,7 @@ const catalog = createCatalog<Messages>({
     "goDialogExportImageTitle": [],
     "goDialogExportButton": [],
     "goSkippedTooMany": [],
+    "goSkippedTooManyCount": ["n"],
     "goSkippedUnreadable": [],
     "goSkippedTooLarge": [],
     "goSkippedUnsupported": [],
@@ -2462,6 +2517,10 @@ const catalog = createCatalog<Messages>({
       "itemWaiting": "待处理",
       "keptOriginal": "未压小",
       "keptOriginalTitle": "重新编码没有更小，保留了原图；这不代表原图已是最优",
+      "keptAnimatedPNG": "APNG 保留原图",
+      "keptAnimatedPNGTitle": "动图 PNG（APNG）暂不支持转为动画 WebP，已保留原图，帧数与动画均未改动",
+      "keptColorSpace": "CMYK 保留原图",
+      "keptColorSpaceTitle": "CMYK 色彩空间暂不支持在本机安全转换，已保留原图（含其色彩配置），颜色未改动",
       "bestWithinTarget": "已在目标内",
       "bestWithinTargetTitle": "原图已在目标体积内，无需重新编码",
       "bestGuardFailed": "保留原图",
@@ -2486,6 +2545,8 @@ const catalog = createCatalog<Messages>({
       "ready": "准备就绪",
       "compressingProgress": "正在压缩，{done} / {total}",
       "savedPercent": "省 {pct}%",
+      "largeImageFastMode": "大图快速模式",
+      "largeImageFastModeTitle": "PNG 超过 1600 万像素且内容不易压缩，已采用快速编码（压缩级别较低、跳过过滤器搜索）；体积可能不是最小",
       "grewPercent": "增大 {pct}%",
       "savedTo": "{count, plural, other {已保存 # 张到 {target} · {savings}}}",
       "savedAlongside": "{count, plural, other {已保存 # 张到原图旁边 · {savings}}}",
@@ -2497,6 +2558,8 @@ const catalog = createCatalog<Messages>({
       "imageActions": "图片操作",
       "added": "{n, plural, other {已添加 # 张图片}}",
       "addedWithSkipped": "{n, plural, other {已添加 # 张图片}}{skipped, plural, other {，跳过 # 个文件}}",
+      "skippedSummary": "{n, plural, other {# 个文件未添加：{reasons}}}",
+      "skippedReasonCount": "「{reason}」×{count}",
       "skippedFile": "{name}：{reason}",
       "unableOpenFolder": "无法打开文件夹",
       "screenshotShortcutInactive": "截图快捷键 {shortcut} 未生效，可能已被其他应用占用",
@@ -2620,6 +2683,8 @@ const catalog = createCatalog<Messages>({
       "nextImage": "下一张（→）",
       "previewKeptOriginal": "未压得更小，保留原图",
       "metadataICCKept": "ICC",
+      "metadataICCDroppedIncompatible": "不兼容的 {space} ICC 已移除",
+      "metadataICCDroppedUnsupported": "ICC 未写入（WebP）",
       "metadataEXIFKept": "EXIF",
       "metadataGPSRemoved": "GPS 已移除",
       "metadataOrientationReset": "方向已校正",
@@ -2710,6 +2775,7 @@ const catalog = createCatalog<Messages>({
       "goDialogExportImageTitle": "导出压缩图片",
       "goDialogExportButton": "导出",
       "goSkippedTooMany": "一次最多添加 500 张图片",
+      "goSkippedTooManyCount": "{n, plural, other {# 张超出单次 500 张上限}}",
       "goSkippedUnreadable": "无法读取文件",
       "goSkippedTooLarge": "文件超过 250 MB",
       "goSkippedUnsupported": "不支持的图片格式",
@@ -2926,6 +2992,10 @@ const catalog = createCatalog<Messages>({
       "itemWaiting": "Waiting",
       "keptOriginal": "Not smaller",
       "keptOriginalTitle": "The re-encode was not smaller, so the original was kept — this does not mean it was already optimal",
+      "keptAnimatedPNG": "APNG kept",
+      "keptAnimatedPNGTitle": "Animated PNG (APNG) cannot be converted to animated WebP yet, so the original was kept with every frame and its animation intact",
+      "keptColorSpace": "CMYK kept",
+      "keptColorSpaceTitle": "CMYK colour cannot be converted safely on this machine, so the original was kept with its colour profile; its colours are unchanged",
       "bestWithinTarget": "Within target",
       "bestWithinTargetTitle": "The original already fits the target size",
       "bestGuardFailed": "Original kept",
@@ -2950,6 +3020,8 @@ const catalog = createCatalog<Messages>({
       "ready": "Ready",
       "compressingProgress": "Compressing, {done} / {total}",
       "savedPercent": "Saved {pct}%",
+      "largeImageFastMode": "Large image fast mode",
+      "largeImageFastModeTitle": "This PNG is over 16 megapixels and its content does not compress cheaply, so it used the fast encoding path (lower deflate effort, no filter search); the result may not be the smallest possible",
       "grewPercent": "Grew {pct}%",
       "savedTo": "{count, plural, one {Saved # image to {target} · {savings}} other {Saved # images to {target} · {savings}}}",
       "savedAlongside": "{count, plural, one {Saved # image next to the original · {savings}} other {Saved # images next to the originals · {savings}}}",
@@ -2961,6 +3033,8 @@ const catalog = createCatalog<Messages>({
       "imageActions": "Image actions",
       "added": "{n, plural, one {Added # image} other {Added # images}}",
       "addedWithSkipped": "{n, plural, one {Added # image} other {Added # images}}{skipped, plural, one {, skipped # file} other {, skipped # files}}",
+      "skippedSummary": "{n, plural, one {# file was not added: {reasons}} other {# files were not added: {reasons}}}",
+      "skippedReasonCount": "{reason} ×{count}",
       "skippedFile": "{name}: {reason}",
       "unableOpenFolder": "Could not open the folder",
       "screenshotShortcutInactive": "The capture shortcut {shortcut} did not register; another app may already use it",
@@ -3084,6 +3158,8 @@ const catalog = createCatalog<Messages>({
       "nextImage": "Next (→)",
       "previewKeptOriginal": "Not smaller — original kept",
       "metadataICCKept": "ICC",
+      "metadataICCDroppedIncompatible": "Incompatible {space} ICC removed",
+      "metadataICCDroppedUnsupported": "ICC not written (WebP)",
       "metadataEXIFKept": "EXIF",
       "metadataGPSRemoved": "GPS removed",
       "metadataOrientationReset": "Orientation corrected",
@@ -3174,6 +3250,7 @@ const catalog = createCatalog<Messages>({
       "goDialogExportImageTitle": "Export the compressed image",
       "goDialogExportButton": "Export",
       "goSkippedTooMany": "At most 500 images can be added at once",
+      "goSkippedTooManyCount": "{n, plural, one {# image was over the 500-per-add limit} other {# images were over the 500-per-add limit}}",
       "goSkippedUnreadable": "The file could not be read",
       "goSkippedTooLarge": "The file is over 250 MB",
       "goSkippedUnsupported": "Unsupported image format",

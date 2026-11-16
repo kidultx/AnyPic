@@ -47,6 +47,16 @@ var supportedExtensions = map[string]bool{
 	".gif": true, ".bmp": true, ".tif": true, ".tiff": true,
 }
 
+// unsupportedImageExtensions are formats a user can reasonably expect an
+// image compressor to open but AnyPic cannot decode yet. Folder adds report
+// these as skipped; everything else in a folder (.DS_Store, .mov, .txt) is
+// ignored instead of turning the toast into noise (round-2 P0-E).
+var unsupportedImageExtensions = map[string]bool{
+	".heic": true, ".heif": true, ".avif": true, ".psd": true,
+	".raw": true, ".dng": true, ".cr2": true, ".nef": true, ".arw": true,
+	".ico": true, ".svg": true, ".jxl": true,
+}
+
 // Item is one image in the queue.
 type Item struct {
 	ID             int64  `json:"id"`
@@ -90,6 +100,11 @@ type Item struct {
 	// from a real score, so a measured 0 is never hidden as unmeasured.
 	SSIM         float64 `json:"ssim"`
 	SSIMMeasured bool    `json:"ssimMeasured"`
+	// LargeImageFastMode reports that a PNG above the pixel budget used the
+	// fast encoding path because a full filter search would cost seconds on
+	// this content. The row says so instead of silently delivering a larger
+	// file (P0-C).
+	LargeImageFastMode bool `json:"largeImageFastMode"`
 	// TargetBytes is the per-image cap this result was produced under, or 0
 	// when the pass ran in quality mode. TargetQuality is the quality the
 	// search settled on (or the fixed quality when PNG could only report a
@@ -184,6 +199,11 @@ type AddResult struct {
 	Snapshot Snapshot      `json:"snapshot"`
 	Added    int           `json:"added"`
 	Skipped  []SkippedFile `json:"skipped"`
+	// Overflow is how many supported images were not added because one add
+	// is capped at maxBatchSize. One aggregate number is reported instead of
+	// one SkippedFile per image: a 520-file drop should say "20 over the
+	// limit", not omit them (round-2 P0-D).
+	Overflow int `json:"overflow"`
 	// Copied reports that a screenshot was put on the clipboard.
 	Copied bool `json:"copied"`
 }
@@ -439,7 +459,7 @@ func (a *AnyPic) PickFiles(ctx context.Context) (AddResult, error) {
 }
 
 func (a *AnyPic) addPaths(paths []string) (AddResult, error) {
-	candidates, skipped := collectImages(paths)
+	candidates, skipped, overflow := collectImages(paths)
 
 	a.mu.Lock()
 	existing := make(map[string]bool, len(a.items))
@@ -452,10 +472,6 @@ func (a *AnyPic) addPaths(paths []string) (AddResult, error) {
 
 	var newItems []*Item
 	for _, path := range candidates {
-		if len(newItems) >= maxBatchSize {
-			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: tr().GoSkippedTooMany()})
-			break
-		}
 		info, err := os.Stat(path)
 		if err != nil {
 			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: tr().GoSkippedUnreadable()})
@@ -515,7 +531,7 @@ func (a *AnyPic) addPaths(paths []string) (AddResult, error) {
 		go a.makeThumb(item.ID)
 	}
 
-	return AddResult{Snapshot: snap, Added: len(newItems), Skipped: skipped}, nil
+	return AddResult{Snapshot: snap, Added: len(newItems), Skipped: skipped, Overflow: overflow}, nil
 }
 
 // Remove deletes images from the queue.
@@ -755,6 +771,7 @@ func (a *AnyPic) DecorateItem(id int64, style FrameStyle) (Snapshot, error) {
 	item.CompressedSize = 0
 	item.SSIM = 0
 	item.SSIMMeasured = false
+	item.LargeImageFastMode = false
 	item.TargetBytes = 0
 	item.TargetQuality = 0
 	item.TargetMissed = false
@@ -1005,6 +1022,7 @@ func (a *AnyPic) compressItem(ctx context.Context, id int64, s Settings) {
 	item.CompressedSize = 0
 	item.SSIM = 0
 	item.SSIMMeasured = false
+	item.LargeImageFastMode = false
 	item.TargetBytes = 0
 	item.TargetQuality = 0
 	item.TargetMissed = false
@@ -1041,6 +1059,7 @@ func (a *AnyPic) compressItem(ctx context.Context, id int64, s Settings) {
 		item.TransparencyKept = result.transparencyKept
 		item.SSIM = result.ssim
 		item.SSIMMeasured = result.ssimMeasured
+		item.LargeImageFastMode = result.largeFastMode
 		item.TargetBytes = result.targetBytes
 		item.TargetQuality = result.targetQuality
 		item.TargetMissed = result.targetMissed
@@ -1079,8 +1098,12 @@ type compressResult struct {
 	// ssim is 0 when the result was not measured (animations); ssimMeasured
 	// keeps a real zero distinct from "not measured". A passed-through result
 	// scores 1 because the original is unchanged.
-	ssim          float64
-	ssimMeasured  bool
+	ssim         float64
+	ssimMeasured bool
+	// largeFastMode reports that a large PNG kept the fast deflate/filter
+	// path because a full search was measured to cost seconds on this
+	// content (P0-C).
+	largeFastMode bool
 	targetBytes   int64
 	targetQuality int
 	targetMissed  bool
@@ -1090,6 +1113,13 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 	if animated {
 		// Animations never take the still path: the pipeline must keep every
 		// frame, never flatten to the first one (#8).
+		if displayFormat(srcFormat) == "PNG" {
+			// An APNG has no decoder here that keeps its frames, and the
+			// still path would silently write frame one. Keep the original
+			// and say why (round-2 P0-A).
+			reason := "animated_png"
+			return keepOriginalResult(path, name, srcFormat, s, reason)
+		}
 		return a.compressAnimated(ctx, id, path, srcFormat, name, s)
 	}
 	if err := ctx.Err(); err != nil {
@@ -1110,6 +1140,14 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 	// accounts for.
 	meta := readSourceMetadata(f, srcFormat)
 	f.Close()
+
+	if _, ok := img.(*image.CMYK); ok {
+		// Re-encoding would hand the JPEG encoder CMYK samples without a
+		// colour transform, turning the colours into something visibly
+		// wrong. There is no CMYK→RGB engine in this cgo-free build, so the
+		// original is kept with its own profile (round-2 P0-B).
+		return keepOriginalResult(path, name, srcFormat, s, "color_space")
+	}
 
 	resized := false
 	if s.MaxDimension > 0 {
@@ -1138,8 +1176,10 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 	}
 	// Metadata travels with the re-encode, so the target budget has to pay
 	// for it; otherwise a result that fits the cap without its ICC profile
-	// would overshoot once the profile is written back.
-	attachment, metadataReport := meta.prepare(outFormat, srcFormat)
+	// would overshoot once the profile is written back. The profile is kept
+	// only when its declared colour space matches the pixels this format
+	// writes (P0-B): a CMYK profile on RGB output is worse than none.
+	attachment, metadataReport := meta.prepare(outFormat, srcFormat, outputColorSpace(outFormat, img))
 	encodeTarget := target
 	if encodeTarget > 0 {
 		encodeTarget -= int64(attachment.size())
@@ -1175,14 +1215,15 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 	var data []byte
 	quality := 0
 	missed := false
+	largeFastMode := false
 	switch {
 	case target > 0 && (outFormat == "JPEG" || outFormat == "WEBP"):
 		data, quality, missed, err = encodeToTarget(ctx, img, outFormat, encodeTarget)
-	case outFormat == "JPEG" || outFormat == "WEBP" || outFormat == "PNG":
+	case outFormat == "PNG":
+		data, largeFastMode, err = pngLosslessEncode(img)
+	case outFormat == "JPEG" || outFormat == "WEBP":
 		data, err = encodeStill(img, outFormat, s.Quality)
-		if outFormat != "PNG" {
-			quality = s.Quality
-		}
+		quality = s.Quality
 	default:
 		return compressResult{}, errors.New(tr().GoErrUnsupportedOutput())
 	}
@@ -1259,22 +1300,89 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 		transparencyKept: transparencyKept,
 		ssim:             ssim,
 		ssimMeasured:     ssimMeasured,
+		largeFastMode:    largeFastMode,
 		targetBytes:      target,
 		targetQuality:    quality,
 		targetMissed:     missed,
 	}, nil
 }
 
+// keepOriginalResult returns the source file as the result for decisions made
+// before encoding: an APNG (the still path cannot keep its frames) or a CMYK
+// source (this build has no colour-managed CMYK conversion). Keeping the
+// original is the only honest result; the reason is shown in the row.
+func keepOriginalResult(path, name, srcFormat string, s Settings, reason string) (compressResult, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return compressResult{}, errors.New(tr().GoErrReadOriginal())
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return compressResult{}, errors.New(tr().GoErrReadOriginal())
+	}
+	cfg, _, err := image.DecodeConfig(f)
+	f.Close()
+	if err != nil {
+		return compressResult{}, errors.New(tr().GoErrDecodeCorrupt())
+	}
+	target := s.TargetSize
+	if target < 0 {
+		target = 0
+	}
+	hasAlpha := false
+	if displayFormat(srcFormat) == "PNG" {
+		hasAlpha = pngHasAlpha(path)
+	}
+	return compressResult{
+		path:               path,
+		size:               info.Size(),
+		format:             displayFormat(strings.ToLower(srcFormat)),
+		outputName:         outputFilename(name, s.Suffix, extForFormat(srcFormat)),
+		width:              cfg.Width,
+		height:             cfg.Height,
+		hasAlpha:           hasAlpha,
+		passedThrough:      true,
+		keptOriginalReason: reason,
+		ssim:               1,
+		ssimMeasured:       true,
+		targetBytes:        target,
+		targetMissed:       target > 0 && info.Size() > target,
+	}, nil
+}
+
+// pngHasAlpha reads the IHDR colour type: 4 (gray+alpha) and 6 (RGBA) carry
+// an alpha channel. Palette transparency (tRNS) is refined by makeThumb.
+func pngHasAlpha(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	var head [26]byte
+	if _, err := io.ReadFull(f, head[:]); err != nil {
+		return false
+	}
+	if !bytes.Equal(head[:8], pngSignature) || string(head[12:16]) != "IHDR" {
+		return false
+	}
+	switch head[25] {
+	case 4, 6:
+		return true
+	}
+	return false
+}
+
 // pngLosslessEncode is the encoder for lossless PNG results: the pure-Go
 // filter search in png_lossless.go, with the standard-library encoder as its
-// own baseline. A variable so a test can substitute an encoder that changes
-// pixels and prove the runtime guard refuses its output.
-var pngLosslessEncode = func(img image.Image) ([]byte, error) {
-	data, err := encodePNGLossless(img)
+// own baseline. The second result reports large-image fast mode (P0-C). A
+// variable so a test can substitute an encoder that changes pixels and prove
+// the runtime guard refuses its output.
+var pngLosslessEncode = func(img image.Image) ([]byte, bool, error) {
+	data, fastMode, err := encodePNGLossless(img)
 	if err != nil {
-		return nil, errors.New(tr().GoErrEncodePNG())
+		return nil, false, errors.New(tr().GoErrEncodePNG())
 	}
-	return data, nil
+	return data, fastMode, nil
 }
 
 // encodeStill encodes one still image in its output format. Target-size
@@ -1287,7 +1395,11 @@ func encodeStill(img image.Image, outFormat string, quality int) ([]byte, error)
 			return nil, errors.New(tr().GoErrEncodeJPEG())
 		}
 	case "PNG":
-		return pngLosslessEncode(img)
+		data, _, err := pngLosslessEncode(img)
+		if err != nil {
+			return nil, err
+		}
+		return data, nil
 	case "WEBP":
 		opts := webp.Options{Quality: quality, Method: 4}
 		if err := webp.Encode(&buf, img, opts); err != nil {
@@ -1802,25 +1914,26 @@ func (a *AnyPic) removeTemp(item *Item) {
 	item.compressedPath = ""
 }
 
-// isAnimatedFile reports whether a GIF or WebP holds more than one frame.
-// Static images of both formats are supported; animations are skipped rather
-// than silently flattened to their first frame. Frame counting walks the file
-// structure without decoding pixels (see animation.go).
+// isAnimatedFile reports whether a file holds more than one frame. Detection
+// is by content — GIF, WebP or APNG — never by extension: a five-frame GIF
+// renamed to .png must still take the animation path (round-2 P0-A). Frame
+// counting walks the file structure without decoding pixels (animation.go).
 func isAnimatedFile(path string) (bool, error) {
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".gif", ".webp":
-		n, err := animationFrameCount(path)
-		if err != nil {
-			return false, err
-		}
-		return n > 1, nil
+	frames, err := animationFrameCount(path)
+	if err != nil {
+		return false, err
 	}
-	return false, nil
+	return frames > 1, nil
 }
 
-func collectImages(paths []string) ([]string, []SkippedFile) {
+// collectImages walks the dropped paths. It returns at most maxBatchSize
+// supported images and the number of supported images left out; the caller
+// reports that count as one aggregate sentence (P0-D) instead of silently
+// truncating the queue.
+func collectImages(paths []string) ([]string, []SkippedFile, int) {
 	var out []string
 	var skipped []SkippedFile
+	overflow := 0
 	seen := map[string]bool{}
 
 	addFile := func(path string) {
@@ -1828,15 +1941,16 @@ func collectImages(paths []string) ([]string, []SkippedFile) {
 		if seen[path] {
 			return
 		}
-		if len(out) >= maxBatchSize {
-			return
-		}
+		seen[path] = true
 		ext := strings.ToLower(filepath.Ext(path))
 		if !supportedExtensions[ext] {
 			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: tr().GoSkippedUnsupportedShort()})
 			return
 		}
-		seen[path] = true
+		if len(out) >= maxBatchSize {
+			overflow++
+			return
+		}
 		out = append(out, path)
 	}
 
@@ -1861,7 +1975,11 @@ func collectImages(paths []string) ([]string, []SkippedFile) {
 				}
 				return nil
 			}
-			if supportedExtensions[strings.ToLower(filepath.Ext(p))] {
+			ext := strings.ToLower(filepath.Ext(p))
+			// A folder of HEIC photos must say it was skipped, not look empty
+			// (P0-E). Other file types stay silent so a normal folder does not
+			// turn the notice into noise.
+			if supportedExtensions[ext] || unsupportedImageExtensions[ext] {
 				addFile(p)
 			}
 			return nil
@@ -1870,7 +1988,7 @@ func collectImages(paths []string) ([]string, []SkippedFile) {
 			skipped = append(skipped, SkippedFile{Name: filepath.Base(path), Reason: tr().GoSkippedFolderUnreadable()})
 		}
 	}
-	return out, skipped
+	return out, skipped, overflow
 }
 
 func normalizeSettings(s Settings) Settings {

@@ -50,7 +50,9 @@ jobs:
       - name: Go checks
         run: |
           go vet ./...
-          go test -race -count=1 ./...
+          # Same explicit timeout as ci.yml: the default 10m per package is
+          # under the -race cost of the compression suite.
+          go test -race -count=1 -timeout 25m ./...
 
       - name: Import macOS signing certificate
         if: runner.os == 'macOS'
