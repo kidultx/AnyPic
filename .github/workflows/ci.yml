@@ -26,8 +26,12 @@ jobs:
       - name: Go vet
         run: go vet ./...
 
+      # -timeout is explicit because the default 10m per package is no longer
+      # enough: the compression suite re-encodes multi-megapixel fixtures, and
+      # under -race it runs ~10 minutes on a GitHub macOS runner. The old
+      # default turned a slow run into a confusing "panic: test timed out".
       - name: Go test
-        run: go test -race -count=1 ./...
+        run: go test -race -count=1 -timeout 25m ./...
 
       - name: Build (sanity)
         run: bunx mygo build -platform darwin/amd64

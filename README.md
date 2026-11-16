@@ -78,7 +78,7 @@ bun run dev:web
 ```bash
 bun run typecheck    # TypeScript 类型检查
 go vet ./...
-go test -race ./...  # 后端单元与集成测试（含压缩基准集对比）
+go test -race -count=1 -timeout 25m ./...  # 后端单元与集成测试（含压缩基准集对比）
 bun run build        # 生成 build/ 下的应用包与安装包
 ```
 

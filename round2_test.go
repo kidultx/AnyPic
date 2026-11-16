@@ -267,9 +267,15 @@ func largePNGFixture(t *testing.T, fill func(x, y int) color.NRGBA, level png.Co
 	// Just above the 16M-pixel budget (16,785,409 pixels).
 	const side = 4097
 	img := image.NewNRGBA(image.Rect(0, 0, side, side))
+	// Written straight into the pixel buffer: SetNRGBA per pixel is 16.8M
+	// interface calls, which costs tens of seconds once -race instruments
+	// every one of them.
 	for y := 0; y < side; y++ {
+		row := img.Pix[y*img.Stride : y*img.Stride+side*4]
 		for x := 0; x < side; x++ {
-			img.SetNRGBA(x, y, fill(x, y))
+			c := fill(x, y)
+			i := x * 4
+			row[i], row[i+1], row[i+2], row[i+3] = c.R, c.G, c.B, c.A
 		}
 	}
 	path := filepath.Join(t.TempDir(), "large.png")
@@ -300,11 +306,16 @@ func TestP0CLargePNGCompressibleContentGetsBestSearch(t *testing.T) {
 		}
 		return color.NRGBA{R: 245, G: 246, B: 248, A: 255}
 	}
-	path, img := largePNGFixture(t, ui, png.DefaultCompression)
-	baseline, err := encodePNGStdlib(img, png.DefaultCompression)
+	path, _ := largePNGFixture(t, ui, png.DefaultCompression)
+	// The fixture file was written by png.Encoder at DefaultCompression, so
+	// its own size is the baseline this test compares against. Encoding the
+	// same image a second time only to read a number os.Stat already knows
+	// would double the test's cost (about 15s under -race) for nothing.
+	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)
 	}
+	baseline := info.Size()
 
 	service := &AnyPic{tempDir: t.TempDir()}
 	result, err := service.compressOne(context.Background(), 1, path, "PNG", "large.png", false, Settings{
@@ -319,8 +330,8 @@ func TestP0CLargePNGCompressibleContentGetsBestSearch(t *testing.T) {
 	if result.largeFastMode {
 		t.Fatal("a compressible 6K-class PNG was labelled fast mode instead of searched")
 	}
-	if result.size >= int64(len(baseline))/2 {
-		t.Fatalf("result %d bytes, baseline %d: the large-image search did not run", result.size, len(baseline))
+	if result.size >= baseline/2 {
+		t.Fatalf("result %d bytes, baseline %d: the large-image search did not run", result.size, baseline)
 	}
 }
 
