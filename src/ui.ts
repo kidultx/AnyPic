@@ -43,6 +43,8 @@ export function metadataSummary(report: Item["metadata"]): { text: string; title
   if (!report) return null;
   const parts: string[] = [];
   if (report.iccKept) parts.push(t.metadataICCKept());
+  if (report.iccDroppedIncompatible) parts.push(t.metadataICCDroppedIncompatible(report.iccColorSpace || "?"));
+  if (report.iccDroppedUnsupported) parts.push(t.metadataICCDroppedUnsupported());
   if (report.exifKept) parts.push(t.metadataEXIFKept());
   if (report.gpsRemoved) parts.push(t.metadataGPSRemoved());
   if (report.orientationReset) parts.push(t.metadataOrientationReset());

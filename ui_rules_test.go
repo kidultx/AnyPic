@@ -145,11 +145,16 @@ func TestNoNewNativeSelects(t *testing.T) {
 // primary actions), while ⌘C grew queue-keys.ts to 12,605 and belongs with
 // the row's other manners rather than in main.ts. Budgets are raised to the
 // measured sizes plus ~2% headroom.
+// The round-2 P0 fixes grew main.ts to 100,752: the aggregate skipped/overflow
+// toast (P0-D/P0-E, replacing the old first-file-only message), the APNG/CMYK
+// passthrough labels, and the large-image fast-mode chip (P0-C). The reason
+// counts come from the backend's own localized reason strings, so they belong
+// next to applyAddResult. Budget raised to 102,800 (~2% headroom).
 var uiBudgets = []struct {
 	file   string
 	budget int
 }{
-	{"src/main.ts", 99_700},
+	{"src/main.ts", 102_800},
 	{"src/shortcuts.ts", 4_200},
 	{"src/queue-keys.ts", 12_900},
 	{"src/i18n.ts", 5_200},
