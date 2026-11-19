@@ -3628,6 +3628,86 @@ func (msgs Messages) PatternSwatch(label string) string {
 	return Catalog.Format(msgs.locale, "patternSwatch", map[string]any{"label": label})
 }
 
+// Photo says "照片"
+// in the language the app shows.
+func Photo() string { return In(i18n.Locale()).Photo() }
+
+// Photo says "照片"
+// in the language of msgs.
+func (msgs Messages) Photo() string {
+	return Catalog.Format(msgs.locale, "photo", nil)
+}
+
+// PhotoAlpine says "雪山"
+// in the language the app shows.
+func PhotoAlpine() string { return In(i18n.Locale()).PhotoAlpine() }
+
+// PhotoAlpine says "雪山"
+// in the language of msgs.
+func (msgs Messages) PhotoAlpine() string {
+	return Catalog.Format(msgs.locale, "photoAlpine", nil)
+}
+
+// PhotoDunes says "沙丘"
+// in the language the app shows.
+func PhotoDunes() string { return In(i18n.Locale()).PhotoDunes() }
+
+// PhotoDunes says "沙丘"
+// in the language of msgs.
+func (msgs Messages) PhotoDunes() string {
+	return Catalog.Format(msgs.locale, "photoDunes", nil)
+}
+
+// PhotoLake says "湖泊"
+// in the language the app shows.
+func PhotoLake() string { return In(i18n.Locale()).PhotoLake() }
+
+// PhotoLake says "湖泊"
+// in the language of msgs.
+func (msgs Messages) PhotoLake() string {
+	return Catalog.Format(msgs.locale, "photoLake", nil)
+}
+
+// PhotoSea says "海边"
+// in the language the app shows.
+func PhotoSea() string { return In(i18n.Locale()).PhotoSea() }
+
+// PhotoSea says "海边"
+// in the language of msgs.
+func (msgs Messages) PhotoSea() string {
+	return Catalog.Format(msgs.locale, "photoSea", nil)
+}
+
+// PhotoSwatch says "照片 {label}"
+// in the language the app shows.
+func PhotoSwatch(label string) string { return In(i18n.Locale()).PhotoSwatch(label) }
+
+// PhotoSwatch says "照片 {label}"
+// in the language of msgs.
+func (msgs Messages) PhotoSwatch(label string) string {
+	return Catalog.Format(msgs.locale, "photoSwatch", map[string]any{"label": label})
+}
+
+// PhotoBlur says "模糊"
+// in the language the app shows.
+func PhotoBlur() string { return In(i18n.Locale()).PhotoBlur() }
+
+// PhotoBlur says "模糊"
+// in the language of msgs.
+func (msgs Messages) PhotoBlur() string {
+	return Catalog.Format(msgs.locale, "photoBlur", nil)
+}
+
+// PhotoDim says "压暗"
+// in the language the app shows.
+func PhotoDim() string { return In(i18n.Locale()).PhotoDim() }
+
+// PhotoDim says "压暗"
+// in the language of msgs.
+func (msgs Messages) PhotoDim() string {
+	return Catalog.Format(msgs.locale, "photoDim", nil)
+}
+
 // CustomColor says "自定义颜色"
 // in the language the app shows.
 func CustomColor() string { return In(i18n.Locale()).CustomColor() }

@@ -2666,6 +2666,53 @@ body.side-drag * {
   background-clip: padding-box;
 }
 
+/* Photo chips show the picture itself. The image is cropped square from the
+   embedded JPEG's runtime thumbnail, so no extra thumbnail files ship. */
+.photo-chip {
+  width: 34px;
+  height: 34px;
+  overflow: hidden;
+  border-radius: var(--radius-control);
+  background-color: var(--pill);
+}
+
+.photo-chip img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* The photo sliders sit in the same two-column inspection row as the other
+   paired knobs; the numeric readout stays baseline-aligned with its label. */
+.beautify-slider-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.beautify-readout {
+  color: var(--text);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.beautify-readout small {
+  margin-left: 1px;
+  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+}
+
+/* Five background kinds have to fit the inspector column; the kind names are
+   shorter than the section headings, so the micro size keeps them on one
+   line without turning the control into an overflow. */
+#beautifyBgKind button {
+  font-size: var(--fs-micro);
+}
+
 /* The custom color input is styled as one more swatch so the picker does not
    break the chip row. */
 #beautifyColor {

@@ -1424,6 +1424,38 @@ export interface Messages {
    */
   patternSwatch(label: string): string;
   /**
+   * `照片`
+   */
+  photo(): string;
+  /**
+   * `雪山`
+   */
+  photoAlpine(): string;
+  /**
+   * `沙丘`
+   */
+  photoDunes(): string;
+  /**
+   * `湖泊`
+   */
+  photoLake(): string;
+  /**
+   * `海边`
+   */
+  photoSea(): string;
+  /**
+   * `照片 {label}`
+   */
+  photoSwatch(label: string): string;
+  /**
+   * `模糊`
+   */
+  photoBlur(): string;
+  /**
+   * `压暗`
+   */
+  photoDim(): string;
+  /**
    * `自定义颜色`
    */
   customColor(): string;
@@ -2260,6 +2292,14 @@ const catalog = createCatalog<Messages>({
     "patternVelvet": [],
     "patternPolka": [],
     "patternSwatch": ["label"],
+    "photo": [],
+    "photoAlpine": [],
+    "photoDunes": [],
+    "photoLake": [],
+    "photoSea": [],
+    "photoSwatch": ["label"],
+    "photoBlur": [],
+    "photoDim": [],
     "customColor": [],
     "solidSwatch": ["hex"],
     "gradientSwatch": ["label"],
@@ -2736,6 +2776,14 @@ const catalog = createCatalog<Messages>({
       "patternVelvet": "天鹅绒",
       "patternPolka": "波点",
       "patternSwatch": "图案 {label}",
+      "photo": "照片",
+      "photoAlpine": "雪山",
+      "photoDunes": "沙丘",
+      "photoLake": "湖泊",
+      "photoSea": "海边",
+      "photoSwatch": "照片 {label}",
+      "photoBlur": "模糊",
+      "photoDim": "压暗",
       "customColor": "自定义颜色",
       "solidSwatch": "纯色 {hex}",
       "gradientSwatch": "渐变 {label}",
@@ -3211,6 +3259,14 @@ const catalog = createCatalog<Messages>({
       "patternVelvet": "Velvet",
       "patternPolka": "Polka",
       "patternSwatch": "Pattern {label}",
+      "photo": "Photo",
+      "photoAlpine": "Alpine",
+      "photoDunes": "Dunes",
+      "photoLake": "Lake",
+      "photoSea": "Sea",
+      "photoSwatch": "Photo {label}",
+      "photoBlur": "Blur",
+      "photoDim": "Dim",
       "customColor": "Custom color",
       "solidSwatch": "Solid {hex}",
       "gradientSwatch": "Gradient {label}",

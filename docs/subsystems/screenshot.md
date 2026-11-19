@@ -48,17 +48,24 @@
   （已导出则用 `savedPath`，否则写到原图旁或输出目录），再把
   `![名称](本地路径)` 写进剪贴板；不上传任何内容。
 - 美化样式:`FrameStyle`(decorate.go),六个旋钮——背景(无/纯色 hex/
-  渐变预设/day-card 图案)、圆角四档、描边、投影两档、边距三档、画布比例
-  (只外扩不裁切)。图案 id 是闭集(patterns.go),非法值回落 `teal`。
+  渐变预设/day-card 图案/内嵌照片)、圆角四档、描边、投影两档、边距三档、
+  画布比例(只外扩不裁切)。图案 id 是闭集(patterns.go),非法值回落 `teal`;
+  照片 id 是闭集(backgrounds.go 的 `photoOrder`),非法值回落 `alpine`。
+  照片背景另带模糊(0–20)与压暗(0–60%)两个参数,只在该背景下生效,
+  缺失字段按 0 归一化,兼容旧页面负载。照片缩略图由
+  `AnyPic.PhotoBackgrounds` 从同一份内嵌 JPEG 现算 dataURL(96px),
+  不单独打包图片文件。投影色随照片平均亮度自动选:亮图用暗色墨影,
+  暗图用浅色雾影(`photoShadowTint`),不写死。
   **样式由页面持有,且只属于当前正在调的图**:换一张图,工作台即重置为
   默认样式、渲染缓存清空——上一张的样式与渲染结果绝不泄漏到下一张;
   不写 localStorage,不进 Settings/settings.json。后端只渲染,
   `normalizeFrameStyle` 把任何输入兜底成已定义渲染。
-- 视觉参数(边距/圆角缩放、渐变预设表、图案表与平铺缩放、描边色、投影
-  档位)定义在 `decorate.go` / `patterns.go`;页面侧的色板、渐变 chip 与
-  图案 chip 列表在 `src/preview.ts`
-  (`BG_SWATCHES`/`GRADIENT_PRESETS`/`PATTERN_PRESETS`),两边预设 id 与
-  渐变 stop 对齐。
+- 视觉参数(边距/圆角缩放、渐变预设表、图案表与平铺缩放、照片的 cover
+  裁切/模糊/压暗、描边色、投影档位)定义在 `decorate.go` /
+  `patterns.go` / `backgrounds.go`;页面侧的色板、渐变 chip、图案 chip 与
+  照片 chip 列表在 `src/preview.ts`
+  (`BG_SWATCHES`/`GRADIENT_PRESETS`/`PATTERN_PRESETS`/`PHOTO_PRESETS`),
+  两边预设 id 与渐变 stop 对齐。
 
 ## 主要运行路径
 
@@ -116,6 +123,7 @@
 ## 重要约束
 
 - 全部在本机完成(不变量 1);`decorateScreenshot` 是纯 Go 绘制,无网络;
+  照片背景经 `//go:embed` 随二进制内嵌,渲染不读用户磁盘、不下载;
   Markdown 复制只写本地路径,不上传。
 - 绝不覆盖原图(不变量 2):美化结果永远是 `原名-美化.png`,重名加序号。
 - 绝不覆盖用户更新的剪贴板:压缩结果要求捕获租约仍有效且解码像素仍相等；
@@ -136,6 +144,7 @@ go test -race -run 'TestIssue17' .   # 权限检查、错误文本契约、窗�
 go test -race -run 'TestScreenshotPipeline|TestScreenshotClipboard|TestCopy' .  # 管线、租约/像素守卫、Markdown
 go test -race -run 'TestIssue1' .   # 样式归一化、各旋钮、条目应用、预览
 go test -race -run 'TestPattern' .  # 图案闭集、平铺比例、边界画布、阴影色
+go test -race -run 'TestPhoto' .    # 照片闭集与归一化、cover 居中、模糊/压暗、缩略图、投影色
 go test -race ./...                 # 全量
 bun run typecheck                   # tsc --noEmit
 ```
