@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/disintegration/imaging"
@@ -36,8 +37,14 @@ func TestRenderBeautifySamples(t *testing.T) {
 		t.Fatalf("mkdir samples: %v", err)
 	}
 
+	// ANYPIC_SAMPLES_ONLY=photos writes a clean photo-backdrop sheet; the
+	// normal run still covers every look.
+	onlyPhotos := os.Getenv("ANYPIC_SAMPLES_ONLY") == "photos"
 	for _, sample := range beautifySamples(t) {
 		for _, style := range sampleStyleVariants() {
+			if onlyPhotos && style.Background != "photo" {
+				continue
+			}
 			out := decorateScreenshot(sample.img, style)
 			name := sample.name + "-" + styleName(style) + ".png"
 			path := filepath.Join(outDir, name)
@@ -64,10 +71,12 @@ type beautifySample struct {
 // sampleStyleVariants are the looks worth eyeballing: every gradient preset
 // (including the light and dark ends where the hairline ring flips), the
 // transparent-background case, the deep shadow, the compact and roomy
-// margins, and every day-card pattern. Rendering the full pattern set against
-// all six shapes is what shows whether a 9px motif survives 4K, whether an
-// ultra-wide or tall frame keeps its tiles square, and whether a transparent
-// capture still casts its own silhouette.
+// margins, every day-card pattern, and every embedded photo at its default,
+// maximum blur and maximum dim. Rendering the full set against all six shapes
+// is what shows whether a 9px motif survives 4K, whether an ultra-wide or
+// tall frame keeps its tiles square, whether a transparent capture still
+// casts its own silhouette, and whether a 1000px photo stays presentable
+// when a 4K canvas covers it.
 func sampleStyleVariants() []FrameStyle {
 	def := defaultFrameStyle()
 	none := def
@@ -96,6 +105,18 @@ func sampleStyleVariants() []FrameStyle {
 		pattern.BGPattern = id
 		variants = append(variants, pattern)
 	}
+	for _, id := range photoOrder {
+		photo := def
+		photo.Background = "photo"
+		photo.BGPhoto = id
+		variants = append(variants, photo)
+		blurred := photo
+		blurred.PhotoBlur = photoBlurMax
+		variants = append(variants, blurred)
+		dimmed := photo
+		dimmed.PhotoDim = photoDimMax
+		variants = append(variants, dimmed)
+	}
 	return variants
 }
 
@@ -106,6 +127,14 @@ func styleName(s FrameStyle) string {
 		name = "nobg"
 	case "pattern":
 		name = "pattern-" + normalizeFrameStyle(s).BGPattern
+	case "photo":
+		name = "photo-" + normalizeFrameStyle(s).BGPhoto
+		if s.PhotoBlur > 0 {
+			name += "-blur" + strconv.Itoa(s.PhotoBlur)
+		}
+		if s.PhotoDim > 0 {
+			name += "-dim" + strconv.Itoa(s.PhotoDim)
+		}
 	case "gradient":
 		name = s.BGGradient
 	default:

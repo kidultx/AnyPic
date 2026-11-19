@@ -48,10 +48,13 @@ const ringWidthBase = 2
 // FrameStyle describes one beautify render. Every string knob is normalized
 // by normalizeFrameStyle, so an IPC caller can only produce a defined render.
 type FrameStyle struct {
-	Background string `json:"background"`         // "none", "solid", "gradient", "pattern"
+	Background string `json:"background"`         // "none", "solid", "gradient", "pattern", "photo"
 	BGColor    string `json:"backgroundColor"`    // "#rrggbb" when solid
 	BGGradient string `json:"backgroundGradient"` // preset id when gradient
 	BGPattern  string `json:"backgroundPattern"`  // day-card pattern id when pattern
+	BGPhoto    string `json:"backgroundPhoto"`    // photo id when photo
+	PhotoBlur  int    `json:"backgroundBlur"`     // photo blur, day-card's 0..20
+	PhotoDim   int    `json:"backgroundDim"`      // photo black wash, 0..60 percent
 	Radius     string `json:"radius"`             // "none", "small", "medium", "large"
 	Ring       bool   `json:"ring"`               // hairline ring around the content
 	Shadow     string `json:"shadow"`             // "off", "soft", "deep"
@@ -67,6 +70,7 @@ func defaultFrameStyle() FrameStyle {
 		BGColor:    "#e7e7ea",
 		BGGradient: "indigo",
 		BGPattern:  "teal",
+		BGPhoto:    "alpine",
 		Radius:     "medium",
 		Ring:       true,
 		Shadow:     "soft",
@@ -99,7 +103,7 @@ var gradientPresets = map[string]struct {
 // can never make the backend render garbage.
 func normalizeFrameStyle(s FrameStyle) FrameStyle {
 	switch s.Background {
-	case "solid", "gradient", "pattern":
+	case "solid", "gradient", "pattern", "photo":
 	default:
 		s.Background = "none"
 	}
@@ -115,6 +119,11 @@ func normalizeFrameStyle(s FrameStyle) FrameStyle {
 	if _, ok := patternPresets[s.BGPattern]; !ok {
 		s.BGPattern = "teal"
 	}
+	if _, ok := photoSources[s.BGPhoto]; !ok {
+		s.BGPhoto = "alpine"
+	}
+	s.PhotoBlur = clampInt(s.PhotoBlur, 0, photoBlurMax)
+	s.PhotoDim = clampInt(s.PhotoDim, 0, photoDimMax)
 	switch s.Radius {
 	case "none", "small", "medium", "large":
 	default:
@@ -421,9 +430,10 @@ func hexAt(hex string, i int) int {
 }
 
 // newBackdrop returns the backdrop image for the canvas: a preset gradient, a
-// day-card pattern, or a solid color. patternScale is the frame's tile scale —
-// carried in the geometry, not re-derived here, so a scaled preview repeats
-// the pattern exactly as the full-size export does.
+// day-card pattern, an embedded landscape photo, or a solid color.
+// patternScale is the frame's tile scale — carried in the geometry, not
+// re-derived here, so a scaled preview repeats the pattern exactly as the
+// full-size export does.
 func newBackdrop(cw, ch int, style FrameStyle, patternScale float64) image.Image {
 	switch style.Background {
 	case "gradient":
@@ -431,6 +441,8 @@ func newBackdrop(cw, ch int, style FrameStyle, patternScale float64) image.Image
 		return newGradient(cw, ch, preset.from, preset.to)
 	case "pattern":
 		return newPatternBackdrop(cw, ch, style.BGPattern, patternScale)
+	case "photo":
+		return newPhotoBackdrop(cw, ch, style.BGPhoto, style.PhotoBlur, style.PhotoDim)
 	}
 	return image.NewUniform(color.RGBA{
 		R: uint8(hexAt(style.BGColor, 1)),
@@ -443,13 +455,15 @@ func newBackdrop(cw, ch int, style FrameStyle, patternScale float64) image.Image
 // backdropLuminance scores a backdrop from 0 to 1 so the ring can pick a
 // hairline that stays visible on it. A gradient is scored at its own middle,
 // which is where most of the ring sits; a pattern at its ground colour, which
-// is what most of the ring runs over.
+// is what most of the ring runs over; a photo at its average.
 func backdropLuminance(style FrameStyle) float64 {
 	switch style.Background {
 	case "solid":
 		return hexLuminance(style.BGColor)
 	case "pattern":
 		return luminanceOf(patternPresets[style.BGPattern].ground)
+	case "photo":
+		return photoLuminance(style.BGPhoto)
 	}
 	preset := gradientPresets[style.BGGradient]
 	return hexLuminance(hexOf(oklabLerpColor(preset.from, preset.to, 0.5)))
@@ -863,12 +877,16 @@ func applyMask(img *image.RGBA, mask *image.Alpha) {
 // shadowTint colours the cast shadow. Plain backdrops take the neutral black
 // a designed shadow is made of; a pattern takes the hue the day-card reference
 // gives that paper, so the cast reads as falling on the material rather than
-// on a printout of it.
+// on a printout of it. A photo derives the hue and lightness from its own
+// average, flipping to a light haze on a dark picture where ink would vanish.
 func shadowTint(style FrameStyle) color.NRGBA {
-	if style.Background == "pattern" {
+	switch style.Background {
+	case "pattern":
 		if info, ok := patternPresets[style.BGPattern]; ok {
 			return info.shadow
 		}
+	case "photo":
+		return photoShadowTint(style.BGPhoto)
 	}
 	return color.NRGBA{A: 0xff}
 }

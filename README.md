@@ -139,6 +139,7 @@ animation.go       动图帧数检测（GIF/WebP/APNG，按内容嗅探）：走
 screenshot.go      快捷键截图、剪贴板取图与截图归档
 decorate.go        截图外观美化：圆角、描边、投影与背景
 patterns.go        背景图案：day-card 的 15 种纯代码绘制图案
+backgrounds.go     照片背景：内嵌的四张 day-card 照片、模糊/压暗与缩略图
 updater.go         应用内更新：检查新版本、下载安装包，安装前退出应用并打开安装包
 compressor_test.go 后端测试
 screenshot_test.go 截图与设置归一化测试
@@ -165,5 +166,6 @@ site/video/        介绍视频成品，及生成它的分镜（src/）与脚本
 - [gen2brain/webp](https://github.com/gen2brain/webp) — BSD-3-Clause，内含 [libwebp](https://chromium.googlesource.com/webm/libwebp)（BSD-3-Clause）
 - [golang.org/x/image](https://pkg.go.dev/golang.org/x/image) — BSD-3-Clause
 - [magpie](https://github.com/yetone/magpie) — 界面语言参考（未包含其代码）
+- [magpie-community/plugins](https://github.com/magpie-community/plugins/tree/main/packages/day-card) — 美化工作台的四张照片背景，MIT（Copyright (c) 2026 magpie-community contributors；上游 NOTICE 只排除 Amp 标，照片在授权内；文件原样内嵌，见 [resources/backgrounds/NOTICE](resources/backgrounds/NOTICE)）
 
 AnyPic 的界面与实现为本项目原创，以 [MIT](LICENSE) 许可证发布。

@@ -141,6 +141,7 @@ animation.go       animated-image frame counting (GIF/WebP/APNG, sniffed by cont
 screenshot.go      hotkey screenshots, clipboard image capture and screenshot archiving
 decorate.go        screenshot beautification: corner radius, border, shadow and background
 patterns.go        backdrop patterns: the 15 code-drawn day-card fills
+backgrounds.go     photo backdrops: four embedded day-card photos, blur/dim and thumbnails
 updater.go         in-app updates: check for new versions, download installers, quit and open them when installing
 compressor_test.go backend tests
 screenshot_test.go screenshot and settings-normalization tests
@@ -167,5 +168,6 @@ site/video/        rendered intro video, plus its storyboard (src/) and render s
 - [gen2brain/webp](https://github.com/gen2brain/webp) — BSD-3-Clause, includes [libwebp](https://chromium.googlesource.com/webm/libwebp) (BSD-3-Clause)
 - [golang.org/x/image](https://pkg.go.dev/golang.org/x/image) — BSD-3-Clause
 - [magpie](https://github.com/yetone/magpie) — UI language reference (its code is not included)
+- [magpie-community/plugins](https://github.com/magpie-community/plugins/tree/main/packages/day-card) — the four photo backdrops in the beautify workspace, MIT (Copyright (c) 2026 magpie-community contributors; the upstream NOTICE excludes only the Amp logo, the photos are covered; embedded unchanged, see [resources/backgrounds/NOTICE](resources/backgrounds/NOTICE))
 
 AnyPic's interface and implementation are original to this project and released under the [MIT](LICENSE) license.
