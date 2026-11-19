@@ -48,7 +48,7 @@
    「先导出 / 直接退出 / 取消」（`src/main.ts` 的 `quitWithUnsavedResults`）。
    用户选「直接退出」或「先导出」成功后，页面调 `AnyPic.QuitNow()`：置
    `quitConfirmed` 再走一次 `App.Quit()`。确认过的这一次放行，置
-   `quitting` 并跑 `service.Cleanup()`（删各条目的临时文件，不变量 4）；
+   `quitting` 并跑 `service.Cleanup()`（删各条目的临时文件，不变量 5）；
    关闭回调看到 `quitting` 就放行，不再拦截。安装更新这条路径在
    `InstallUpdate` 里直接置 `quitConfirmed`——页面在调它之前已经确认过
    同样的损失。
@@ -79,7 +79,7 @@
   macOS 把 Dock 图标放回来、显示并聚焦）。在 `WhenReady` 之前注册的回调
   必须先判 nil。
 - **退出只能走 `mygo.App.Quit()`**：`Cleanup` 挂在 `OnBeforeQuit` 上，
-  绕过它退出就会留下临时文件（不变量 4）。更新器代开安装包后正是走这条路
+  绕过它退出就会留下临时文件（不变量 5）。更新器代开安装包后正是走这条路
   （[updater.md](updater.md)）。
 - **有未导出结果时，退出必须先问页面**：`OnBeforeQuit` 是同步的，不能等
   页面弹窗；所以它先 `PreventDefault`，再广播命令，由页面用 `QuitNow`

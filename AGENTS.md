@@ -10,21 +10,46 @@ TypeScript 前端）。产品定位、功能与下载见 [README.md](README.md)�
    （#3 获准的例外）：检查只在启动与用户点击时发生，下载只在用户点击后
    发生，且只访问 GitHub Releases。新增依赖或代码路径前先确认它不引入
    其他网络访问；Linux 截图调用的外部工具（gnome-screenshot、spectacle、
-   grim 等）也只做本机操作。
+   grim 等）也只做本机操作。**边界：** 把 SMB/NFS 等网络挂载上的文件夹
+   拖进来时，`filepath.WalkDir` 读取这些文件会经过网络——那是用户自己
+   选定的输入位置，不是应用上传或发送图片；应用本身仍不向任何服务传输
+   图片字节。
+   **守护：** `TestInvariantOneNoNetworkImports`（解析非测试 `.go` 的
+   import，除 `updater.go` 外禁止 `net` / `net/http` / `net/url`）。
 2. **绝不覆盖用户的原图。** 输出文件名一律是 `原名 + 后缀`（默认 `-anypic`，
    `outputFilename`）写在原图旁边，或写到用户指定的目录；写入先落临时文件。
-3. **诚实的压缩结果。** 重新编码反而更大就用原图并标注「已是最优」；动图
-   绝不只保留第一帧——动态 GIF/WebP 转成保留帧数、延迟与透明的动画
-   WebP（#8，2026-11-08 变更，原为明确跳过），转码反而更大就保留原图并
-   标注；透明不被压成黑底或白底；PNG 输出是无损重编码，质量滑杆对它不
-   生效是格式限制——如实展示，不假装生效。
-4. **只写自己的文件，默认不盖用户值。** 设置只进
-   `mygo.App.Path(PathUserData)/settings.json`，截图只进用户图片目录的
-   `AnyPic/`，退出时清理临时目录；默认值只在用户没设置过时生效。
-5. **生成物绝不手改。** `src/mygo.ts`（文件头 `Code generated ... DO NOT
+   **守护：** **无测试守护**——这是约定而非机制。8 个写入口里 7 处有去重
+   保护（6 处调 `uniquePath`，`writeScreenshot` 自己写了一遍），
+   `ExportOne` 直接写用户在保存对话框里选的路径（有意例外）。加第九个
+   写入口的人必须自己记得调 `uniquePath`。
+3. **诚实的压缩结果。** 重新编码只有严格更小才交付；否则保留原图，并给出
+   `not_smaller` / `target_met` / `pixels_changed` 之一（动图转码不更小也是
+   `not_smaller`；APNG、CMYK 这类没有安全重编码路径的保留原图，分别给出
+   `animated_png` / `color_space`）。绝不把「我们的编码器没打过原图」说成
+   「原图已是最优」。动图绝不只保留第一帧——动态 GIF/WebP 转成保留帧数、
+   延迟与透明的动画 WebP（#8，2026-11-08 变更，原为明确跳过）；透明不被
+   压成黑底或白底；PNG 输出是无损重编码，质量滑杆对它不生效是格式限制
+   ——如实展示，不假装生效。
+   **守护：** `TestTargetSizeFormatMatrix`、`TestPassthroughReasons`、
+   `TestSSIMMatchesSlowReference`、措辞回归
+   `TestPassthroughCopyDoesNotClaimAlreadyOptimal`，以及运行时逐像素守卫
+   `losslessPixelsEqual`；这是范本，新不变量应尽量长成这样。
+4. **不写到任何我们没被要求写的地方。** 输出只落在：原图旁边（压缩结果、
+   `原名-美化.png`）、用户选定的输出目录、用户保存对话框选定的路径、
+   截图/粘贴用的 `Pictures/AnyPic`（取不到时退回应用数据目录下的
+   `AnyPic/`）、更新安装包的 Downloads/Cache。除这些位置外，应用不往
+   用户磁盘的任何地方写文件；写入先落临时文件。
+   **守护：** **无测试守护。**
+5. **应用私有数据只进 settings.json。** 设置只进
+   `mygo.App.Path(PathUserData)/settings.json`；临时文件只在应用临时目录，
+   退出时清理；默认值只在用户没设置过时生效。
+   **守护：** **无测试守护。**
+6. **生成物绝不手改。** `src/mygo.ts`（文件头 `Code generated ... DO NOT
    EDIT`）、`src/locales.ts` 与 `locales/catalog_gen.go` 都由
    `bun run generate` 写出。改 IPC 接口 = 改 Go 侧定义 + generate；改文案 =
    改 `locales/*.json` + generate。
+   **守护：** CI 的 `bun run generate && git diff --exit-code` step（不是
+   单元测试；手改生成物后 CI 会红）。
 
 改动一条不变量 = 破坏性变更：先开 issue 说明理由，获准后再动，并同步本文件。
 

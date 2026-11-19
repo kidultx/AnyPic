@@ -1757,7 +1757,7 @@ func (a *AnyPic) markResultsSaved(copies []savedCopy) {
 // UnsavedResults reports how many compressed images exist only in this
 // session's temporary directory: the item is done, it did not pass through
 // (a passed-through result is the original file), and no export has written a
-// copy to disk. Cleanup removes the temp files on quit (invariant 4), so
+// copy to disk. Cleanup removes the temp files on quit (invariant 5), so
 // these results would be lost.
 func (a *AnyPic) UnsavedResults() int {
 	a.mu.Lock()
