@@ -76,9 +76,15 @@ func sampleStyleVariants() []FrameStyle {
 	deep.Shadow = "deep"
 	compact := def
 	compact.Padding = "compact"
+	// The worst case for the shadow/frame contract: the widest shadow on the
+	// smallest margin. If a layer's tail outgrows the padding, the canvas edge
+	// cuts it into the flat band users reported.
+	deepCompact := def
+	deepCompact.Shadow = "deep"
+	deepCompact.Padding = "compact"
 	roomy := def
 	roomy.Padding = "roomy"
-	variants := []FrameStyle{none, deep, compact, roomy}
+	variants := []FrameStyle{none, deep, compact, deepCompact, roomy}
 	for _, id := range []string{"indigo", "dusk", "ocean", "mint", "rose", "sunset", "slate", "charcoal"} {
 		gradient := def
 		gradient.BGGradient = id
