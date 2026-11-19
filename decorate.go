@@ -48,10 +48,13 @@ const ringWidthBase = 2
 // FrameStyle describes one beautify render. Every string knob is normalized
 // by normalizeFrameStyle, so an IPC caller can only produce a defined render.
 type FrameStyle struct {
-	Background string `json:"background"`         // "none", "solid", "gradient", "pattern"
+	Background string `json:"background"`         // "none", "solid", "gradient", "pattern", "photo"
 	BGColor    string `json:"backgroundColor"`    // "#rrggbb" when solid
 	BGGradient string `json:"backgroundGradient"` // preset id when gradient
 	BGPattern  string `json:"backgroundPattern"`  // day-card pattern id when pattern
+	BGPhoto    string `json:"backgroundPhoto"`    // photo id when photo
+	PhotoBlur  int    `json:"backgroundBlur"`     // photo blur, day-card's 0..20
+	PhotoDim   int    `json:"backgroundDim"`      // photo black wash, 0..60 percent
 	Radius     string `json:"radius"`             // "none", "small", "medium", "large"
 	Ring       bool   `json:"ring"`               // hairline ring around the content
 	Shadow     string `json:"shadow"`             // "off", "soft", "deep"
@@ -67,6 +70,7 @@ func defaultFrameStyle() FrameStyle {
 		BGColor:    "#e7e7ea",
 		BGGradient: "indigo",
 		BGPattern:  "teal",
+		BGPhoto:    "alpine",
 		Radius:     "medium",
 		Ring:       true,
 		Shadow:     "soft",
@@ -99,7 +103,7 @@ var gradientPresets = map[string]struct {
 // can never make the backend render garbage.
 func normalizeFrameStyle(s FrameStyle) FrameStyle {
 	switch s.Background {
-	case "solid", "gradient", "pattern":
+	case "solid", "gradient", "pattern", "photo":
 	default:
 		s.Background = "none"
 	}
@@ -115,6 +119,11 @@ func normalizeFrameStyle(s FrameStyle) FrameStyle {
 	if _, ok := patternPresets[s.BGPattern]; !ok {
 		s.BGPattern = "teal"
 	}
+	if _, ok := photoSources[s.BGPhoto]; !ok {
+		s.BGPhoto = "alpine"
+	}
+	s.PhotoBlur = clampInt(s.PhotoBlur, 0, photoBlurMax)
+	s.PhotoDim = clampInt(s.PhotoDim, 0, photoDimMax)
 	switch s.Radius {
 	case "none", "small", "medium", "large":
 	default:
@@ -421,9 +430,10 @@ func hexAt(hex string, i int) int {
 }
 
 // newBackdrop returns the backdrop image for the canvas: a preset gradient, a
-// day-card pattern, or a solid color. patternScale is the frame's tile scale —
-// carried in the geometry, not re-derived here, so a scaled preview repeats
-// the pattern exactly as the full-size export does.
+// day-card pattern, an embedded landscape photo, or a solid color.
+// patternScale is the frame's tile scale — carried in the geometry, not
+// re-derived here, so a scaled preview repeats the pattern exactly as the
+// full-size export does.
 func newBackdrop(cw, ch int, style FrameStyle, patternScale float64) image.Image {
 	switch style.Background {
 	case "gradient":
@@ -431,6 +441,8 @@ func newBackdrop(cw, ch int, style FrameStyle, patternScale float64) image.Image
 		return newGradient(cw, ch, preset.from, preset.to)
 	case "pattern":
 		return newPatternBackdrop(cw, ch, style.BGPattern, patternScale)
+	case "photo":
+		return newPhotoBackdrop(cw, ch, style.BGPhoto, style.PhotoBlur, style.PhotoDim)
 	}
 	return image.NewUniform(color.RGBA{
 		R: uint8(hexAt(style.BGColor, 1)),
@@ -443,13 +455,15 @@ func newBackdrop(cw, ch int, style FrameStyle, patternScale float64) image.Image
 // backdropLuminance scores a backdrop from 0 to 1 so the ring can pick a
 // hairline that stays visible on it. A gradient is scored at its own middle,
 // which is where most of the ring sits; a pattern at its ground colour, which
-// is what most of the ring runs over.
+// is what most of the ring runs over; a photo at its average.
 func backdropLuminance(style FrameStyle) float64 {
 	switch style.Background {
 	case "solid":
 		return hexLuminance(style.BGColor)
 	case "pattern":
 		return luminanceOf(patternPresets[style.BGPattern].ground)
+	case "photo":
+		return photoLuminance(style.BGPhoto)
 	}
 	preset := gradientPresets[style.BGGradient]
 	return hexLuminance(hexOf(oklabLerpColor(preset.from, preset.to, 0.5)))
@@ -596,9 +610,10 @@ type shadowLayer struct {
 }
 
 // shadowStack returns the layers for a shadow level, in pixels at full size,
-// derived from the margin p. Every layer is kept inside the margin — its
-// visible extent (2σ past its offset) is under p — so the canvas edge never
-// cuts a shadow off.
+// derived from the margin p. A blurred layer's visible tail reaches about
+// three sigmas past its offset (three box passes), so every layer keeps
+// 3σ + dy under p: the canvas edge must fall well after the shadow has faded,
+// or the margin cuts it into a flat band. TestFrameShadowFitsMargin pins this.
 func shadowStack(level string, p float64) []shadowLayer {
 	if level == "off" || p <= 0 {
 		return nil
@@ -611,7 +626,7 @@ func shadowStack(level string, p float64) []shadowLayer {
 	return []shadowLayer{
 		{sigma: math.Max(0.8, p*0.055) * spread, alpha: 0.15 * depth, dy: math.Max(0.5, p*0.022) * spread},
 		{sigma: p * 0.20 * spread, alpha: 0.16 * depth, dy: p * 0.075 * spread},
-		{sigma: p * 0.34 * spread, alpha: 0.09 * depth, dy: p * 0.10 * spread},
+		{sigma: p * 0.24 * spread, alpha: 0.10 * depth, dy: p * 0.06 * spread},
 	}
 }
 
@@ -621,7 +636,10 @@ func shadowStack(level string, p float64) []shadowLayer {
 // renders in a few hundred milliseconds and one that takes seconds on 4K.
 const shadowWorkTarget = 700
 
-// downscaleAlpha box-averages an alpha mask by an integer factor.
+// downscaleAlpha box-averages an alpha mask by an integer factor. The output
+// is rounded up, not truncated: dropping the right/bottom remainder would
+// shrink the work buffer away from the canvas edge, and the upscale would then
+// shift and cut the shadow instead of covering the full frame.
 func downscaleAlpha(src *image.Alpha, k int) *image.Alpha {
 	if k <= 1 {
 		out := image.NewAlpha(src.Bounds())
@@ -629,8 +647,8 @@ func downscaleAlpha(src *image.Alpha, k int) *image.Alpha {
 		return out
 	}
 	b := src.Bounds()
-	w := max(1, b.Dx()/k)
-	h := max(1, b.Dy()/k)
+	w := max(1, (b.Dx()+k-1)/k)
+	h := max(1, (b.Dy()+k-1)/k)
 	dst := image.NewAlpha(image.Rect(0, 0, w, h))
 	for y := 0; y < h; y++ {
 		row := dst.Pix[y*dst.Stride : y*dst.Stride+w]
@@ -652,7 +670,14 @@ func downscaleAlpha(src *image.Alpha, k int) *image.Alpha {
 }
 
 // boxBlurAlpha blurs an alpha mask in place with a separable box blur, keeping
-// a running sum so the cost is independent of the radius.
+// a running sum so the cost is independent of the radius. Samples outside the
+// mask are transparent: a shadow has no silhouette beyond the canvas, and
+// clamping the edge pixel would hold the blur up as a flat band at the border.
+//
+// Each pass reads the original column/row into a temporary buffer and writes
+// it back only afterwards. The vertical pass used to write into the buffer it
+// was still reading, which fed blurred values back into its own running sum
+// and turned a rectangle into an oscillating plateau (round-2 shadow report).
 func boxBlurAlpha(a *image.Alpha, radius int) {
 	if radius < 1 {
 		return
@@ -663,16 +688,23 @@ func boxBlurAlpha(a *image.Alpha, radius int) {
 		return
 	}
 	div := int32(2*radius + 1)
-	tmp := make([]int32, w)
+	tmp := make([]int32, max(w, h))
 	for y := 0; y < h; y++ {
 		row := a.Pix[y*a.Stride : y*a.Stride+w]
 		var sum int32
 		for i := -radius; i <= radius; i++ {
-			sum += int32(row[clampInt(i, 0, w-1)])
+			if i >= 0 && i < w {
+				sum += int32(row[i])
+			}
 		}
 		for x := 0; x < w; x++ {
 			tmp[x] = (sum + div/2) / div
-			sum += int32(row[clampInt(x+radius+1, 0, w-1)]) - int32(row[clampInt(x-radius, 0, w-1)])
+			if add := x + radius + 1; add < w {
+				sum += int32(row[add])
+			}
+			if sub := x - radius; sub >= 0 {
+				sum -= int32(row[sub])
+			}
 		}
 		for x := 0; x < w; x++ {
 			row[x] = uint8(tmp[x])
@@ -681,12 +713,21 @@ func boxBlurAlpha(a *image.Alpha, radius int) {
 	for x := 0; x < w; x++ {
 		var sum int32
 		for i := -radius; i <= radius; i++ {
-			sum += int32(a.Pix[clampInt(i, 0, h-1)*a.Stride+x])
+			if i >= 0 && i < h {
+				sum += int32(a.Pix[i*a.Stride+x])
+			}
 		}
 		for y := 0; y < h; y++ {
-			v := (sum + div/2) / div
-			sum += int32(a.Pix[clampInt(y+radius+1, 0, h-1)*a.Stride+x]) - int32(a.Pix[clampInt(y-radius, 0, h-1)*a.Stride+x])
-			a.Pix[y*a.Stride+x] = uint8(v)
+			tmp[y] = (sum + div/2) / div
+			if add := y + radius + 1; add < h {
+				sum += int32(a.Pix[add*a.Stride+x])
+			}
+			if sub := y - radius; sub >= 0 {
+				sum -= int32(a.Pix[sub*a.Stride+x])
+			}
+		}
+		for y := 0; y < h; y++ {
+			a.Pix[y*a.Stride+x] = uint8(tmp[y])
 		}
 	}
 }
@@ -715,9 +756,20 @@ func gaussianBlurAlpha(a *image.Alpha, sigma float64) {
 	}
 }
 
+// shadowWork is the summed shadow at work scale. Values are in 0..255 alpha
+// units and stay floating point until the final composite: rounding each
+// layer into 8 bits here leaves a faint wide layer with only a handful of
+// levels, and the bilinear upscale turns those levels into visible bands.
+type shadowWork struct {
+	w, h  int
+	alpha []float64
+}
+
 // shadowAtWorkScale blurs the silhouette once per layer and sums the layers,
-// each pushed down by its own offset, into one small alpha buffer.
-func shadowAtWorkScale(silhouette *image.Alpha, k int, layers []shadowLayer) *image.Alpha {
+// each pushed down by its own offset, into one small alpha buffer. Rows that
+// a layer's offset pushes past the top are transparent — clamping them to the
+// first row would smear the shadow upward along the whole canvas width.
+func shadowAtWorkScale(silhouette *image.Alpha, k int, layers []shadowLayer) *shadowWork {
 	small := downscaleAlpha(silhouette, k)
 	b := small.Bounds()
 	acc := make([]float64, b.Dx()*b.Dy())
@@ -727,23 +779,18 @@ func shadowAtWorkScale(silhouette *image.Alpha, k int, layers []shadowLayer) *im
 		gaussianBlurAlpha(blurred, layer.sigma/float64(k))
 		shift := int(math.Round(layer.dy / float64(k)))
 		for y := 0; y < b.Dy(); y++ {
-			sy := clampInt(y-shift, 0, b.Dy()-1)
+			sy := y - shift
+			if sy < 0 || sy >= b.Dy() {
+				continue
+			}
 			srow := blurred.Pix[sy*blurred.Stride : sy*blurred.Stride+b.Dx()]
 			arow := acc[y*b.Dx() : y*b.Dx()+b.Dx()]
 			for x := 0; x < b.Dx(); x++ {
-				arow[x] += float64(srow[x]) / 255 * layer.alpha
+				arow[x] += float64(srow[x]) * layer.alpha
 			}
 		}
 	}
-	out := image.NewAlpha(b)
-	for y := 0; y < b.Dy(); y++ {
-		orow := out.Pix[y*out.Stride : y*out.Stride+b.Dx()]
-		arow := acc[y*b.Dx() : y*b.Dx()+b.Dx()]
-		for x := 0; x < b.Dx(); x++ {
-			orow[x] = uint8(math.Round(clamp01(arow[x]) * 255))
-		}
-	}
-	return out
+	return &shadowWork{w: b.Dx(), h: b.Dy(), alpha: acc}
 }
 
 /* ------------------------------------------------------------------ */
@@ -830,12 +877,16 @@ func applyMask(img *image.RGBA, mask *image.Alpha) {
 // shadowTint colours the cast shadow. Plain backdrops take the neutral black
 // a designed shadow is made of; a pattern takes the hue the day-card reference
 // gives that paper, so the cast reads as falling on the material rather than
-// on a printout of it.
+// on a printout of it. A photo derives the hue and lightness from its own
+// average, flipping to a light haze on a dark picture where ink would vanish.
 func shadowTint(style FrameStyle) color.NRGBA {
-	if style.Background == "pattern" {
+	switch style.Background {
+	case "pattern":
 		if info, ok := patternPresets[style.BGPattern]; ok {
 			return info.shadow
 		}
+	case "photo":
+		return photoShadowTint(style.BGPhoto)
 	}
 	return color.NRGBA{A: 0xff}
 }
@@ -873,15 +924,14 @@ func drawShadow(canvas *image.RGBA, content *image.RGBA, box image.Rectangle, la
 		}
 	}
 	small := shadowAtWorkScale(silhouette, k, layers)
-	sb := small.Bounds()
 
 	for y := 0; y < cb.Dy(); y++ {
 		fy := (float64(y)+0.5)/float64(k) - 0.5
 		y0 := int(math.Floor(fy))
 		ty := fy - float64(y0)
-		y0c, y1c := clampInt(y0, 0, sb.Dy()-1), clampInt(y0+1, 0, sb.Dy()-1)
-		r0 := small.Pix[y0c*small.Stride : y0c*small.Stride+sb.Dx()]
-		r1 := small.Pix[y1c*small.Stride : y1c*small.Stride+sb.Dx()]
+		y0c, y1c := clampInt(y0, 0, small.h-1), clampInt(y0+1, 0, small.h-1)
+		r0 := small.alpha[y0c*small.w : y0c*small.w+small.w]
+		r1 := small.alpha[y1c*small.w : y1c*small.w+small.w]
 		crow := canvas.Pix[y*canvas.Stride : y*canvas.Stride+cb.Dx()*4]
 		var contentRow []uint8
 		if y >= box.Min.Y && y < box.Max.Y {
@@ -898,10 +948,10 @@ func drawShadow(canvas *image.RGBA, content *image.RGBA, box image.Rectangle, la
 			fx := (float64(x)+0.5)/float64(k) - 0.5
 			x0 := int(math.Floor(fx))
 			tx := fx - float64(x0)
-			x0c, x1c := clampInt(x0, 0, sb.Dx()-1), clampInt(x0+1, 0, sb.Dx()-1)
+			x0c, x1c := clampInt(x0, 0, small.w-1), clampInt(x0+1, 0, small.w-1)
 			v := lerp(
-				lerp(float64(r0[x0c]), float64(r0[x1c]), tx),
-				lerp(float64(r1[x0c]), float64(r1[x1c]), tx), ty)
+				lerp(r0[x0c], r0[x1c], tx),
+				lerp(r1[x0c], r1[x1c], tx), ty)
 			v *= 1 - float64(contentAlpha)/255
 			if v < 0.25 {
 				continue

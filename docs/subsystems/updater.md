@@ -63,7 +63,7 @@
 - `saved`：压缩开始时置 false；该结果的任一次导出（`ExportAll` /
   `ExportProcessed` / `ExportOne`）写出文件后置 true。`UnsavedResults`
   只数 done、非直通、未保存的结果——退出时 `Cleanup` 会删掉临时目录
-  （不变量 4），这些结果才会真的丢；已导出的副本和直通的原图不受影响。
+  （不变量 5），这些结果才会真的丢；已导出的副本和直通的原图不受影响。
 
 ## 重要约束
 

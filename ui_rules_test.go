@@ -150,6 +150,12 @@ func TestNoNewNativeSelects(t *testing.T) {
 // passthrough labels, and the large-image fast-mode chip (P0-C). The reason
 // counts come from the backend's own localized reason strings, so they belong
 // next to applyAddResult. Budget raised to 102,800 (~2% headroom).
+// The 2026-11-19 photo backdrops grew index.html to 38,230: the fifth
+// background kind button, the four-chip photo strip (thumbnails are filled in
+// at runtime from the embedded JPEGs) and the blur/dim rows with their
+// readouts and fill bars. That is the control surface itself, and the render
+// math lives in backgrounds.go, so the budget moves to 39,000 (~2% headroom)
+// instead of splitting one panel across modules.
 var uiBudgets = []struct {
 	file   string
 	budget int
@@ -159,7 +165,7 @@ var uiBudgets = []struct {
 	{"src/queue-keys.ts", 12_900},
 	{"src/i18n.ts", 5_200},
 	{"src/style.css", 67_500},
-	{"index.html", 37_600},
+	{"index.html", 39_000},
 }
 
 // TestScriptAndStyleBudgets guards them. Sizes are counted with LF line

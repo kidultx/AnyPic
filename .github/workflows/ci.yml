@@ -20,6 +20,12 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # Invariant 6: src/mygo.ts, src/locales.ts and locales/catalog_gen.go
+      # are generated. A hand edit would otherwise pass every other check,
+      # because the generated files are committed.
+      - name: Generated files are up to date
+        run: bun run generate && git diff --exit-code
+
       - name: Typecheck
         run: bun run typecheck
 

@@ -379,10 +379,34 @@
                 <button data-kind="solid" aria-pressed="false" data-i18n="solid"></button>
                 <button data-kind="gradient" aria-pressed="false" data-i18n="gradient"></button>
                 <button data-kind="pattern" aria-pressed="false" data-i18n="pattern"></button>
+                <button data-kind="photo" aria-pressed="false" data-i18n="photo"></button>
               </div>
               <div class="swatches" id="beautifySwatches" hidden></div>
               <div class="swatches gradients" id="beautifyGradients" hidden></div>
               <div class="swatches patterns" id="beautifyPatterns" hidden></div>
+              <div class="swatches photos" id="beautifyPhotos" hidden></div>
+            </div>
+            <div class="beautify-field-row" id="beautifyPhotoTuning" hidden>
+              <div class="beautify-field">
+                <div class="beautify-slider-head">
+                  <label class="beautify-label" for="beautifyPhotoBlur" data-i18n="photoBlur"></label>
+                  <span class="beautify-readout"><b id="beautifyPhotoBlurValue">0</b></span>
+                </div>
+                <div class="range-wrap">
+                  <input id="beautifyPhotoBlur" type="range" min="0" max="20" step="1" value="0" />
+                  <div class="range-track-fill" id="beautifyPhotoBlurFill"></div>
+                </div>
+              </div>
+              <div class="beautify-field">
+                <div class="beautify-slider-head">
+                  <label class="beautify-label" for="beautifyPhotoDim" data-i18n="photoDim"></label>
+                  <span class="beautify-readout"><b id="beautifyPhotoDimValue">0</b><small>%</small></span>
+                </div>
+                <div class="range-wrap">
+                  <input id="beautifyPhotoDim" type="range" min="0" max="60" step="1" value="0" />
+                  <div class="range-track-fill" id="beautifyPhotoDimFill"></div>
+                </div>
+              </div>
             </div>
             <div class="beautify-field">
               <span class="beautify-label" data-i18n="cornerRadius"></span>

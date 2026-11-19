@@ -173,15 +173,16 @@ func TestIssue1DecorateShadowLevels(t *testing.T) {
 }
 
 // TestFrameShadowFitsMargin pins the geometry contract behind the padding
-// tiers: every shadow layer's visible extent (two sigmas past its offset) has
-// to stay inside the margin the padding bought, or the canvas edge would cut
-// the shadow off — visibly so on the deep level.
+// tiers: every shadow layer's visible extent (three sigmas past its offset —
+// the box-blur approximation's actual tail) has to stay inside the margin the
+// padding bought, or the canvas edge would cut the shadow off — visibly so on
+// the deep level and the compact margin.
 func TestFrameShadowFitsMargin(t *testing.T) {
 	for _, level := range []string{"soft", "deep"} {
-		for _, p := range []float64{24, 76, 120, 345} {
+		for _, p := range []float64{12, 24, 76, 120, 345} {
 			extent := 0.0
 			for _, layer := range shadowStack(level, p) {
-				extent = max(extent, 2*layer.sigma+layer.dy)
+				extent = max(extent, 3*layer.sigma+layer.dy)
 			}
 			if extent > p {
 				t.Errorf("%s shadow at margin %.0f reaches %.1fpx, past the canvas edge", level, p, extent)

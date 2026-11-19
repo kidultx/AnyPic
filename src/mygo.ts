@@ -99,7 +99,7 @@ export interface ExportResult {
  * by normalizeFrameStyle, so an IPC caller can only produce a defined render.
  */
 export interface FrameStyle {
-  /** "none", "solid", "gradient", "pattern" */
+  /** "none", "solid", "gradient", "pattern", "photo" */
   background: string;
   /** "#rrggbb" when solid */
   backgroundColor: string;
@@ -107,6 +107,12 @@ export interface FrameStyle {
   backgroundGradient: string;
   /** day-card pattern id when pattern */
   backgroundPattern: string;
+  /** photo id when photo */
+  backgroundPhoto: string;
+  /** photo blur, day-card's 0..20 */
+  backgroundBlur: number;
+  /** photo black wash, 0..60 percent */
+  backgroundDim: number;
   /** "none", "small", "medium", "large" */
   radius: string;
   /** hairline ring around the content */
@@ -241,6 +247,16 @@ export interface MetadataReport {
    * format cannot hold the source's representation).
    */
   dropped: boolean;
+}
+
+/**
+ * PhotoBackground is one embedded photo backdrop with a thumbnail generated
+ * from the same JPEG at runtime. The page builds its chips from these, so the
+ * bundle does not carry a second set of thumbnail files.
+ */
+export interface PhotoBackground {
+  id: string;
+  thumbnail: string;
 }
 
 /** Preview holds before and after previews for the comparison view. */
@@ -548,6 +564,14 @@ export const AnyPic = {
   pasteImage(): Promise<AddResult> {
     return call("AnyPic.PasteImage");
   },
+  /**
+   * PhotoBackgrounds lists the built-in photos for the workbench. A decode
+   * failure on an embedded, build-time asset is a build bug; the test below
+   * makes it fail CI rather than leaving a silent gap in the chips.
+   */
+  photoBackgrounds(): Promise<PhotoBackground[]> {
+    return call("AnyPic.PhotoBackgrounds");
+  },
   /** PickFiles shows the native open dialog and adds the chosen files. */
   pickFiles(): Promise<AddResult> {
     return call("AnyPic.PickFiles");
@@ -616,7 +640,7 @@ export const AnyPic = {
    * UnsavedResults reports how many compressed images exist only in this
    * session's temporary directory: the item is done, it did not pass through
    * (a passed-through result is the original file), and no export has written a
-   * copy to disk. Cleanup removes the temp files on quit (invariant 4), so
+   * copy to disk. Cleanup removes the temp files on quit (invariant 5), so
    * these results would be lost.
    */
   unsavedResults(): Promise<number> {
