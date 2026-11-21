@@ -12,7 +12,7 @@
 //   node site/video/render.mjs [zh] [en]   (default: both; PW_DIR=<dir with node_modules/playwright> to override)
 import { createRequire } from "node:module";
 import { execFileSync, spawn } from "node:child_process";
-import { createReadStream, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -32,12 +32,25 @@ for (const lang of langs) {
 
 // VP8 WebM through Playwright's ffmpeg (it reads MJPEG from a pipe, nothing else).
 // It is only the fallback for browsers without H.264, so it gets a lower bitrate.
+// Newer Playwright builds ship an ffmpeg with libvpx-vp9 but no libvpx (VP8),
+// so pick the newest build that can actually run this command instead of the
+// newest build by name.
 // VP8 carries no colour info of its own and Chrome then assumes a BT.709 matrix
 // (measured: #189a58 green 152 → 137); the container tags say what the data is:
 // BT.601 matrix from the JPEG frames, sRGB transfer.
+function ffmpegForWebm() {
+  const root = join(homedir(), "Library/Caches/ms-playwright");
+  for (const d of readdirSync(root).filter((x) => x.startsWith("ffmpeg-")).sort().reverse()) {
+    const ff = join(root, d, "ffmpeg-mac");
+    if (!existsSync(ff)) continue;
+    try {
+      if (/^\s*V\S*\s+libvpx\s/m.test(execFileSync(ff, ["-hide_banner", "-encoders"], { encoding: "utf8" }))) return ff;
+    } catch {}
+  }
+  throw new Error("no Playwright ffmpeg with libvpx; run npx playwright install ffmpeg");
+}
 async function encodeWebm(frames, out) {
-  const ffDir = readdirSync(join(homedir(), "Library/Caches/ms-playwright")).filter((d) => d.startsWith("ffmpeg-")).sort().pop();
-  const ff = join(homedir(), "Library/Caches/ms-playwright", ffDir, "ffmpeg-mac");
+  const ff = ffmpegForWebm();
   const enc = spawn(ff, ["-hide_banner", "-loglevel", "error", "-f", "image2pipe", "-framerate", String(FPS), "-c:v", "mjpeg", "-i", "pipe:0",
     "-c:v", "libvpx", "-b:v", "1M", "-crf", "16", "-qmin", "0", "-qmax", "42", "-deadline", "good", "-cpu-used", "1",
     "-auto-alt-ref", "1", "-lag-in-frames", "16", "-g", "120", "-threads", "8", "-pix_fmt", "yuv420p",
@@ -80,8 +93,10 @@ for (const lang of langs) {
   }
   await page.close();
 
-  // H.264 MP4 through AVFoundation.
-  execFileSync("swift", [join(here, "encode-mp4.swift"), frames, join(here, `anypic-intro${sfx}.mp4`), String(FPS), "2000000"], {
+  // H.264 MP4 through AVFoundation. 1 Mbps keeps this flat, mostly static UI
+  // cut close to the previous asset's size (2 Mbps measured 7.3 MB — nearly
+  // double — with no visible gain).
+  execFileSync("swift", [join(here, "encode-mp4.swift"), frames, join(here, `anypic-intro${sfx}.mp4`), String(FPS), "1000000"], {
     stdio: "inherit",
   });
   // AVAssetWriter's fast-start pass leaves its scratch copy ("….mp4.sb-*") behind.
