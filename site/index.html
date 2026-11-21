@@ -71,14 +71,19 @@
     <h2 data-i18n="f.title">做好一件事，并且诚实。</h2>
     <div class="grid">
       <article class="card wide">
-        <div class="demo result"><span class="mono">4.8 MB</span><span class="arrow">→</span><b>1.1 MB</b><span class="ok">WEBP −77%</span></div>
+        <div class="demo result"><span class="mono">4.8 MB</span><span class="arrow">→</span><b>1.1 MB</b><span class="ok">WEBP −77%</span><span class="demo-note" data-i18n="demo.mock">示意</span></div>
         <h3 data-i18n="f1.t">智能压缩</h3>
         <p data-i18n="f1.d">JPG / PNG / WebP 保持原格式；GIF、BMP、TIFF 自动转为更通用的 JPG 或 PNG。质量 30–100 可调，可按长边缩放到 3840 / 2560 / 1920 / 1280 / 800 像素。</p>
       </article>
       <article class="card">
         <div class="demo"><span class="tag" data-i18n="f2.tag">未压小</span></div>
         <h3 data-i18n="f2.t">诚实的结果</h3>
-        <p data-i18n="f2.d">重新编码没有更小？保留原图并标注「未压小」，不拿更大的文件充数，也不谎称它已经最优。</p>
+        <p data-i18n="f2.d">同一格式、未缩放时，只有重新编码严格更小才交付；否则保留原图并说明原因——这次没压小、原图已在目标体积内，还是逐像素校验发现变化。静态图换格式或缩放时不受此限：结果可能比原图大，行内会用「+%」如实标出。能测量画质的结果按实测 SSIM 标注「几乎无差别 / 轻微损失 / 明显损失」，动图等无法测量的结果则明确写「画质未测量」——不拿设置里的质量数字冒充画质。</p>
+      </article>
+      <article class="card">
+        <div class="demo"><span class="mono">4.8 MB</span><span class="arrow">→</span><b>980 KB</b><span class="ok">≤ 1 MB</span><span class="demo-note" data-i18n="demo.mock">示意</span></div>
+        <h3 data-i18n="f8.t">目标体积</h3>
+        <p data-i18n="f8.d">给每张图设上限：500 KB、1 MB、2 MB 或自定义。JPG 和 WebP 自动搜索能放进上限的最高质量；实在放不下时，如实给出最小体积与对应质量，不悄悄放弃。PNG 是无损格式，无法按上限调质量，结果仍可能超出。</p>
       </article>
       <article class="card">
         <div class="demo frames"><i></i><i></i><i></i><i></i><i></i></div>
@@ -93,14 +98,14 @@
       <article class="card">
         <div class="demo"><kbd>⌘</kbd><kbd>⌥</kbd><kbd>S</kbd></div>
         <h3 data-i18n="f5.t">快捷键截图 + 美化</h3>
-        <p data-i18n="f5.d">随时框选截图，自动入队；预览里加背景、圆角、描边、投影与画布比例，一键生成成品。</p>
+        <p data-i18n="f5.d">随时框选截图，自动入队；预览里可选纯色、渐变、15 种图案或 4 张照片背景，再调圆角、描边、分层投影、边距与画布比例，一键生成成品。</p>
       </article>
       <article class="card solo">
         <div class="demo"><span class="mono">photo.jpg</span><span class="arrow">→</span><span class="mono">photo-anypic.jpg</span></div>
         <h3 data-i18n="f6.t">绝不覆盖原图</h3>
         <p data-i18n="f6.d">输出写在原图旁边（加后缀）或你指定的文件夹，原文件一个字节都不动。</p>
       </article>
-      <article class="card wide privacy">
+      <article class="card privacy">
         <span class="lock" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg></span>
         <h3 data-i18n="f7.t">隐私不是选项，是架构</h3>
         <p data-i18n="f7.d">AnyPic 不上传图片、没有账户、没有遥测，图片处理完全在本机完成。应用唯一的联网行为是检查更新与下载安装包——只在启动和你点击时发生，且只访问 GitHub Releases。代码全部开源，可以自己核对。</p>
@@ -117,18 +122,19 @@
       <li data-i18n="m4"><b>前后对比</b>：拖动分割线查看压缩前后细节。</li>
       <li data-i18n="m5"><b>托盘常驻</b>：关窗后截图快捷键照样可用，可开机启动。</li>
       <li data-i18n="m6"><b>失败可重试</b>：已完成的不会重新编码。</li>
+      <li data-i18n="m7"><b>复制结果</b>：行内按钮、右键菜单或 ⌘C / Ctrl+C。AnyPic 目前只能以 PNG 形式放进剪贴板；JPEG / WebP 的结果会先转码，体积可能是原文件的数倍到十余倍。提示会写明真实格式和两个体积。</li>
     </ul>
   </section>
 
   <section id="formats" class="wrap">
     <h2 data-i18n="fm.title">支持格式与限制</h2>
     <div class="table">
-      <div><span data-i18n="fm.in">可输入</span><p>JPG/JPEG · PNG · WebP · GIF <span data-i18n="fm.anim">（含动画）</span> · BMP · TIFF/TIF</p></div>
-      <div><span data-i18n="fm.out">可输出</span><p data-i18n="fm.outv">JPG · PNG · WebP；动画 GIF / WebP 输出为动画 WebP</p></div>
+      <div><span data-i18n="fm.in">可输入</span><p>JPG/JPEG · PNG <span data-i18n="fm.apng">（APNG 原样保留）</span> · WebP · GIF <span data-i18n="fm.anim">（含动画）</span> · BMP · TIFF/TIF</p></div>
+      <div><span data-i18n="fm.out">可输出</span><p data-i18n="fm.outv">JPG · PNG · WebP；动画 GIF / WebP 输出为动画 WebP；APNG 与 CMYK 源图保留原图并说明原因</p></div>
       <div><span data-i18n="fm.limit">上限</span><p data-i18n="fm.limitv">单文件 250 MB，单批 500 张</p></div>
-      <div><span data-i18n="fm.no">暂不支持</span><p>HEIC · AVIF</p></div>
+      <div><span data-i18n="fm.no">暂不支持</span><p>HEIC · AVIF <span data-i18n="fm.skip">（拖入时会提示被跳过的文件及原因）</span></p></div>
       <div><span>PNG</span><p data-i18n="fm.png">输出为无损重编码，质量滑杆对 PNG 不生效——这是格式本身的限制，我们如实展示。</p></div>
-      <div><span data-i18n="fm.meta">元数据</span><p data-i18n="fm.metav">重新编码会移除 EXIF / XMP（含拍摄信息），方向会在处理前自动校正。</p></div>
+      <div><span data-i18n="fm.meta">元数据</span><p data-i18n="fm.metav">PNG / JPG 输出在与像素色彩空间兼容时保留 ICC 色彩配置；JPEG 的 EXIF 除 GPS 位置外全部保留，方向标记（Orientation）重写为 1，因为像素已按方向旋转。XMP、IPTC 等其它元数据不保留；WebP 输出暂不写入 ICC；无法携带的元数据会在结果行标注。</p></div>
     </div>
   </section>
 
