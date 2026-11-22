@@ -18,6 +18,13 @@ export interface AddResult {
   overflow: number;
   /** Copied reports that a screenshot was put on the clipboard. */
   copied: boolean;
+  /**
+   * Notice reports that a capture had to take another path: the built-in
+   * Windows selector could not see the screen ("overlay-black") or failed
+   * ("overlay-failed"), and the system screenshot tool took the shot. The
+   * page shows the matching message; empty on every ordinary capture.
+   */
+  notice?: string;
 }
 
 /** AppInfo describes the runtime of the app. */
@@ -307,6 +314,14 @@ export interface Settings {
    * result only replaces AnyPic's own copy. Requires ScreenshotClipboard.
    */
   screenshotPipeline: string;
+  /**
+   * ScreenshotTool selects the Windows capture path: "anypic" (AnyPic's
+   * own per-monitor region selector) or "system" (the Snipping Tool
+   * through ms-screenclip). Other platforms ignore it. A failed or black
+   * built-in capture falls back to the system tool on its own, with a
+   * notice; this preference is the user's deliberate choice to skip it.
+   */
+  screenshotTool: string;
   /**
    * TargetSize caps each result at this many bytes; 0 leaves the quality
    * setting in charge. JPEG, WebP and animated WebP search their quality to

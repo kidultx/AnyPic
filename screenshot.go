@@ -86,10 +86,18 @@ func (a *AnyPic) CaptureScreenshot(ctx context.Context) (result AddResult, err e
 		return AddResult{}, err
 	}
 
-	data, viaClipboard, err := captureRegion(ctx)
+	// Windows may use AnyPic's own region selector instead of the system
+	// screenshot tool; the preference is read before the capture so a
+	// just-toggled switch applies to this shot.
+	a.mu.Lock()
+	allowOverlay := a.settings.ScreenshotTool != "system"
+	a.mu.Unlock()
+
+	outcome, err := captureRegion(ctx, allowOverlay)
 	if err != nil {
 		return AddResult{}, err
 	}
+	data, viaClipboard := outcome.data, outcome.viaClipboard
 
 	// The clipboard, auto-process and appearance preferences are read in one
 	// locked snapshot: one capture, one consistent set. Beautify is a
@@ -139,6 +147,10 @@ func (a *AnyPic) CaptureScreenshot(ctx context.Context) (result AddResult, err e
 		return AddResult{}, fmt.Errorf("%s: %w", tr().GoErrCaptureQueue(path), err)
 	}
 	result.Copied = copied
+	// The selector could not see the screen (or failed outright), so the
+	// system tool took the shot. The page says so: a silent switch would
+	// hide why the built-in selector never appeared.
+	result.Notice = outcome.fallback
 
 	// Remember the write only when it succeeded; a failed write records
 	// nothing, so CopyCaptureResult can never treat some later image as ours.
@@ -246,13 +258,50 @@ func hasCommands(names ...string) bool {
 	return true
 }
 
+// captureOutcome is one region capture: the image, how it was fetched, and a
+// notice for the page when AnyPic's own selector had to fall back.
+type captureOutcome struct {
+	data         []byte
+	viaClipboard bool
+	// fallback is "" on the normal path, or one of the noticeOverlay*
+	// codes when the built-in selector was tried first and the system
+	// tool took the shot instead.
+	fallback string
+}
+
+// Notices for the page when the Windows selector could not take the shot.
+// The page owns the wording; these are stable codes, not sentences.
+const (
+	noticeOverlayBlack  = "overlay-black"
+	noticeOverlayFailed = "overlay-failed"
+)
+
 // captureRegion runs the capture plan. It returns the PNG and whether the
 // image was fetched from the clipboard; file-based captures never touch it,
-// which avoids macOS's paste permission prompt.
-func captureRegion(ctx context.Context) ([]byte, bool, error) {
+// which avoids macOS's paste permission prompt. On Windows, when allowOverlay
+// is set, AnyPic's own selector is tried first; a black frame or a failure
+// falls back to the system tool with a notice, while a user cancel stays a
+// cancel so the page stays quiet.
+func captureRegion(ctx context.Context, allowOverlay bool) (captureOutcome, error) {
+	fallback := ""
+	if allowOverlay && overlaySupported() {
+		data, err := runOverlayCapture(ctx)
+		switch {
+		case err == nil:
+			return captureOutcome{data: data}, nil
+		case errors.Is(err, errCaptureCanceled):
+			return captureOutcome{}, errCaptureCanceled
+		case errors.Is(err, errOverlayBlack):
+			fallback = noticeOverlayBlack
+		default:
+			logOverlayFailure(err)
+			fallback = noticeOverlayFailed
+		}
+	}
+
 	plan, err := screenshotPlanFor()
 	if err != nil {
-		return nil, false, err
+		return captureOutcome{}, err
 	}
 
 	cmd := exec.Command(plan.name, plan.args...)
@@ -262,32 +311,32 @@ func captureRegion(ctx context.Context) ([]byte, bool, error) {
 		// the paste permission every time.
 		data, err := captureToFile(cmd, plan)
 		if err != nil {
-			return nil, false, err
+			return captureOutcome{}, err
 		}
-		return data, false, nil
+		return captureOutcome{data: data, fallback: fallback}, nil
 	}
 
 	baseline := clipboardImageDigest()
 	if plan.blocking {
 		if err := runCaptureCommand(cmd); err != nil {
-			return nil, false, errCaptureCanceled
+			return captureOutcome{}, errCaptureCanceled
 		}
 		if data := waitForNewImage(ctx, baseline, 3*time.Second); data != nil {
-			return data, true, nil
+			return captureOutcome{data: data, viaClipboard: true, fallback: fallback}, nil
 		}
-		return nil, false, errCaptureCanceled
+		return captureOutcome{}, errCaptureCanceled
 	}
 
 	if err := startCaptureCommand(cmd); err != nil {
-		return nil, false, fmt.Errorf("%s: %w", tr().GoErrCaptureStart(), err)
+		return captureOutcome{}, fmt.Errorf("%s: %w", tr().GoErrCaptureStart(), err)
 	}
 	go func() { _ = cmd.Wait() }()
 	// These tools return as soon as their overlay opens, so the wait has to
 	// cover a leisurely selection; canceling means waiting it out.
 	if data := waitForNewImage(ctx, baseline, 30*time.Second); data != nil {
-		return data, true, nil
+		return captureOutcome{data: data, viaClipboard: true, fallback: fallback}, nil
 	}
-	return nil, false, errCaptureCanceled
+	return captureOutcome{}, errCaptureCanceled
 }
 
 // captureToFile runs a file-writing capture command and returns the image it

@@ -27,7 +27,7 @@ AnyPic 是一款使用 [MyGo](https://github.com/egoist/mygo) 构建的跨平台
 - **队列批量操作**：勾选多张或全选后一键移除所选（可撤销），并可按文件名过滤队列。队列也像真正的列表一样工作：↑/↓ 移动、Shift+↑/↓ 或 Shift+点击连选、⌘/Ctrl+A 全选可见项、⌘/Ctrl+C 复制当前行的压缩结果、Delete/Backspace 移除所选（⌘⌫ 仍是清空队列），空格或回车打开预览；右键任意一行可预览、复制图片、美化、导出、在文件夹中显示或移除——列表与网格两种视图一致。
 - **复制压缩结果**：行内「复制图片」按钮、右键菜单、预览窗口，或对着一行按 ⌘C / Ctrl+C，都能把这一张的压缩结果放进剪贴板。剪贴板只接受 PNG，JPEG / WebP 结果会先解码再重编码（通常会变大）；提示语会写明实际写入的格式和两个体积，例如「已复制 PNG · 945 KB（原文件 166 KB）」，不把膨胀藏起来。动图只能复制首帧，提示语会说明。
 - **粘贴入队**：在其他应用复制图片后，按 ⌘V / Ctrl+V 直接加入队列；粘贴的图片存到「图片/AnyPic」，与截图同级。
-- **快捷键截图**：默认 ⌘⌥S（Windows / Linux 为 Ctrl+Alt+S），在「偏好设置」（⌘,，或侧栏底部）里点击快捷键后可直接录制新的组合键；随时框选屏幕区域，截图自动存到「图片/AnyPic」并加入队列，还可选择是否同时复制到剪贴板。macOS 上通过临时文件取图，不读取剪贴板，因此不会反复弹出粘贴权限提示。「偏好设置 → 截图」里的「截图后自动压缩并复制」默认关闭；开启后截图先复制原图，压缩完成时自动换成压缩结果，期间粘贴拿到的是原图。只有剪贴板仍是 AnyPic 放入的那张图时才会替换——压缩期间复制了文字、图片或清空了剪贴板，都会保留用户的新内容。该开关依赖「截图后复制到剪贴板」，后者关闭时它也会关闭。托盘菜单也提供「再次复制上一张压缩结果」。
+- **快捷键截图**：默认 ⌘⌥S（Windows / Linux 为 Ctrl+Alt+S），在「偏好设置」（⌘,，或侧栏底部）里点击快捷键后可直接录制新的组合键；随时框选屏幕区域，截图自动存到「图片/AnyPic」并加入队列，还可选择是否同时复制到剪贴板。macOS 上通过临时文件取图，不读取剪贴板，因此不会反复弹出粘贴权限提示。Windows 上框选由 AnyPic 自己的浮层完成：每块显示器一个置顶窗口，展示按下快捷键那一刻的冻结画面（GDI 抓屏，全程本机）；Esc、右键、单击、失去前台或 60 秒无操作都会取消，结束后焦点交还按下快捷键前的窗口（失焦取消除外）。「偏好设置 → 截图」里的「截图后自动压缩并复制」默认关闭；开启后截图先复制原图，压缩完成时自动换成压缩结果，期间粘贴拿到的是原图。只有剪贴板仍是 AnyPic 放入的那张图时才会替换——压缩期间复制了文字、图片或清空了剪贴板，都会保留用户的新内容。该开关依赖「截图后复制到剪贴板」，后者关闭时它也会关闭。托盘菜单也提供「再次复制上一张压缩结果」。
 - **预览内美化**：预览界面里有「对比 / 美化」两个页签，美化工作台提供背景（纯色 / 渐变预设 / 15 种 day-card 图案与自定义取色 / 4 张可调模糊与压暗的照片）、圆角、细描边、投影、边距与画布比例（1:1 / 4:3 / 16:9，只外扩不裁切）六组旋钮，调整实时反映在大图上，满意后一键应用——生成 `原名-美化.png` 旁存于原图旁，原图不动，随后照常压缩导出。美化完全在本机生成，图案背景是纯代码绘制，照片背景随应用内嵌，都不联网取素材。
 - **托盘常驻**：关闭窗口后 AnyPic 留在菜单栏 / 通知区域，截图快捷键继续可用；可在「偏好设置」里选择关闭窗口后是否隐藏 Dock 图标（默认隐藏），从菜单栏图标可重新打开窗口或退出。AnyPic 同一时间只运行一份：它已在运行时再次启动，会把已有的窗口带回前面，不会开出第二份。
 - **开机启动**：可在「偏好设置」里开关「开机时启动 AnyPic」，写入系统的登录项（macOS 登录项 / Linux XDG autostart / Windows 注册表 Run），开关状态与系统实际状态保持同步。
@@ -124,6 +124,7 @@ macOS 发布包用一张固定不变的自签名证书「AnyPic Release Signing�
 - 暂不支持 HEIC 与 AVIF；文件夹中拖到这些格式时会计入跳过提示，不会被无声丢弃。
 - PNG 输出为无损重编码，编码器会在逐像素校验内尝试多种 filter 取最小结果（超过 1600 万像素或非 8-bit RGB 图沿用标准库档位）；质量滑杆不生效是 PNG 格式本身的限制。
 - 重新编码保留 ICC 色彩配置与 JPEG EXIF：GPS 位置信息移除，方向标记校正为 1，其余字段保留；XMP、IPTC、注释等其它元数据不保留。跨格式转换无法原样携带的元数据会在结果行如实标注。
+- Windows 截图默认用 AnyPic 自己的浮层；抓屏全黑（远程桌面、受保护内容、独占全屏）或浮层启动失败时，会如实提示并回退到系统截图工具（Snipping Tool）。「偏好设置 → 截图」的「使用系统截图工具」开关可以始终走系统工具。
 - macOS 上截图前，AnyPic 会检查「屏幕与系统录音」（旧系统叫「屏幕录制」）权限；没有权限时不会去截图，而是提示你去「系统设置 → 隐私与安全性 → 屏幕与系统录音」允许 AnyPic（如果 AnyPic 的开关已经打开，却还是出现这个提示，先选中它点「−」删掉，再重新允许；允许后退出并重新打开 AnyPic）。「偏好设置 → 截图」里的「无法截图？检查屏幕录制权限」可直接打开该设置。正式版安装包用固定的自签名证书签名，升级后这项权限会保留；从 0.1.7 及更早的版本升级时，需要按提示重新允许一次。从源码构建时请参考上文「验证与打包」配置固定的签名身份，否则每次重新打包都要重新授权；对外分发时改用 Developer ID 证书并公证。Linux 需要 gnome-screenshot、spectacle 或 grim + slurp + wl-copy 之一。
 
 ## 项目结构
@@ -137,6 +138,10 @@ png_lossless.go    纯 Go PNG filter 搜索编码器（无损输出，标准库�
 clipboard.go       压缩结果复制、剪贴板防覆盖与 Markdown 链接
 animation.go       动图帧数检测（GIF/WebP/APNG，按内容嗅探）：走文件结构计数，不解码像素
 screenshot.go      快捷键截图、剪贴板取图与截图归档
+overlay.go         Windows 框选浮层的跨平台内核：选区状态机、DIP→物理像素换算与纯黑检测
+overlay_windows.go Windows 浮层窗口与 GDI 抓屏（build tag 隔离；GDI 部分改编自 kbinani/screenshot，MIT，见 LICENSE-kbinani-screenshot.txt）
+overlay_other.go   非 Windows 平台的空实现
+overlay_test.go    坐标换算、纯黑检测与取消路径测试
 decorate.go        截图外观美化：圆角、描边、投影与背景
 patterns.go        背景图案：day-card 的 15 种纯代码绘制图案
 backgrounds.go     照片背景：内嵌的四张 day-card 照片、模糊/压暗与缩略图
@@ -165,6 +170,7 @@ site/video/        介绍视频成品，及生成它的分镜（src/）与脚本
 - [disintegration/imaging](https://github.com/disintegration/imaging) — MIT
 - [gen2brain/webp](https://github.com/gen2brain/webp) — BSD-3-Clause，内含 [libwebp](https://chromium.googlesource.com/webm/libwebp)（BSD-3-Clause）
 - [golang.org/x/image](https://pkg.go.dev/golang.org/x/image) — BSD-3-Clause
+- [kbinani/screenshot](https://github.com/kbinani/screenshot) — MIT（Copyright (c) 2016 kbinani；Windows 截图浮层的 GDI 抓屏改编自其 windows.go，许可全文见 [LICENSE-kbinani-screenshot.txt](LICENSE-kbinani-screenshot.txt)）
 - [magpie](https://github.com/yetone/magpie) — 界面语言参考（未包含其代码）
 - [magpie-community/plugins](https://github.com/magpie-community/plugins/tree/main/packages/day-card) — 美化工作台的四张照片背景，MIT（Copyright (c) 2026 magpie-community contributors；上游 NOTICE 只排除 Amp 标，照片在授权内；文件原样内嵌，见 [resources/backgrounds/NOTICE](resources/backgrounds/NOTICE)）
 

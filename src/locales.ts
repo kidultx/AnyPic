@@ -116,6 +116,14 @@ export interface Messages {
    */
   screenshotPipelineNeedsClipboard(): string;
   /**
+   * `使用系统截图工具`
+   */
+  useSystemCapture(): string;
+  /**
+   * `默认使用 AnyPic 自己的框选；开启后改用 Windows 截图工具。`
+   */
+  useSystemCaptureNote(): string;
+  /**
    * `无法截图？检查屏幕录制权限`
    */
   checkScreenRecording(): string;
@@ -772,6 +780,14 @@ export interface Messages {
    */
   captureCopied(): string;
   /**
+   * `AnyPic 的截屏是全黑的（远程桌面或受保护内容），已改用系统截图工具`
+   */
+  captureFallbackBlack(): string;
+  /**
+   * `AnyPic 的截屏失败，已改用系统截图工具`
+   */
+  captureFallbackFailed(): string;
+  /**
    * `粘贴失败`
    */
   pasteFailed(): string;
@@ -851,6 +867,10 @@ export interface Messages {
    * `无法保存截图自动处理设置`
    */
   screenshotPipelineSettingsFailed(): string;
+  /**
+   * `无法保存截图工具设置`
+   */
+  screenshotToolSettingsFailed(): string;
   /**
    * `无法保存 Dock 图标设置`
    */
@@ -1652,6 +1672,10 @@ export interface Messages {
    */
   goScreenshotNameDuplicate(n: number, stamp: string): string;
   /**
+   * `拖动框选 · 右键或 Esc 取消`
+   */
+  goOverlayHint(): string;
+  /**
    * `-美化`
    */
   goDecoratedSuffix(): string;
@@ -1965,6 +1989,8 @@ const catalog = createCatalog<Messages>({
     "screenshotPipelineNoteOn": [],
     "screenshotPipelineNoteOff": [],
     "screenshotPipelineNeedsClipboard": [],
+    "useSystemCapture": [],
+    "useSystemCaptureNote": [],
     "checkScreenRecording": [],
     "launchAtLogin": [],
     "hideDock": [],
@@ -2129,6 +2155,8 @@ const catalog = createCatalog<Messages>({
     "addFailed": [],
     "screenshotFailed": [],
     "captureCopied": [],
+    "captureFallbackBlack": [],
+    "captureFallbackFailed": [],
     "pasteFailed": [],
     "removeTitle": ["n"],
     "removeBody": [],
@@ -2149,6 +2177,7 @@ const catalog = createCatalog<Messages>({
     "clipboardSettingsFailed": [],
     "autoProcessSettingsFailed": [],
     "screenshotPipelineSettingsFailed": [],
+    "screenshotToolSettingsFailed": [],
     "dockSettingsFailed": [],
     "loginItemFailed": [],
     "systemRefused": [],
@@ -2349,6 +2378,7 @@ const catalog = createCatalog<Messages>({
     "goPastedName": ["stamp"],
     "goScreenshotName": ["stamp"],
     "goScreenshotNameDuplicate": ["n", "stamp"],
+    "goOverlayHint": [],
     "goDecoratedSuffix": [],
     "goErrNoClipboardImage": [],
     "goErrNoSaveLocation": [],
@@ -2449,6 +2479,8 @@ const catalog = createCatalog<Messages>({
       "screenshotPipelineNoteOn": "截图会先复制原图；压缩完成后换成压缩结果，期间可以直接粘贴。",
       "screenshotPipelineNoteOff": "只按上一项复制原图，压缩结果不会自动进剪贴板。",
       "screenshotPipelineNeedsClipboard": "先打开「截图后复制到剪贴板」，才能启用这一步；它换的正是那份原图。",
+      "useSystemCapture": "使用系统截图工具",
+      "useSystemCaptureNote": "默认使用 AnyPic 自己的框选；开启后改用 Windows 截图工具。",
       "checkScreenRecording": "无法截图？检查屏幕录制权限",
       "launchAtLogin": "开机时启动 AnyPic",
       "hideDock": "关闭窗口后隐藏 Dock 图标",
@@ -2613,6 +2645,8 @@ const catalog = createCatalog<Messages>({
       "addFailed": "添加图片失败",
       "screenshotFailed": "截图失败",
       "captureCopied": "截图已复制到剪贴板",
+      "captureFallbackBlack": "AnyPic 的截屏是全黑的（远程桌面或受保护内容），已改用系统截图工具",
+      "captureFallbackFailed": "AnyPic 的截屏失败，已改用系统截图工具",
       "pasteFailed": "粘贴失败",
       "removeTitle": "{n, plural, other {移除所选 # 张图片？}}",
       "removeBody": "原始图片不会被删除。",
@@ -2633,6 +2667,7 @@ const catalog = createCatalog<Messages>({
       "clipboardSettingsFailed": "无法保存截图剪贴板设置",
       "autoProcessSettingsFailed": "无法保存自动处理设置",
       "screenshotPipelineSettingsFailed": "无法保存截图自动处理设置",
+      "screenshotToolSettingsFailed": "无法保存截图工具设置",
       "dockSettingsFailed": "无法保存 Dock 图标设置",
       "loginItemFailed": "无法更改「开机时启动」",
       "systemRefused": "系统拒绝了这次更改，开关已恢复原状",
@@ -2833,6 +2868,7 @@ const catalog = createCatalog<Messages>({
       "goPastedName": "粘贴 {stamp}",
       "goScreenshotName": "截图 {stamp}",
       "goScreenshotNameDuplicate": "截图 {stamp} ({n})",
+      "goOverlayHint": "拖动框选 · 右键或 Esc 取消",
       "goDecoratedSuffix": "-美化",
       "goErrNoClipboardImage": "剪贴板里没有图片",
       "goErrNoSaveLocation": "无法确定保存位置",
@@ -2932,6 +2968,8 @@ const catalog = createCatalog<Messages>({
       "screenshotPipelineNoteOn": "The capture is copied first; the compressed result replaces it when ready, so pasting meanwhile works.",
       "screenshotPipelineNoteOff": "Only the raw capture is copied; the compressed result stays out of the clipboard.",
       "screenshotPipelineNeedsClipboard": "Turn on “Copy captures to the clipboard” first; this step replaces that copy.",
+      "useSystemCapture": "Use the system screenshot tool",
+      "useSystemCaptureNote": "AnyPic's own region selector is the default; the Windows Snipping Tool is used instead when this is on.",
       "checkScreenRecording": "Cannot capture? Check screen recording access",
       "launchAtLogin": "Launch AnyPic at login",
       "hideDock": "Hide the Dock icon when the window closes",
@@ -3096,6 +3134,8 @@ const catalog = createCatalog<Messages>({
       "addFailed": "Could not add the images",
       "screenshotFailed": "Capture failed",
       "captureCopied": "Capture copied to the clipboard",
+      "captureFallbackBlack": "The built-in capture came back black (remote desktop or protected content); the system screenshot tool was used instead",
+      "captureFallbackFailed": "The built-in capture failed; the system screenshot tool was used instead",
       "pasteFailed": "Paste failed",
       "removeTitle": "{n, plural, one {Remove # image?} other {Remove # images?}}",
       "removeBody": "The original files are not deleted.",
@@ -3116,6 +3156,7 @@ const catalog = createCatalog<Messages>({
       "clipboardSettingsFailed": "Could not save the clipboard setting",
       "autoProcessSettingsFailed": "Could not save the automatic processing setting",
       "screenshotPipelineSettingsFailed": "Could not save the capture pipeline setting",
+      "screenshotToolSettingsFailed": "Could not save the screenshot tool setting",
       "dockSettingsFailed": "Could not save the Dock icon setting",
       "loginItemFailed": "Could not change “Launch at login”",
       "systemRefused": "The system refused the change; the switch was restored",
@@ -3316,6 +3357,7 @@ const catalog = createCatalog<Messages>({
       "goPastedName": "Pasted {stamp}",
       "goScreenshotName": "Screenshot {stamp}",
       "goScreenshotNameDuplicate": "Screenshot {stamp} ({n})",
+      "goOverlayHint": "Drag to select · right-click or Esc to cancel",
       "goDecoratedSuffix": "-decorated",
       "goErrNoClipboardImage": "The clipboard has no image",
       "goErrNoSaveLocation": "Could not determine where to save",

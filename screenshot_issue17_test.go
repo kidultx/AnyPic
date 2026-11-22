@@ -32,6 +32,12 @@ func issue17Seams(t *testing.T) {
 	leaseValid := clipboardLeaseValid
 	writeText := clipboardWriteText
 	clearClipboard := clipboardClear
+	// The built-in Windows selector is off for these tests: they exercise the
+	// system-tool plans, and on a Windows test runner a real capture would
+	// open overlay windows and wait for a selection nobody makes. The overlay
+	// tests turn it back on themselves.
+	supported := overlaySupported
+	overlaySupported = func() bool { return false }
 	// Captures may reach the clipboard now that the pipeline writes the raw
 	// image first; these tests must never touch the developer's real one.
 	clipboardReadState = func() clipboardState { return clipboardState{} }
@@ -54,6 +60,7 @@ func issue17Seams(t *testing.T) {
 		clipboardLeaseValid = leaseValid
 		clipboardWriteText = writeText
 		clipboardClear = clearClipboard
+		overlaySupported = supported
 	})
 }
 

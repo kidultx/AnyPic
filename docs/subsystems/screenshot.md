@@ -6,15 +6,22 @@
 ## 职责边界
 
 `screenshot.go` + `decorate.go`:全局快捷键、区域截图命令选择、美化渲染
-(`decorateScreenshot`,纯函数)、截图归档(`writeScreenshot`)。美化工作台
-的 IPC 入口(`PreviewDecorated`/`DecorateItem`)归
+(`decorateScreenshot`,纯函数)、截图归档(`writeScreenshot`)。Windows 的
+自绘框选浮层拆在三个文件:跨平台内核 `overlay.go`(选区状态机、DIP→物理
+像素换算、纯黑检测,可在任意平台测试)、`overlay_windows.go`(每屏一个
+窗口 + GDI 抓屏,build tag 隔离)、`overlay_other.go`(非 Windows 空实现)。
+美化工作台的 IPC 入口(`PreviewDecorated`/`DecorateItem`)归
 [compressor.go](../../compressor.go);页面同步归 `index.html` +
 `src/main.ts`(预览模态的「对比/美化」tab)。
 
 ## Source of truth
 
 - 快捷键与剪贴板偏好:`screenshot.go` 读 `Settings.ScreenshotShortcut` /
-  `ScreenshotClipboard` / `ScreenshotPipeline`。`ScreenshotPipeline`
+  `ScreenshotClipboard` / `ScreenshotPipeline`。
+- 截图工具选择:`Settings.ScreenshotTool` 是闭集,`"anypic"`(默认,
+  Windows 自绘浮层)或 `"system"`(系统截图工具);`normalizeSettings` 把
+  缺失值与任何未知值都归一为 `"anypic"`,只有显式 `"system"` 才退出。
+  其他平台忽略该设置,始终走各自的系统命令。`ScreenshotPipeline`
   （**默认 off**，只有显式 `"on"` 才开启）表示截图后自动压缩、并在压缩完成
   时用压缩结果替换剪贴板里的原图；它依赖 `ScreenshotClipboard`，后者关闭
   时 `normalizeSettings` 强制把管线也关掉，`CaptureScreenshot` 仍会再判一次，
@@ -87,6 +94,41 @@
    开启时并入自动流程。
 4. 对比 tab(status=done)保持原有压缩前后对比。
 
+### Windows 自绘框选(默认路径)
+
+- `captureRegion` 在 `ScreenshotTool != "system"` 且 `overlaySupported()`
+  时先走 `runOverlayCapture`(两个都是测试接缝)。浮层一次 `BitBlt` 抓整个
+  虚拟桌面(`SRCCOPY|CAPTUREBLT`,否则漏掉菜单、tooltip 等 layered 窗口;
+  top-down 32bpp DIB,alpha 强制 255——GDI 不定义 alpha,不强制会在预乘
+  管线里变透明),按 `EnumDisplayMonitors` + `GetMonitorInfoW` +
+  `GetDpiForMonitor` 得到的物理矩形,每块显示器一个无边框置顶窗口,各自
+  展示自己那份冻结画面;只有光标所在那一块拿键盘(拿不到也不死锁,见下)。
+- **坐标系**:`PointerPosition` 返回窗口内 DIP,浮层位图是物理像素,两者
+  绝不混用。换算只有一处:`physical = round(DIP × display.scale) + display.rect.Min`
+  (`overlayPhysicalPoint`),选区在全局虚拟屏物理坐标里保存。抓屏位图的
+  `image.Rectangle` 与虚拟屏原点相同,成功时直接 `SubImage(selection)` 裁剪,
+  没有第二次偏移算术。绘制用 `physicalSize / scale` 的小数 DIP 而不是
+  `Context.Size()`(整数 DIP 截断在 150% 下会留下黑边)。
+- **焦点安全**:`OnBlur` 时用 `GetForegroundWindow` 判断新前台是不是我们
+  自己的某个浮层——是(在多屏之间移动焦点)就忽略,不是就立即取消,对应
+  `WM_ACTIVATE(WA_INACTIVE)`。另有 Esc、右键、单击不拖动、窗口被关闭、
+  ctx 取消与 60 秒超时(`overlayTimeout`)六条退路;取消一律走
+  `errCaptureCanceled`,静默且**不**运行系统截图工具。结束(成功或取消)
+  时先 `SetForegroundWindow` 把前台还给快捷键按下前的窗口,再销毁浮层
+  ——Windows 销毁前台窗口后交给 z-order 下一个,不一定是用户原来的窗口;
+  失焦取消与 ctx 取消不还,用户已经选了别处。
+- **成功产物**:选区裁剪后 PNG 编码,与 macOS/Linux 的 `captureRegion`
+  返回值同形,后续 `writeScreenshot` → `AddPaths` → 剪贴板 → 管线完全
+  相同。
+- **失败与回退**:抓完先 `looksBlack`(每 4093 像素采样,99.5% 的 RGB 都
+  < 8 才算黑,alpha 忽略)——RDP、DRM、独占全屏会全黑,此时回退到原有
+  系统截图路径并带 `AddResult.Notice = "overlay-black"`;浮层启动/抓屏
+  的其他错误记日志并回退,带 `"overlay-failed"`。页面把这两个码翻成
+  本地化提示;回退抓到的图照常入队。设置改为 `"system"` 则完全不尝试
+  浮层。Windows 的 GDI 抓屏改编自 kbinani/screenshot(MIT,Copyright (c)
+  2016 kbinani),许可全文见仓库根目录
+  [LICENSE-kbinani-screenshot.txt](../../LICENSE-kbinani-screenshot.txt)。
+
 ## 状态转换
 
 - `captureBusy`(atomic):同一时刻只允许一次截图。
@@ -119,6 +161,11 @@
 - **出错时窗口前置**:除取消与「正在截图中」外,`CaptureScreenshot` 的
   任何错误(权限、截图工具、保存、入队)都会恢复/显示/聚焦窗口——全局
   快捷键在后台触发时,错误提示才看得见。成功路径的零点击例外不变。
+- **Windows 浮层回退**:浮层失败不是错误——系统截图工具仍可能成功。两条
+  回退各带一个 `AddResult.Notice`:抓屏全黑是 `"overlay-black"`(RDP、
+  受保护内容),其余失败是 `"overlay-failed"`;页面按码显示本地化提示,
+  并照常提示截图已加入队列。取消与超时是 `errCaptureCanceled`,既不通
+  知页面也不触发回退。
 
 ## 重要约束
 
@@ -136,6 +183,11 @@
 - 美化是显式动作:没有全局设置、没有截图时静默套用;样式不记忆
   (不写 localStorage),每次打开都回到默认。
 - 非法样式输入由 `normalizeFrameStyle` 兜底为默认渲染,不报错。
+- Windows 浮层只读取屏幕像素并画在自己窗口里,不写文件、不联网;GDI
+  抓屏的第三方来源与许可见上文,不得移除归属注释与
+  `LICENSE-kbinani-screenshot.txt`。浮层的坐标与焦点规则是契约:
+  DIP→物理换算只允许经 `overlayPhysicalPoint`,跨屏选区只在全局物理坐标
+  里表示。
 
 ## 验证命令
 
@@ -145,6 +197,8 @@ go test -race -run 'TestScreenshotPipeline|TestScreenshotClipboard|TestCopy' .  
 go test -race -run 'TestIssue1' .   # 样式归一化、各旋钮、条目应用、预览
 go test -race -run 'TestPattern' .  # 图案闭集、平铺比例、边界画布、阴影色
 go test -race -run 'TestPhoto' .    # 照片闭集与归一化、cover 居中、模糊/压暗、缩略图、投影色
+go test -race -run 'TestOverlay|TestLooksBlack|TestNormalizeSettingsScreenshotTool' .  # 浮层坐标、纯黑检测、取消路径、回退提示
 go test -race ./...                 # 全量
+GOOS=windows GOARCH=amd64 go build .  # overlay_windows.go 只在交叉编译时被检查
 bun run typecheck                   # tsc --noEmit
 ```
