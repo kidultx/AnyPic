@@ -37,7 +37,7 @@ func issue18Capture(t *testing.T, run func(*exec.Cmd) error) []string {
 		run = issue17Runner(issue17PNG(t))
 	}
 	runCaptureCommand = run
-	if _, _, err := captureRegion(context.Background()); err != nil && err != errCaptureCanceled {
+	if _, err := captureRegion(context.Background(), false); err != nil && err != errCaptureCanceled {
 		t.Fatalf("captureRegion: %v", err)
 	}
 	return issue18ShotDirs(t, tmp)
@@ -68,7 +68,7 @@ func TestIssue18UnsupportedToolLeavesNoTempDir(t *testing.T) {
 		return screenshotCommand{name: "/usr/bin/gnome-screenshot", args: []string{"-a"}, blocking: true}, nil
 	}
 	runCaptureCommand = func(*exec.Cmd) error { return nil }
-	if _, _, err := captureRegion(context.Background()); err == nil || err == errCaptureCanceled {
+	if _, err := captureRegion(context.Background(), false); err == nil || err == errCaptureCanceled {
 		t.Fatalf("unsupported tool return: got %v, want a plain error", err)
 	}
 	if left := issue18ShotDirs(t, tmp); len(left) > 0 {

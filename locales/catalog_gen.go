@@ -316,6 +316,26 @@ func (msgs Messages) ScreenshotPipelineNeedsClipboard() string {
 	return Catalog.Format(msgs.locale, "screenshotPipelineNeedsClipboard", nil)
 }
 
+// UseSystemCapture says "使用系统截图工具"
+// in the language the app shows.
+func UseSystemCapture() string { return In(i18n.Locale()).UseSystemCapture() }
+
+// UseSystemCapture says "使用系统截图工具"
+// in the language of msgs.
+func (msgs Messages) UseSystemCapture() string {
+	return Catalog.Format(msgs.locale, "useSystemCapture", nil)
+}
+
+// UseSystemCaptureNote says "默认使用 AnyPic 自己的框选；开启后改用 Windows 截图工具。"
+// in the language the app shows.
+func UseSystemCaptureNote() string { return In(i18n.Locale()).UseSystemCaptureNote() }
+
+// UseSystemCaptureNote says "默认使用 AnyPic 自己的框选；开启后改用 Windows 截图工具。"
+// in the language of msgs.
+func (msgs Messages) UseSystemCaptureNote() string {
+	return Catalog.Format(msgs.locale, "useSystemCaptureNote", nil)
+}
+
 // CheckScreenRecording says "无法截图？检查屏幕录制权限"
 // in the language the app shows.
 func CheckScreenRecording() string { return In(i18n.Locale()).CheckScreenRecording() }
@@ -1978,6 +1998,26 @@ func (msgs Messages) CaptureCopied() string {
 	return Catalog.Format(msgs.locale, "captureCopied", nil)
 }
 
+// CaptureFallbackBlack says "AnyPic 的截屏是全黑的（远程桌面或受保护内容），已改用系统截图工具"
+// in the language the app shows.
+func CaptureFallbackBlack() string { return In(i18n.Locale()).CaptureFallbackBlack() }
+
+// CaptureFallbackBlack says "AnyPic 的截屏是全黑的（远程桌面或受保护内容），已改用系统截图工具"
+// in the language of msgs.
+func (msgs Messages) CaptureFallbackBlack() string {
+	return Catalog.Format(msgs.locale, "captureFallbackBlack", nil)
+}
+
+// CaptureFallbackFailed says "AnyPic 的截屏失败，已改用系统截图工具"
+// in the language the app shows.
+func CaptureFallbackFailed() string { return In(i18n.Locale()).CaptureFallbackFailed() }
+
+// CaptureFallbackFailed says "AnyPic 的截屏失败，已改用系统截图工具"
+// in the language of msgs.
+func (msgs Messages) CaptureFallbackFailed() string {
+	return Catalog.Format(msgs.locale, "captureFallbackFailed", nil)
+}
+
 // PasteFailed says "粘贴失败"
 // in the language the app shows.
 func PasteFailed() string { return In(i18n.Locale()).PasteFailed() }
@@ -2178,6 +2218,16 @@ func ScreenshotPipelineSettingsFailed() string {
 // in the language of msgs.
 func (msgs Messages) ScreenshotPipelineSettingsFailed() string {
 	return Catalog.Format(msgs.locale, "screenshotPipelineSettingsFailed", nil)
+}
+
+// ScreenshotToolSettingsFailed says "无法保存截图工具设置"
+// in the language the app shows.
+func ScreenshotToolSettingsFailed() string { return In(i18n.Locale()).ScreenshotToolSettingsFailed() }
+
+// ScreenshotToolSettingsFailed says "无法保存截图工具设置"
+// in the language of msgs.
+func (msgs Messages) ScreenshotToolSettingsFailed() string {
+	return Catalog.Format(msgs.locale, "screenshotToolSettingsFailed", nil)
 }
 
 // DockSettingsFailed says "无法保存 Dock 图标设置"
@@ -4198,6 +4248,16 @@ func GoScreenshotNameDuplicate(n int, stamp string) string {
 // in the language of msgs.
 func (msgs Messages) GoScreenshotNameDuplicate(n int, stamp string) string {
 	return Catalog.Format(msgs.locale, "goScreenshotNameDuplicate", map[string]any{"n": n, "stamp": stamp})
+}
+
+// GoOverlayHint says "拖动框选 · 右键或 Esc 取消"
+// in the language the app shows.
+func GoOverlayHint() string { return In(i18n.Locale()).GoOverlayHint() }
+
+// GoOverlayHint says "拖动框选 · 右键或 Esc 取消"
+// in the language of msgs.
+func (msgs Messages) GoOverlayHint() string {
+	return Catalog.Format(msgs.locale, "goOverlayHint", nil)
 }
 
 // GoDecoratedSuffix says "-美化"

@@ -159,6 +159,12 @@ type Settings struct {
 	// pasting while compression runs still gets the shot; the compressed
 	// result only replaces AnyPic's own copy. Requires ScreenshotClipboard.
 	ScreenshotPipeline string `json:"screenshotPipeline"`
+	// ScreenshotTool selects the Windows capture path: "anypic" (AnyPic's
+	// own per-monitor region selector) or "system" (the Snipping Tool
+	// through ms-screenclip). Other platforms ignore it. A failed or black
+	// built-in capture falls back to the system tool on its own, with a
+	// notice; this preference is the user's deliberate choice to skip it.
+	ScreenshotTool string `json:"screenshotTool"`
 	// TargetSize caps each result at this many bytes; 0 leaves the quality
 	// setting in charge. JPEG, WebP and animated WebP search their quality to
 	// meet it. PNG is lossless, so a PNG result can only report that it could
@@ -206,6 +212,11 @@ type AddResult struct {
 	Overflow int `json:"overflow"`
 	// Copied reports that a screenshot was put on the clipboard.
 	Copied bool `json:"copied"`
+	// Notice reports that a capture had to take another path: the built-in
+	// Windows selector could not see the screen ("overlay-black") or failed
+	// ("overlay-failed"), and the system screenshot tool took the shot. The
+	// page shows the matching message; empty on every ordinary capture.
+	Notice string `json:"notice,omitempty"`
 }
 
 // Preview holds before and after previews for the comparison view.
@@ -315,6 +326,7 @@ func defaultSettings() Settings {
 		ScreenshotShortcut:  DefaultScreenshotShortcut,
 		ScreenshotClipboard: "on",
 		ScreenshotPipeline:  "off",
+		ScreenshotTool:      "anypic",
 		HideDockWhenTray:    "on",
 		OpenAtLogin:         "off",
 	}
@@ -2059,6 +2071,12 @@ func normalizeSettings(s Settings) Settings {
 	// Older settings files have no clipboard preference; copy is the default.
 	if s.ScreenshotClipboard != "off" {
 		s.ScreenshotClipboard = "on"
+	}
+	// AnyPic's own selector is the default on Windows; "system" is the
+	// explicit opt-out. The values are closed: a typo must not silently
+	// change which tool opens.
+	if s.ScreenshotTool != "system" {
+		s.ScreenshotTool = "anypic"
 	}
 	// The capture pipeline is opt-in: anything but an explicit "on" — the
 	// zero value, an older settings file, or a user who turned it off — is
