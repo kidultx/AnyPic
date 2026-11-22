@@ -39,6 +39,9 @@ let raf = 0;
 let saveTimer: number | undefined;
 let savePending = false;
 let isMac = navigator.platform.toLowerCase().includes("mac");
+/* The built-in region selector exists on Windows only; the system screenshot
+   tool preference is shown only where the alternative is real. */
+let isWindows = false;
 let recordingShortcut = false;
 /* An automatic pass spans one or more batches: images added while it runs
    join the same pass and are saved together when the queue settles. */
@@ -72,6 +75,7 @@ function defaultSettings(): Settings {
     screenshotShortcut: DEFAULT_SHORTCUT,
     screenshotClipboard: "on",
     screenshotPipeline: "off",
+    screenshotTool: "anypic",
     targetSize: 0,
     hideDockWhenTray: "on",
     openAtLogin: "off",
@@ -169,7 +173,11 @@ async function init() {
 
 function detectPlatform() {
   try {
-    if (isMyGo()) isMac = runtime().platform === "darwin";
+    if (isMyGo()) {
+      const platform = runtime().platform;
+      isMac = platform === "darwin";
+      isWindows = platform === "win32";
+    }
   } catch {
     /* the dev server opened in a browser has no runtime */
   }
@@ -177,6 +185,8 @@ function detectPlatform() {
   document.documentElement.classList.toggle("is-mac", isMac);
   $("#screenPermissionBtn").hidden = !(isMac && isMyGo());
   $("#windowSection").hidden = !isMac;
+  $("#screenshotToolRow").hidden = !isWindows;
+  $("#screenshotToolNote").hidden = !isWindows;
   $$<HTMLElement>("[data-shortcut]").forEach((el) => {
     const shortcut = el.dataset.shortcut;
     if (shortcut === "open") el.textContent = isMac ? "⌘ O" : "Ctrl O";
@@ -1142,6 +1152,12 @@ function bindEvents() {
   bindToggle("#pipelineToggle", "screenshotPipeline", t.screenshotPipelineSettingsFailed());
   bindToggle("#autoProcessToggle", "autoProcess", t.autoProcessSettingsFailed());
   bindToggle("#dockToggle", "hideDockWhenTray", t.dockSettingsFailed());
+  $("#screenshotToolToggle").addEventListener("change", (event) => {
+    const useSystem = (event.target as HTMLInputElement).checked;
+    void setSettings({ screenshotTool: useSystem ? "system" : "anypic" }, undefined, (error) =>
+      showError(error, t.screenshotToolSettingsFailed()),
+    );
+  });
   $("#openAtLoginToggle").addEventListener("change", (event) => {
     const input = event.target as HTMLInputElement;
     const on = input.checked;
@@ -1491,6 +1507,10 @@ async function captureScreenshot() {
     if (result.added > 0) filter = "all";
     applyAddResult(result, "capture");
     if (result.copied) showToast(t.captureCopied(), "info");
+    // The built-in selector could not see the screen or failed, so the
+    // system tool took the shot. Say it instead of silently switching.
+    if (result.notice === "overlay-black") showToast(t.captureFallbackBlack(), "info");
+    else if (result.notice === "overlay-failed") showToast(t.captureFallbackFailed(), "info");
   } catch (error) {
     // Canceling the region selection, or a second press while the first
     // capture is still open, is not an error the user needs to see.
@@ -2137,6 +2157,8 @@ function syncSettingsToUI() {
   if (autoToggle) autoToggle.checked = autoProcessEnabled();
   const clipboardToggle = $<HTMLInputElement>("#clipboardToggle");
   if (clipboardToggle) clipboardToggle.checked = settings.screenshotClipboard !== "off";
+  const screenshotToolToggle = $<HTMLInputElement>("#screenshotToolToggle");
+  if (screenshotToolToggle) screenshotToolToggle.checked = settings.screenshotTool === "system";
   const pipelineToggle = $<HTMLInputElement>("#pipelineToggle");
   if (pipelineToggle) {
     pipelineToggle.checked = screenshotPipelineEnabled();
