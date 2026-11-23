@@ -79,6 +79,7 @@ bun run dev:web
 
 ```bash
 bun run typecheck    # TypeScript type check
+bun run test         # Outcome value-semantics and presentation tests
 go vet ./...
 go test -race ./...  # backend unit and integration tests (including the compression benchmark)
 bun run build        # build the app bundle and installers under build/
@@ -134,6 +135,7 @@ The interface is organized around a flat set of design tokens (the UI language t
 ```text
 main.go            app entry point, window, native menus, tray and command events
 compressor.go      image queue, compression pipeline, previews, export, settings persistence
+outcome.go         immutable compression results, stable reasons and IPC snapshots
 quality.go         target-size quality search and SSIM quality measurement
 metadata.go        colour-profile compatibility check and passthrough, selective EXIF, lossless PNG pixel check
 png_lossless.go    pure-Go PNG filter search used by lossless output (standard library kept as baseline)
@@ -154,6 +156,7 @@ i18n.go            language resolution, the Go-side tr() and the stable error co
 locales/           Chinese and English message catalogs (zh-Hans.json / en.json) and the generated Go accessors
 index.html         app UI markup
 src/main.ts        state management, rendering and interaction
+src/outcome.ts     read-only results and shared passthrough, quality, target-miss and error presentation
 src/i18n.ts        page language choice, data-i18n markup filling and error codes
 src/locales.ts     typed message accessors generated from locales/*.json
 src/style.css      design system and responsive layout

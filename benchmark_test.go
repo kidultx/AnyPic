@@ -120,24 +120,24 @@ func TestBenchmarkSet(t *testing.T) {
 			t.Fatalf("%s: %v (run `go run ./testdata/benchmark/generate`)", path, err)
 		}
 		srcFormat := displayFormat(strings.TrimPrefix(filepath.Ext(c.file), "."))
-		result, err := service.compressOne(context.Background(), int64(i+1), path, srcFormat, c.file, c.animated, Settings{
+		result, err := outcomeWithError(service.compressOne(context.Background(), int64(i+1), path, srcFormat, c.file, c.animated, Settings{
 			Format:     c.format,
 			Quality:    c.quality,
 			TargetSize: c.target,
 			Suffix:     "-bench",
-		})
+		}))
 		if err != nil {
 			t.Fatalf("%s: %v", c.name, err)
 		}
-		info, err := os.Stat(result.path)
+		info, err := os.Stat(result.Path())
 		if err != nil {
 			t.Fatalf("%s: result file: %v", c.name, err)
 		}
-		if info.Size() != result.size {
-			t.Fatalf("%s: reported %d bytes, file is %d", c.name, result.size, info.Size())
+		if info.Size() != result.Snapshot().CompressedSize {
+			t.Fatalf("%s: reported %d bytes, file is %d", c.name, result.Snapshot().CompressedSize, info.Size())
 		}
-		if c.target > 0 && !result.targetMissed && result.size > c.target {
-			t.Fatalf("%s: wrote %d bytes over its %d-byte target", c.name, result.size, c.target)
+		if c.target > 0 && !result.Snapshot().TargetMissed && result.Snapshot().CompressedSize > c.target {
+			t.Fatalf("%s: wrote %d bytes over its %d-byte target", c.name, result.Snapshot().CompressedSize, c.target)
 		}
 		records = append(records, benchmarkRecord{
 			Case:          c.name,
@@ -146,11 +146,11 @@ func TestBenchmarkSet(t *testing.T) {
 			Format:        c.format,
 			Quality:       c.quality,
 			TargetBytes:   c.target,
-			TargetQuality: result.targetQuality,
-			Size:          result.size,
-			SSIM:          result.ssim,
-			SSIMMeasured:  result.ssimMeasured,
-			Missed:        result.targetMissed,
+			TargetQuality: result.Snapshot().TargetQuality,
+			Size:          result.Snapshot().CompressedSize,
+			SSIM:          result.Snapshot().SSIM,
+			SSIMMeasured:  result.Snapshot().SSIMMeasured,
+			Missed:        result.Snapshot().TargetMissed,
 		})
 	}
 

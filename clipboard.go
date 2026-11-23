@@ -156,11 +156,11 @@ func (a *AnyPic) CopyCaptureResult(id int64) (CopyOutcome, error) {
 		a.mu.Unlock()
 		return CopyOutcome{}, errors.New(tr().GoErrNoItem())
 	}
-	if item.Status != statusDone {
+	if !item.completed() {
 		a.mu.Unlock()
 		return CopyOutcome{}, errors.New(tr().GoErrCompressFirst())
 	}
-	name := item.OutputName
+	name := item.Outcome.Snapshot().OutputName
 	lease := item.clipboardLease
 	pixels := item.clipboardPixels
 	hasPixels := item.clipboardHasPixels
@@ -240,11 +240,11 @@ func (a *AnyPic) CopyLastResult() (CopyOutcome, error) {
 	a.mu.Lock()
 	id := a.lastResultID
 	item := a.byID[id]
-	if id == 0 || item == nil || item.Status != statusDone {
+	if id == 0 || item == nil || !item.completed() {
 		a.mu.Unlock()
 		return CopyOutcome{}, errors.New(tr().GoErrNoLastResult())
 	}
-	name := item.OutputName
+	name := item.Outcome.Snapshot().OutputName
 	a.mu.Unlock()
 
 	if _, err := a.copyItemToClipboard(id); err != nil {
@@ -264,7 +264,7 @@ func (a *AnyPic) CopyItemAsMarkdown(id int64) (MarkdownCopy, error) {
 		a.mu.Unlock()
 		return MarkdownCopy{}, errors.New(tr().GoErrNoItem())
 	}
-	if item.Status != statusDone {
+	if !item.completed() {
 		a.mu.Unlock()
 		return MarkdownCopy{}, errors.New(tr().GoErrCompressFirst())
 	}
@@ -275,7 +275,7 @@ func (a *AnyPic) CopyItemAsMarkdown(id int64) (MarkdownCopy, error) {
 	a.mu.Unlock()
 
 	dest := ""
-	if snapshot.PassedThrough {
+	if snapshot.Outcome.Kind() == OutcomePassedThrough {
 		// The result is the original file; it already lives on disk.
 		dest = snapshot.Path
 	} else {
@@ -285,17 +285,15 @@ func (a *AnyPic) CopyItemAsMarkdown(id int64) (MarkdownCopy, error) {
 			}
 		}
 		if dest == "" {
-			src := snapshot.compressedPath
-			if src == "" {
-				src = snapshot.Path
-			}
+			src := snapshot.resultPath()
 			destDir := snapshot.Dir
 			if mode == "folder" && folder != "" {
 				destDir = folder
 			}
-			name := snapshot.OutputName
+			result := snapshot.Outcome.Snapshot()
+			name := result.OutputName
 			if name == "" {
-				name = outputFilename(snapshot.Name, suffix, extForFormat(snapshot.OutputFormat))
+				name = outputFilename(snapshot.Name, suffix, extForFormat(result.OutputFormat))
 			}
 			dest = uniquePath(filepath.Join(destDir, name))
 			if err := copyFile(src, dest); err != nil {

@@ -281,23 +281,23 @@ func TestIssue8AnimatedGIFBecomesAnimatedWebP(t *testing.T) {
 	original := threeFrameGIFFixture(t, src, 64, 48)
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 1, src, "GIF", "loop.gif", true, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 1, src, "GIF", "loop.gif", true, Settings{
 		Format: "auto", Quality: 82, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.passedThrough {
+	if result.Kind() == OutcomePassedThrough {
 		t.Fatal("expected a converted animation, got passthrough")
 	}
-	if result.format != "WEBP" || result.outputName != "loop-anypic.webp" {
-		t.Fatalf("format %q name %q", result.format, result.outputName)
+	if result.Snapshot().OutputFormat != "WEBP" || result.Snapshot().OutputName != "loop-anypic.webp" {
+		t.Fatalf("format %q name %q", result.Snapshot().OutputFormat, result.Snapshot().OutputName)
 	}
-	if result.width != 64 || result.height != 48 {
-		t.Fatalf("canvas %dx%d", result.width, result.height)
+	if result.Snapshot().Width != 64 || result.Snapshot().Height != 48 {
+		t.Fatalf("canvas %dx%d", result.Snapshot().Width, result.Snapshot().Height)
 	}
 
-	f, err := os.Open(result.path)
+	f, err := os.Open(result.Path())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -325,8 +325,8 @@ func TestIssue8AnimatedGIFBecomesAnimatedWebP(t *testing.T) {
 	if a2>>8 != 255 {
 		t.Fatalf("frame 3 alpha = %d, want opaque", a2>>8)
 	}
-	if result.size >= original {
-		t.Fatalf("converted %d bytes is not smaller than the GIF's %d", result.size, original)
+	if result.Snapshot().CompressedSize >= original {
+		t.Fatalf("converted %d bytes is not smaller than the GIF's %d", result.Snapshot().CompressedSize, original)
 	}
 }
 
@@ -379,22 +379,22 @@ func TestIssue8AnimatedWebPReencodesWithQuality(t *testing.T) {
 	original := writeAnimatedWebP(t, src, 95, 320, 240)
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 2, src, "WEBP", "loop.webp", true, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 2, src, "WEBP", "loop.webp", true, Settings{
 		Format: "auto", Quality: 40, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.passedThrough {
+	if result.Kind() == OutcomePassedThrough {
 		t.Fatal("expected a re-encoded animation, got passthrough")
 	}
-	if result.format != "WEBP" || result.outputName != "loop-anypic.webp" {
-		t.Fatalf("format %q name %q", result.format, result.outputName)
+	if result.Snapshot().OutputFormat != "WEBP" || result.Snapshot().OutputName != "loop-anypic.webp" {
+		t.Fatalf("format %q name %q", result.Snapshot().OutputFormat, result.Snapshot().OutputName)
 	}
-	if result.size >= original {
-		t.Fatalf("re-encoded %d bytes is not smaller than the quality-95 source's %d", result.size, original)
+	if result.Snapshot().CompressedSize >= original {
+		t.Fatalf("re-encoded %d bytes is not smaller than the quality-95 source's %d", result.Snapshot().CompressedSize, original)
 	}
-	f, err := os.Open(result.path)
+	f, err := os.Open(result.Path())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -416,17 +416,17 @@ func TestIssue8AnimatedPassthroughWhenLarger(t *testing.T) {
 	writeAnimatedWebP(t, src, 30, 320, 240)
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 3, src, "WEBP", "loop.webp", true, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 3, src, "WEBP", "loop.webp", true, Settings{
 		Format: "auto", Quality: 95, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.passedThrough {
-		t.Fatalf("expected passthrough, got a %d-byte re-encode", result.size)
+	if result.Kind() != OutcomePassedThrough {
+		t.Fatalf("expected passthrough, got a %d-byte re-encode", result.Snapshot().CompressedSize)
 	}
-	if result.path != src || result.outputName != "loop-anypic.webp" {
-		t.Fatalf("path %q name %q", result.path, result.outputName)
+	if result.Path() != src || result.Snapshot().OutputName != "loop-anypic.webp" {
+		t.Fatalf("path %q name %q", result.Path(), result.Snapshot().OutputName)
 	}
 }
 
@@ -436,16 +436,16 @@ func TestIssue8AnimatedResizeAppliesToEveryFrame(t *testing.T) {
 	threeFrameGIFFixture(t, src, 800, 600)
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 4, src, "GIF", "big.gif", true, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 4, src, "GIF", "big.gif", true, Settings{
 		Format: "auto", Quality: 82, MaxDimension: 400, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.width != 400 || result.height != 300 {
-		t.Fatalf("canvas %dx%d, want 400x300", result.width, result.height)
+	if result.Snapshot().Width != 400 || result.Snapshot().Height != 300 {
+		t.Fatalf("canvas %dx%d, want 400x300", result.Snapshot().Width, result.Snapshot().Height)
 	}
-	f, err := os.Open(result.path)
+	f, err := os.Open(result.Path())
 	if err != nil {
 		t.Fatal(err)
 	}

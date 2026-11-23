@@ -53,7 +53,7 @@ func TestCompressIDsLeavesOtherReadyImagesAlone(t *testing.T) {
 		switch item.ID {
 		case compressed:
 			if item.Status != statusDone {
-				t.Fatalf("requested image status = %s (%s), want done", item.Status, item.Error)
+				t.Fatalf("requested image status = %s (%s), want done", item.Status, item.Outcome.Reason)
 			}
 		case waiting:
 			if item.Status != statusReady {

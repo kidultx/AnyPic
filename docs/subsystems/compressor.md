@@ -47,23 +47,11 @@
 - libwebp 的 lossy still 解码结果是 limited-range YUV（黑 = 16）。
   `normalizeDecodedImage` 在 SSIM 与缩略图之前把它展开成全范围 NRGBA；不
   展开会把范围错配当成压缩损失（真实照片 q82 WebP 会从 0.986 掉到 0.55）。
-- 诚实结果标记写在 `Item` 上并随 IPC 到页面：
-  - [`PassedThrough`](../../compressor.go)：静态图同格式、未缩放且重编码
-    不更小（动图为转码不更小），保留原图。
-  - [`KeptOriginalReason`](../../compressor.go)：passthrough 的原因，
-    `not_smaller` / `target_met` / `pixels_changed`。页面据此显示
-    「未压小 / 已在目标内 / 保留原图」，**不再**显示「已是最优」——这句话
-    曾把「我们的编码器没打过原图」说成「原图无法再小」，在 logo.png 与
-    screenshot-real.png 上都是假话。
-  - [`Animated`](../../compressor.go)：多帧 GIF/WebP 走 `compressAnimated`。
-  - [`Metadata`](../../compressor.go)：本次输出的元数据报告，见下节。
-  - [`TransparencyKept`](../../compressor.go)：仅当「用户选了 JPG、因图带
-    透明而改存 PNG」时为真；passthrough 结果同样为真，因为原因相同（#15）。
-  - [`SSIM` / `SSIMMeasured` / `TargetBytes` / `TargetQuality` /
-    `TargetMissed`](../../compressor.go)：本次结果的实测画质、是否测量过，
-    以及目标体积信息。页面用 SSIM ≥ 0.98 / ≥ 0.92 分「几乎无差别 / 轻微
-    损失 / 明显损失」三档；未达目标的行同时标出最小体积和实际质量（无损
-    PNG 标「无损」，passthrough 标「保留原图」）。
+- 诚实结果集中在 [`Outcome`](outcome.md)，随 IPC 的 `item.outcome` 到页面。
+  保留原图由 kind + 必填 reason 表达，页面只说「未压小 / 已在目标内 /
+  保留原图」，不再声称「已是最优」。`TransparencyKept` 仅当用户选 JPG
+  且因透明改存 PNG 时为真，passthrough 也保留这一说明（#15）。
+  实测画质、元数据与目标未达的表示、快照隔离和前端判断见该页。
 
 ## 主要运行路径
 
@@ -77,16 +65,14 @@
    PNG 经 `encodePNGLossless` 做 filter 搜索）
    → 写回 ICC / 清洗后的 EXIF → 无损 PNG 逐像素校验 → 「同格式 + 未缩放 +
    不更小」则 passthrough → SSIM 测量 → 写临时文件。
-4. 结果写回 `Item` 的 `OutputFormat` / `OutputName` / `PassedThrough` /
-   `TransparencyKept` / `SSIM` / `SSIMMeasured` / `TargetBytes` /
-   `TargetQuality` / `TargetMissed`，`ItemChanged` 广播给页面。
+4. `compressOne` 返回不可变 `Outcome`；`compressItem` 一次替换
+   `Item.Outcome`，`ItemChanged` 广播脱离存储的结果快照给页面。
 
 ## 状态转换
 
-- 每轮开始时 `compressItem` 清零 `PassedThrough`、`TransparencyKept`、
-  `SSIM`、`SSIMMeasured`、`TargetBytes`、`TargetQuality`、`TargetMissed`
-  等结果字段；成功结束按本次结果重写，失败只置 `Error`。
-- 美化应用（`DecorateItem`）把条目重置为 ready，同样清空这些标记。
+- 每轮排队、工作前及重试都通过 `resetOutcome` 置 `Outcome = nil`；成功、
+  保留原图、失败和取消都发布各自的新 Outcome，不继承旧结果字段。
+- 美化应用（`DecorateItem`）把条目重置为 ready / nil。
 - `TransparencyKept` 只属于静态图路径；自动 / PNG / WebP 设置与动图路径
   永远为 false。
 

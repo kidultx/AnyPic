@@ -12,7 +12,6 @@ package main
 // desktop's languages do.
 
 import (
-	"context"
 	"errors"
 	"strings"
 	"sync/atomic"
@@ -156,17 +155,6 @@ func notifyLanguageChanged() {
 	if languageListener != nil {
 		languageListener()
 	}
-}
-
-// errorText says an error of the pipeline in the language the app shows.
-// Go's sentinel for a canceled pass reads "context canceled" whatever the
-// language, and the images that were being encoded when the user canceled
-// showed exactly that in their rows.
-func errorText(err error) string {
-	if errors.Is(err, context.Canceled) {
-		return tr().GoErrCanceled()
-	}
-	return err.Error()
 }
 
 // Error codes the page recognizes. They are protocol, not copy: the page

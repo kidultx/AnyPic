@@ -3,7 +3,7 @@
    rendering; this module reads it through QueueKeysContext and asks it to
    sync the rows after a selection change (#20). */
 
-import type { Item } from "./mygo";
+import type { Item } from "./outcome";
 import { $ } from "./ui";
 import { t } from "./i18n";
 

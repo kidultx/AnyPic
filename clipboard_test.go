@@ -82,19 +82,19 @@ func clipboardFixture(t *testing.T) (*AnyPic, *Item, []byte) {
 		t.Fatal(err)
 	}
 	item := &Item{
-		ID:             1,
-		Name:           "my photo (1).png",
-		Path:           srcPath,
-		Dir:            dir,
-		Format:         "PNG",
-		Width:          120,
-		Height:         90,
-		OriginalSize:   original,
-		CompressedSize: int64(len(data)),
-		Status:         statusDone,
-		OutputFormat:   "WEBP",
-		OutputName:     "my photo (1)-anypic.webp",
-		compressedPath: compPath,
+		ID:           1,
+		Name:         "my photo (1).png",
+		Path:         srcPath,
+		Dir:          dir,
+		Format:       "PNG",
+		Width:        120,
+		Height:       90,
+		OriginalSize: original,
+		Status:       statusDone,
+		Outcome: newEncodedOutcome(compPath, original, OutcomeSnapshot{
+			CompressedSize: int64(len(data)), OutputFormat: "WEBP", OutputName: "my photo (1)-anypic.webp",
+			Width: 120, Height: 90,
+		}),
 	}
 	service.items = []*Item{item}
 	service.byID = map[int64]*Item{item.ID: item}
@@ -155,8 +155,8 @@ func TestCopyItemToClipboardReportsThePayload(t *testing.T) {
 	if copy.SourceFormat != "WEBP" {
 		t.Errorf("sourceFormat = %q, want WEBP", copy.SourceFormat)
 	}
-	if copy.SourceBytes != int(item.CompressedSize) {
-		t.Errorf("sourceBytes = %d, want the result's %d bytes", copy.SourceBytes, item.CompressedSize)
+	if copy.SourceBytes != int(item.Outcome.Snapshot().CompressedSize) {
+		t.Errorf("sourceBytes = %d, want the result's %d bytes", copy.SourceBytes, item.Outcome.Snapshot().CompressedSize)
 	}
 	// The fixture is a lossy WebP gradient, and the clipboard takes PNG only:
 	// the payload is bigger than its source. The copy must say so rather than
@@ -194,8 +194,8 @@ func TestCopyCaptureResultReplacesAnyPicsOwnClipboardImage(t *testing.T) {
 	if !outcome.Copied || outcome.Skipped {
 		t.Fatalf("outcome = %+v, want copied", outcome)
 	}
-	if outcome.Name != item.OutputName {
-		t.Fatalf("name = %q, want %q", outcome.Name, item.OutputName)
+	if outcome.Name != item.Outcome.Snapshot().OutputName {
+		t.Fatalf("name = %q, want %q", outcome.Name, item.Outcome.Snapshot().OutputName)
 	}
 	if len(stub.writes) != 1 {
 		t.Fatalf("clipboard writes = %d, want 1", len(stub.writes))
@@ -416,8 +416,8 @@ func TestCopyLastResultUsesTheMostRecentFinishedImage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !outcome.Copied || outcome.Name != item.OutputName {
-		t.Fatalf("outcome = %+v, want %q copied", outcome, item.OutputName)
+	if !outcome.Copied || outcome.Name != item.Outcome.Snapshot().OutputName {
+		t.Fatalf("outcome = %+v, want %q copied", outcome, item.Outcome.Snapshot().OutputName)
 	}
 	if len(stub.writes) != 1 {
 		t.Fatalf("clipboard writes = %d, want 1", len(stub.writes))
@@ -439,7 +439,7 @@ func TestCopyItemAsMarkdownWritesADurableFileFirst(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Path == "" || result.Path == item.compressedPath {
+	if result.Path == "" || result.Path == item.Outcome.Path() {
 		t.Fatalf("markdown path %q is not a durable copy outside the session temp dir", result.Path)
 	}
 	if filepath.Dir(result.Path) != item.Dir {
@@ -465,7 +465,8 @@ func TestCopyItemAsMarkdownWritesADurableFileFirst(t *testing.T) {
 func TestCopyItemAsMarkdownOfAPassedThroughResultPointsAtTheOriginal(t *testing.T) {
 	service, item, _ := clipboardFixture(t)
 	stub := stubClipboard(t)
-	item.PassedThrough = true
+	service.resetOutcome(item)
+	item.Outcome = newPassedThroughOutcome(item.Path, item.Name, item.Format, service.settings, ReasonNotSmaller, OutcomeSnapshot{SSIMMeasured: true})
 
 	result, err := service.CopyItemAsMarkdown(item.ID)
 	if err != nil {

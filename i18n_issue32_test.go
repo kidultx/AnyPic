@@ -722,7 +722,7 @@ func TestIssue32ACanceledImageSaysSoInWords(t *testing.T) {
 		setUILanguage(c.language)
 		service.compressItem(ctx, id, service.settings)
 		service.mu.Lock()
-		got := service.byID[id].Error
+		got := service.byID[id].Outcome.Err().Error()
 		service.mu.Unlock()
 		if got != c.want {
 			t.Errorf("in %s an image canceled mid-pass says %q, want %q (#32)", c.language, got, c.want)

@@ -192,7 +192,8 @@ func TestScreenshotClipboardWriteFailureRecordsNoOwnership(t *testing.T) {
 	// the failed write left no ownership; the pipeline must skip instead of
 	// overwriting it.
 	stub.read = png
-	a.items[0].Status = statusDone
+	a.tempDir = t.TempDir()
+	a.compressItem(context.Background(), a.items[0].ID, a.settings)
 	outcome, err := a.CopyCaptureResult(a.items[0].ID)
 	if err != nil {
 		t.Fatalf("CopyCaptureResult: %v", err)

@@ -59,63 +59,21 @@ var unsupportedImageExtensions = map[string]bool{
 
 // Item is one image in the queue.
 type Item struct {
-	ID             int64  `json:"id"`
-	Name           string `json:"name"`
-	Path           string `json:"path"`
-	Dir            string `json:"dir"`
-	Format         string `json:"format"`
-	Width          int    `json:"width"`
-	Height         int    `json:"height"`
-	OriginalSize   int64  `json:"originalSize"`
-	CompressedSize int64  `json:"compressedSize"`
-	Status         string `json:"status"`
-	Error          string `json:"error,omitempty"`
-	OutputFormat   string `json:"outputFormat"`
-	OutputName     string `json:"outputName"`
-	Thumb          string `json:"thumb,omitempty"`
-	HasAlpha       bool   `json:"hasAlpha"`
-	PassedThrough  bool   `json:"passedThrough"`
-	// KeptOriginalReason says why a passthrough result kept the original
-	// instead of the re-encode: "target_met" (the original already fits the
-	// target), "not_smaller" (the re-encode was not smaller) or
-	// "pixels_changed" (the lossless check caught a re-encode that changed
-	// pixels). Empty when the result is a real re-encode. The page uses it so
-	// a passthrough never claims more than "we did not make it smaller".
-	KeptOriginalReason string `json:"keptOriginalReason,omitempty"`
-	// Metadata reports what happened to the source's ICC profile and EXIF.
-	// Nil when the source had no metadata worth reporting.
-	Metadata *MetadataReport `json:"metadata,omitempty"`
-	// TransparencyKept reports that the user chose JPG but the image has
-	// transparency, so the output was saved as PNG instead of being
-	// flattened onto a background (#15). Passthrough results carry it too,
-	// because the reason still holds.
-	TransparencyKept bool    `json:"transparencyKept"`
-	SavedPercent     float64 `json:"savedPercent"`
+	ID           int64    `json:"id"`
+	Name         string   `json:"name"`
+	Path         string   `json:"path"`
+	Dir          string   `json:"dir"`
+	Format       string   `json:"format"`
+	Width        int      `json:"width"`
+	Height       int      `json:"height"`
+	OriginalSize int64    `json:"originalSize"`
+	Status       string   `json:"status"`
+	Thumb        string   `json:"thumb,omitempty"`
+	HasAlpha     bool     `json:"hasAlpha"`
+	Outcome      *Outcome `json:"-"`
 	// Animated marks a multi-frame GIF/WebP that converts to animated WebP
 	// instead of a still re-encode (#8).
 	Animated bool `json:"animated"`
-	// SSIM is the structural similarity between the source handed to the
-	// encoder and the decoded result, measured on grayscale at up to
-	// ssimMaxSide pixels. SSIMMeasured separates "not measured" (animations)
-	// from a real score, so a measured 0 is never hidden as unmeasured.
-	SSIM         float64 `json:"ssim"`
-	SSIMMeasured bool    `json:"ssimMeasured"`
-	// LargeImageFastMode reports that a PNG above the pixel budget used the
-	// fast encoding path because a full filter search would cost seconds on
-	// this content. The row says so instead of silently delivering a larger
-	// file (P0-C).
-	LargeImageFastMode bool `json:"largeImageFastMode"`
-	// TargetBytes is the per-image cap this result was produced under, or 0
-	// when the pass ran in quality mode. TargetQuality is the quality the
-	// search settled on (or the fixed quality when PNG could only report a
-	// miss). TargetMissed reports that no probed quality could reach it; the
-	// page then says the smallest result and its quality.
-	TargetBytes   int64 `json:"targetBytes,omitempty"`
-	TargetQuality int   `json:"targetQuality,omitempty"`
-	TargetMissed  bool  `json:"targetMissed,omitempty"`
-
-	compressedPath string
-	stale          bool
 	// saved records that a copy of the compressed result already exists
 	// outside the session temp directory (an export wrote it), so quitting
 	// will not lose it. See UnsavedResults. savedPath is where that copy is.
@@ -129,6 +87,35 @@ type Item struct {
 	clipboardLease     uint64
 	clipboardPixels    [32]byte
 	clipboardHasPixels bool
+}
+
+type ItemSnapshot struct {
+	Item
+	Outcome *OutcomeSnapshot `json:"outcome"`
+}
+
+func (item Item) snapshot() ItemSnapshot {
+	snapshot := ItemSnapshot{Item: item}
+	if item.Outcome != nil {
+		result := item.Outcome.Snapshot()
+		snapshot.Outcome = &result
+		if item.Outcome.Successful() {
+			snapshot.Width, snapshot.Height = result.Width, result.Height
+			snapshot.HasAlpha = result.HasAlpha
+		}
+	}
+	return snapshot
+}
+
+func (item Item) resultPath() string {
+	if item.Outcome != nil && item.Outcome.Successful() && item.Outcome.Path() != "" {
+		return item.Outcome.Path()
+	}
+	return item.Path
+}
+
+func (item Item) completed() bool {
+	return item.Status == statusDone && item.Outcome != nil && item.Outcome.Successful()
 }
 
 // Settings are the compression preferences, persisted between launches.
@@ -189,9 +176,9 @@ type Batch struct {
 
 // Snapshot is everything the page needs to draw the queue.
 type Snapshot struct {
-	Items    []Item   `json:"items"`
-	Settings Settings `json:"settings"`
-	Batch    Batch    `json:"batch"`
+	Items    []ItemSnapshot `json:"items"`
+	Settings Settings       `json:"settings"`
+	Batch    Batch          `json:"batch"`
 }
 
 // SkippedFile says why a file was not added.
@@ -287,7 +274,7 @@ type AnyPic struct {
 }
 
 // ItemChanged is sent whenever an image changes while a batch runs.
-var ItemChanged = mygo.NewEvent[Item]("anypic:item")
+var ItemChanged = mygo.NewEvent[ItemSnapshot]("anypic:item")
 
 // OpenRequested tells the page that the OS handed the app a file: a file
 // association, a Dock drop, or a command line path.
@@ -563,7 +550,7 @@ func (a *AnyPic) Remove(ids []int64) (Snapshot, error) {
 			if a.lastResultID == item.ID {
 				a.lastResultID = 0
 			}
-			a.removeTemp(item)
+			a.resetOutcome(item)
 			delete(a.byID, item.ID)
 			continue
 		}
@@ -581,7 +568,7 @@ func (a *AnyPic) Clear() (Snapshot, error) {
 		return Snapshot{}, errors.New(tr().GoErrBusyClear())
 	}
 	for _, item := range a.items {
-		a.removeTemp(item)
+		a.resetOutcome(item)
 	}
 	a.items = nil
 	a.byID = map[int64]*Item{}
@@ -763,7 +750,7 @@ func (a *AnyPic) DecorateItem(id int64, style FrameStyle) (Snapshot, error) {
 		_ = os.Remove(dest)
 		return Snapshot{}, errors.New(tr().GoErrNoItem())
 	}
-	a.removeTemp(item)
+	a.resetOutcome(item)
 	item.Path = dest
 	item.Dir = dir
 	item.Name = filepath.Base(dest)
@@ -772,24 +759,7 @@ func (a *AnyPic) DecorateItem(id int64, style FrameStyle) (Snapshot, error) {
 	item.Width = out.Bounds().Dx()
 	item.Height = out.Bounds().Dy()
 	item.Status = statusReady
-	item.Error = ""
-	item.OutputFormat = ""
-	item.OutputName = ""
-	item.PassedThrough = false
-	item.KeptOriginalReason = ""
-	item.Metadata = nil
-	item.TransparencyKept = false
-	item.SavedPercent = 0
-	item.CompressedSize = 0
-	item.SSIM = 0
-	item.SSIMMeasured = false
-	item.LargeImageFastMode = false
-	item.TargetBytes = 0
-	item.TargetQuality = 0
-	item.TargetMissed = false
-	item.saved = false
-	item.savedPath = ""
-	snapshot := *item
+	snapshot := item.snapshot()
 	snap := a.snapshotLocked()
 	a.mu.Unlock()
 
@@ -894,8 +864,8 @@ func (a *AnyPic) CompressFailed(s Settings) error {
 	found := false
 	for _, item := range a.items {
 		if item.Status == statusError {
+			a.resetOutcome(item)
 			item.Status = statusReady
-			item.Error = ""
 			found = true
 		}
 	}
@@ -935,11 +905,8 @@ func (a *AnyPic) startCompressionIDs(s Settings, onlyReady bool, onlyIDs []int64
 			continue
 		}
 		ids = append(ids, item.ID)
-		item.stale = false
+		a.resetOutcome(item)
 		item.Status = statusReady
-		item.Error = ""
-		item.saved = false
-		item.savedPath = ""
 	}
 	if len(ids) == 0 {
 		a.mu.Unlock()
@@ -1024,104 +991,42 @@ func (a *AnyPic) compressItem(ctx context.Context, id int64, s Settings) {
 		a.mu.Unlock()
 		return
 	}
+	a.resetOutcome(item)
 	item.Status = statusWorking
-	item.Error = ""
-	item.PassedThrough = false
-	item.KeptOriginalReason = ""
-	item.Metadata = nil
-	item.TransparencyKept = false
-	item.SavedPercent = 0
-	item.CompressedSize = 0
-	item.SSIM = 0
-	item.SSIMMeasured = false
-	item.LargeImageFastMode = false
-	item.TargetBytes = 0
-	item.TargetQuality = 0
-	item.TargetMissed = false
-	item.saved = false
-	item.savedPath = ""
-	snapshot := *item
+	source := *item
+	snapshot := item.snapshot()
 	a.mu.Unlock()
 	_ = ItemChanged.Broadcast(snapshot)
 
-	result, err := a.compressOne(ctx, id, item.Path, item.Format, item.Name, item.Animated, s)
+	outcome := a.compressOne(ctx, id, source.Path, source.Format, source.Name, source.Animated, s)
 
 	a.mu.Lock()
 	item = a.byID[id]
 	if item == nil {
+		a.resetOutcome(&Item{Path: source.Path, Outcome: outcome})
 		a.mu.Unlock()
 		return
 	}
-	if err != nil {
+	item.Outcome = outcome
+	if !outcome.Successful() {
 		item.Status = statusError
-		item.Error = errorText(err)
 	} else {
-		a.removeTemp(item)
 		item.Status = statusDone
-		item.CompressedSize = result.size
-		item.OutputFormat = result.format
-		item.OutputName = result.outputName
-		item.compressedPath = result.path
-		item.Width = result.width
-		item.Height = result.height
-		item.HasAlpha = result.hasAlpha
-		item.PassedThrough = result.passedThrough
-		item.KeptOriginalReason = result.keptOriginalReason
-		item.Metadata = result.metadata
-		item.TransparencyKept = result.transparencyKept
-		item.SSIM = result.ssim
-		item.SSIMMeasured = result.ssimMeasured
-		item.LargeImageFastMode = result.largeFastMode
-		item.TargetBytes = result.targetBytes
-		item.TargetQuality = result.targetQuality
-		item.TargetMissed = result.targetMissed
 		a.lastResultID = id
-		if item.OriginalSize > 0 {
-			item.SavedPercent = float64(item.OriginalSize-result.size) / float64(item.OriginalSize) * 100
-			if item.SavedPercent < 0 {
-				item.SavedPercent = 0
-			}
-		}
 	}
-	if err != nil {
+	if !outcome.Successful() {
 		a.batch.Failed++
 	}
 	a.batch.Done++
 	batch := a.batch
-	snapshot = *item
+	snapshot = item.snapshot()
 	a.mu.Unlock()
 
 	_ = ItemChanged.Broadcast(snapshot)
 	_ = BatchChanged.Broadcast(batch)
 }
 
-type compressResult struct {
-	path               string
-	size               int64
-	format             string
-	outputName         string
-	width              int
-	height             int
-	hasAlpha           bool
-	passedThrough      bool
-	keptOriginalReason string
-	metadata           *MetadataReport
-	transparencyKept   bool
-	// ssim is 0 when the result was not measured (animations); ssimMeasured
-	// keeps a real zero distinct from "not measured". A passed-through result
-	// scores 1 because the original is unchanged.
-	ssim         float64
-	ssimMeasured bool
-	// largeFastMode reports that a large PNG kept the fast deflate/filter
-	// path because a full search was measured to cost seconds on this
-	// content (P0-C).
-	largeFastMode bool
-	targetBytes   int64
-	targetQuality int
-	targetMissed  bool
-}
-
-func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, name string, animated bool, s Settings) (compressResult, error) {
+func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, name string, animated bool, s Settings) *Outcome {
 	if animated {
 		// Animations never take the still path: the pipeline must keep every
 		// frame, never flatten to the first one (#8).
@@ -1129,23 +1034,21 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 			// An APNG has no decoder here that keeps its frames, and the
 			// still path would silently write frame one. Keep the original
 			// and say why (round-2 P0-A).
-			reason := "animated_png"
-			return keepOriginalResult(path, name, srcFormat, s, reason)
+			return newPassedThroughOutcome(path, name, srcFormat, s, ReasonAnimatedPNG, OutcomeSnapshot{SSIMMeasured: true})
 		}
 		return a.compressAnimated(ctx, id, path, srcFormat, name, s)
 	}
 	if err := ctx.Err(); err != nil {
-		return compressResult{}, err
+		return newFailedOutcome(err)
 	}
-
 	f, err := os.Open(path)
 	if err != nil {
-		return compressResult{}, errors.New(tr().GoErrReadOriginal())
+		return newFailedOutcome(compressionError{reason: ReasonReadOriginal})
 	}
 	img, err := decodeImage(f, true)
 	if err != nil {
 		f.Close()
-		return compressResult{}, errors.New(tr().GoErrDecodeCorrupt())
+		return newFailedOutcome(compressionError{reason: ReasonDecodeCorrupt})
 	}
 	// The source's colour profile and EXIF are read from the file header;
 	// the pixels above were already auto-oriented, which the EXIF handling
@@ -1158,7 +1061,7 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 		// colour transform, turning the colours into something visibly
 		// wrong. There is no CMYK→RGB engine in this cgo-free build, so the
 		// original is kept with its own profile (round-2 P0-B).
-		return keepOriginalResult(path, name, srcFormat, s, "color_space")
+		return newPassedThroughOutcome(path, name, srcFormat, s, ReasonColorSpace, OutcomeSnapshot{SSIMMeasured: true})
 	}
 
 	resized := false
@@ -1179,7 +1082,7 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 
 	info, err := os.Stat(path)
 	if err != nil {
-		return compressResult{}, errors.New(tr().GoErrReadOriginal())
+		return newFailedOutcome(compressionError{reason: ReasonReadOriginal})
 	}
 	b := img.Bounds()
 	target := s.TargetSize
@@ -1202,26 +1105,12 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 
 	// A file that is already within the target is the best possible result
 	// while it keeps its own format and size: no re-encode can beat it.
-	passThrough := func(reason string) compressResult {
-		return compressResult{
-			path:               path,
-			size:               info.Size(),
-			format:             displayFormat(strings.ToLower(srcFormat)),
-			outputName:         outputFilename(name, s.Suffix, extForFormat(srcFormat)),
-			width:              b.Dx(),
-			height:             b.Dy(),
-			hasAlpha:           hasAlpha,
-			passedThrough:      true,
-			keptOriginalReason: reason,
-			transparencyKept:   transparencyKept,
-			ssim:               1,
-			ssimMeasured:       true,
-			targetBytes:        target,
-			targetMissed:       target > 0 && info.Size() > target,
-		}
+	original := OutcomeSnapshot{
+		Width: b.Dx(), Height: b.Dy(), HasAlpha: hasAlpha,
+		TransparencyKept: transparencyKept, SSIMMeasured: true,
 	}
 	if target > 0 && !resized && strings.EqualFold(outFormat, srcFormat) && info.Size() <= target {
-		return passThrough("target_met"), nil
+		return newPassedThroughOutcome(path, name, srcFormat, s, ReasonTargetMet, original)
 	}
 
 	var data []byte
@@ -1237,13 +1126,13 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 		data, err = encodeStill(img, outFormat, s.Quality)
 		quality = s.Quality
 	default:
-		return compressResult{}, errors.New(tr().GoErrUnsupportedOutput())
+		return newFailedOutcome(compressionError{reason: ReasonUnsupportedOutput})
 	}
 	if err != nil {
-		return compressResult{}, err
+		return newFailedOutcome(err)
 	}
 	if err := ctx.Err(); err != nil {
-		return compressResult{}, err
+		return newFailedOutcome(err)
 	}
 	data = attachment.apply(data)
 	// PNG has no quality knob; it can only report that the lossless result,
@@ -1258,16 +1147,16 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 	// when its format matches, otherwise the item fails honestly.
 	if outFormat == "PNG" && !losslessPixelsEqual(img, data) {
 		if !resized && strings.EqualFold(outFormat, srcFormat) {
-			return passThrough("pixels_changed"), nil
+			return newPassedThroughOutcome(path, name, srcFormat, s, ReasonPixelsChanged, original)
 		}
-		return compressResult{}, errors.New(tr().GoErrLosslessCheckFailed())
+		return newFailedOutcome(compressionError{reason: ReasonLosslessCheckFailed})
 	}
 
 	// Never make a file larger when the format stays the same and no resize
 	// was requested: the original is already better. "Winning" means
 	// strictly smaller — equality is not a win.
 	if !resized && strings.EqualFold(outFormat, srcFormat) && int64(len(data)) >= info.Size() {
-		return passThrough("not_smaller"), nil
+		return newPassedThroughOutcome(path, name, srcFormat, s, ReasonNotSmaller, original)
 	}
 
 	// The score is measured against the image handed to the encoder, so a
@@ -1280,18 +1169,18 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 
 	dir, err := a.ensureTempDir()
 	if err != nil {
-		return compressResult{}, errors.New(tr().GoErrCreateTemp())
+		return newFailedOutcome(compressionError{reason: ReasonCreateTemp})
 	}
 	ext := extForFormat(outFormat)
 	tmp, err := os.CreateTemp(dir, fmt.Sprintf("%d-*.%s", id, ext))
 	if err != nil {
-		return compressResult{}, errors.New(tr().GoErrCreateTemp())
+		return newFailedOutcome(compressionError{reason: ReasonCreateTemp})
 	}
 	outPath := tmp.Name()
 	tmp.Close()
 	if err := os.WriteFile(outPath, data, 0o600); err != nil {
 		_ = os.Remove(outPath)
-		return compressResult{}, errors.New(tr().GoErrWriteResult())
+		return newFailedOutcome(compressionError{reason: ReasonWriteResult})
 	}
 
 	// TargetQuality names the quality a size search settled on. A normal
@@ -1300,66 +1189,13 @@ func (a *AnyPic) compressOne(ctx context.Context, id int64, path, srcFormat, nam
 	if target == 0 {
 		quality = 0
 	}
-	return compressResult{
-		path:             outPath,
-		size:             int64(len(data)),
-		format:           outFormat,
-		outputName:       outputName,
-		width:            b.Dx(),
-		height:           b.Dy(),
-		hasAlpha:         hasAlpha,
-		metadata:         metadataReport,
-		transparencyKept: transparencyKept,
-		ssim:             ssim,
-		ssimMeasured:     ssimMeasured,
-		largeFastMode:    largeFastMode,
-		targetBytes:      target,
-		targetQuality:    quality,
-		targetMissed:     missed,
-	}, nil
-}
-
-// keepOriginalResult returns the source file as the result for decisions made
-// before encoding: an APNG (the still path cannot keep its frames) or a CMYK
-// source (this build has no colour-managed CMYK conversion). Keeping the
-// original is the only honest result; the reason is shown in the row.
-func keepOriginalResult(path, name, srcFormat string, s Settings, reason string) (compressResult, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return compressResult{}, errors.New(tr().GoErrReadOriginal())
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return compressResult{}, errors.New(tr().GoErrReadOriginal())
-	}
-	cfg, _, err := image.DecodeConfig(f)
-	f.Close()
-	if err != nil {
-		return compressResult{}, errors.New(tr().GoErrDecodeCorrupt())
-	}
-	target := s.TargetSize
-	if target < 0 {
-		target = 0
-	}
-	hasAlpha := false
-	if displayFormat(srcFormat) == "PNG" {
-		hasAlpha = pngHasAlpha(path)
-	}
-	return compressResult{
-		path:               path,
-		size:               info.Size(),
-		format:             displayFormat(strings.ToLower(srcFormat)),
-		outputName:         outputFilename(name, s.Suffix, extForFormat(srcFormat)),
-		width:              cfg.Width,
-		height:             cfg.Height,
-		hasAlpha:           hasAlpha,
-		passedThrough:      true,
-		keptOriginalReason: reason,
-		ssim:               1,
-		ssimMeasured:       true,
-		targetBytes:        target,
-		targetMissed:       target > 0 && info.Size() > target,
-	}, nil
+	return newEncodedOutcome(outPath, info.Size(), OutcomeSnapshot{
+		CompressedSize: int64(len(data)), OutputFormat: outFormat, OutputName: outputName,
+		Width: b.Dx(), Height: b.Dy(), HasAlpha: hasAlpha,
+		Metadata: metadataReport, TransparencyKept: transparencyKept,
+		SSIM: ssim, SSIMMeasured: ssimMeasured, LargeImageFastMode: largeFastMode,
+		TargetBytes: target, TargetQuality: quality, TargetMissed: missed,
+	})
 }
 
 // pngHasAlpha reads the IHDR colour type: 4 (gray+alpha) and 6 (RGBA) carry
@@ -1392,7 +1228,7 @@ func pngHasAlpha(path string) bool {
 var pngLosslessEncode = func(img image.Image) ([]byte, bool, error) {
 	data, fastMode, err := encodePNGLossless(img)
 	if err != nil {
-		return nil, false, errors.New(tr().GoErrEncodePNG())
+		return nil, false, compressionError{reason: ReasonEncodePNG}
 	}
 	return data, fastMode, nil
 }
@@ -1404,7 +1240,7 @@ func encodeStill(img image.Image, outFormat string, quality int) ([]byte, error)
 	switch outFormat {
 	case "JPEG":
 		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality}); err != nil {
-			return nil, errors.New(tr().GoErrEncodeJPEG())
+			return nil, compressionError{reason: ReasonEncodeJPEG}
 		}
 	case "PNG":
 		data, _, err := pngLosslessEncode(img)
@@ -1415,10 +1251,10 @@ func encodeStill(img image.Image, outFormat string, quality int) ([]byte, error)
 	case "WEBP":
 		opts := webp.Options{Quality: quality, Method: 4}
 		if err := webp.Encode(&buf, img, opts); err != nil {
-			return nil, errors.New(tr().GoErrEncodeWebP())
+			return nil, compressionError{reason: ReasonEncodeWebP}
 		}
 	default:
-		return nil, errors.New(tr().GoErrUnsupportedOutput())
+		return nil, compressionError{reason: ReasonUnsupportedOutput}
 	}
 	return buf.Bytes(), nil
 }
@@ -1431,12 +1267,12 @@ func (a *AnyPic) Preview(id int64) (Preview, error) {
 		a.mu.Unlock()
 		return Preview{}, errors.New(tr().GoErrNoItem())
 	}
-	if item.Status != statusDone {
+	if !item.completed() {
 		a.mu.Unlock()
 		return Preview{}, errors.New(tr().GoErrCompressFirst())
 	}
 	src := item.Path
-	out := item.compressedPath
+	out := item.resultPath()
 	a.mu.Unlock()
 
 	before, beforeW, beforeH, err := previewImage(src)
@@ -1467,7 +1303,7 @@ func (a *AnyPic) ExportAll(ctx context.Context) (ExportResult, error) {
 	}
 	done := make([]Item, 0, len(a.items))
 	for _, item := range a.items {
-		if item.Status == statusDone {
+		if item.completed() {
 			done = append(done, *item)
 		}
 	}
@@ -1505,11 +1341,8 @@ func (a *AnyPic) ExportAll(ctx context.Context) (ExportResult, error) {
 	result := ExportResult{Folder: folder}
 	saved := make([]savedCopy, 0, len(done))
 	for _, item := range done {
-		src := item.compressedPath
-		if item.PassedThrough || src == "" {
-			src = item.Path
-		}
-		dest := uniquePath(filepath.Join(folder, item.OutputName))
+		src := item.resultPath()
+		dest := uniquePath(filepath.Join(folder, item.Outcome.Snapshot().OutputName))
 		if err := copyFile(src, dest); err != nil {
 			a.markResultsSaved(saved)
 			return result, fmt.Errorf("%s: %w", tr().GoErrExportItem(item.Name), err)
@@ -1537,7 +1370,7 @@ func (a *AnyPic) ExportProcessed(ids []int64) (ExportResult, error) {
 	}
 	done := make([]Item, 0, len(ids))
 	for _, item := range a.items {
-		if want[item.ID] && item.Status == statusDone {
+		if want[item.ID] && item.completed() {
 			done = append(done, *item)
 		}
 	}
@@ -1557,11 +1390,8 @@ func (a *AnyPic) ExportProcessed(ids []int64) (ExportResult, error) {
 		if mode == "folder" && folder != "" {
 			destDir = folder
 		}
-		src := item.compressedPath
-		if item.PassedThrough || src == "" {
-			src = item.Path
-		}
-		dest := uniquePath(filepath.Join(destDir, item.OutputName))
+		src := item.resultPath()
+		dest := uniquePath(filepath.Join(destDir, item.Outcome.Snapshot().OutputName))
 		if err := copyFile(src, dest); err != nil {
 			a.markResultsSaved(saved)
 			return result, fmt.Errorf("%s: %w", tr().GoErrSaveItem(item.Name), err)
@@ -1623,9 +1453,9 @@ func (a *AnyPic) copyItemToClipboard(id int64) (ClipboardCopy, error) {
 	src := item.Path
 	sourceFormat := item.Format
 	animated := item.Animated
-	if item.Status == statusDone && item.compressedPath != "" && !item.PassedThrough {
-		src = item.compressedPath
-		sourceFormat = item.OutputFormat
+	if item.completed() && item.Outcome != nil && item.Outcome.Kind() == OutcomeEncoded {
+		src = item.resultPath()
+		sourceFormat = item.Outcome.Snapshot().OutputFormat
 		if sourceFormat == "" {
 			sourceFormat = item.Format
 		}
@@ -1673,7 +1503,7 @@ func (a *AnyPic) ExportOne(ctx context.Context, id int64) (ExportResult, error) 
 		a.mu.Unlock()
 		return ExportResult{}, errors.New(tr().GoErrNoItem())
 	}
-	if item.Status != statusDone {
+	if !item.completed() {
 		a.mu.Unlock()
 		return ExportResult{}, errors.New(tr().GoErrCompressFirst())
 	}
@@ -1681,9 +1511,10 @@ func (a *AnyPic) ExportOne(ctx context.Context, id int64) (ExportResult, error) 
 	folder := a.settings.OutputFolder
 	a.mu.Unlock()
 
-	defaultPath := filepath.Join(copyItem.Dir, copyItem.OutputName)
+	outputName := copyItem.Outcome.Snapshot().OutputName
+	defaultPath := filepath.Join(copyItem.Dir, outputName)
 	if folder != "" {
-		defaultPath = filepath.Join(folder, copyItem.OutputName)
+		defaultPath = filepath.Join(folder, outputName)
 	}
 	dest, err := saveDialog(mygo.SaveDialogOptions{
 		Parent:      mygo.CallerWindow(ctx),
@@ -1697,10 +1528,7 @@ func (a *AnyPic) ExportOne(ctx context.Context, id int64) (ExportResult, error) 
 	if dest == "" {
 		return ExportResult{Canceled: true}, nil
 	}
-	src := copyItem.compressedPath
-	if copyItem.PassedThrough || src == "" {
-		src = copyItem.Path
-	}
+	src := copyItem.resultPath()
 	if err := copyFile(src, dest); err != nil {
 		// As exporting every image says it (ExportAll).
 		return ExportResult{}, fmt.Errorf("%s: %w", tr().GoErrExportItem(copyItem.Name), err)
@@ -1776,7 +1604,7 @@ func (a *AnyPic) UnsavedResults() int {
 	defer a.mu.Unlock()
 	count := 0
 	for _, item := range a.items {
-		if item.Status == statusDone && !item.saved && !item.PassedThrough && item.compressedPath != "" {
+		if item.completed() && !item.saved && item.Outcome != nil && item.Outcome.Kind() == OutcomeEncoded && item.Outcome.Path() != "" {
 			count++
 		}
 	}
@@ -1791,7 +1619,7 @@ func (a *AnyPic) Cleanup() {
 		a.cancel()
 	}
 	for _, item := range a.items {
-		a.removeTemp(item)
+		a.resetOutcome(item)
 	}
 	if a.tempDir != "" {
 		_ = os.RemoveAll(a.tempDir)
@@ -1800,9 +1628,9 @@ func (a *AnyPic) Cleanup() {
 }
 
 func (a *AnyPic) snapshotLocked() Snapshot {
-	items := make([]Item, 0, len(a.items))
+	items := make([]ItemSnapshot, 0, len(a.items))
 	for _, item := range a.items {
-		items = append(items, *item)
+		items = append(items, item.snapshot())
 	}
 	return Snapshot{Items: items, Settings: a.settings, Batch: a.batch}
 }
@@ -1896,7 +1724,7 @@ func (a *AnyPic) makeThumb(id int64) {
 	}
 	item.Thumb = thumb
 	item.HasAlpha = hasAlpha
-	snapshot := *item
+	snapshot := item.snapshot()
 	a.mu.Unlock()
 	_ = ItemChanged.Broadcast(snapshot)
 }
@@ -1919,11 +1747,13 @@ func (a *AnyPic) ensureTempDir() (string, error) {
 	return dir, nil
 }
 
-func (a *AnyPic) removeTemp(item *Item) {
-	if item.compressedPath != "" && item.compressedPath != item.Path {
-		_ = os.Remove(item.compressedPath)
+func (a *AnyPic) resetOutcome(item *Item) {
+	if item.Outcome != nil && item.Outcome.Kind() == OutcomeEncoded && item.Outcome.Path() != item.Path {
+		_ = os.Remove(item.Outcome.Path())
 	}
-	item.compressedPath = ""
+	item.Outcome = nil
+	item.saved = false
+	item.savedPath = ""
 }
 
 // isAnimatedFile reports whether a file holds more than one frame. Detection

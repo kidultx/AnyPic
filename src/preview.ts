@@ -4,7 +4,8 @@
    queue (opens the right item, applies back into the auto flow) but does not
    own it. */
 
-import { AnyPic, type FrameStyle, type Item, type Preview, type Snapshot } from "./mygo";
+import { AnyPic, type FrameStyle, type Preview, type Snapshot } from "./mygo";
+import { presentOutcome, type Item } from "./outcome";
 import { $, $$, closeModal, formatBytes, formatDimensions, metadataSummary, openModal, pct, showError, showToast } from "./ui";
 import { t } from "./i18n";
 
@@ -119,18 +120,20 @@ export async function openPreview(id: number, mode: "compare" | "beautify" = "co
     item.path,
   );
   $("#previewOriginalSize").textContent = formatBytes(item.originalSize);
-  $("#previewCompressedSize").textContent = item.passedThrough ? formatBytes(item.originalSize) : formatBytes(item.compressedSize);
-  $("#previewSaved").textContent = item.status === "done"
-    ? item.passedThrough
+  const outcome = item.outcome;
+  const display = presentOutcome(outcome, t);
+  $("#previewCompressedSize").textContent = formatBytes(display.kept ? item.originalSize : outcome?.compressedSize ?? 0);
+  $("#previewSaved").textContent = item.status === "done" && outcome
+    ? display.kept
       ? t.previewKeptOriginal()
-      : item.compressedSize <= item.originalSize
-        ? `−${pct(item.savedPercent)}`
-        : `+${pct((item.compressedSize / Math.max(1, item.originalSize) - 1) * 100)}`
+      : outcome.compressedSize <= item.originalSize
+        ? `−${pct(outcome.savedPercent)}`
+        : `+${pct((outcome.compressedSize / Math.max(1, item.originalSize) - 1) * 100)}`
     : t.itemWaiting();
   // The same metadata sentence the row carries, spelled out in the details.
-  const metadata = item.status === "done" ? metadataSummary(item.metadata) : null;
-  $("#previewDetails").textContent = item.status === "done"
-    ? t.previewOutput(item.outputFormat || item.format, item.outputName || item.name) + (metadata ? ` · ${metadata.text}` : "")
+  const metadata = item.status === "done" ? metadataSummary(outcome?.metadata) : null;
+  $("#previewDetails").textContent = item.status === "done" && outcome
+    ? t.previewOutput(outcome.outputFormat || item.format, outcome.outputName || item.name) + (metadata ? ` · ${metadata.text}` : "")
     : t.itemWaiting();
   $<HTMLButtonElement>("#previewExportBtn").disabled = item.status !== "done";
   $<HTMLButtonElement>("#previewCopyBtn").disabled = item.status !== "done";
