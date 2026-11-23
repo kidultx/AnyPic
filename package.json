@@ -1,6 +1,6 @@
 {
   "name": "anypic",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,6 +11,7 @@
     "dev:web": "vite",
     "build:web": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
+    "test": "bun test",
     "postbuild": "security unlock-keychain -p anypic-local \"$HOME/Library/Keychains/anypic-signing.keychain-db\" 2>/dev/null && codesign --force --deep --sign \"AnyPic Local Signing\" --keychain \"$HOME/Library/Keychains/anypic-signing.keychain-db\" build/darwin-amd64/AnyPic.app || true"
   },
   "dependencies": {

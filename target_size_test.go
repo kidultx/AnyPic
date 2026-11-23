@@ -65,55 +65,55 @@ func TestTargetSizeSearchNeverExceedsTheCap(t *testing.T) {
 				t.Fatalf("fixture target %d not below the original %d", target, original)
 			}
 
-			result, err := service.compressOne(context.Background(), 1, path, "JPEG", "photo.jpg", false, Settings{
+			result, err := outcomeWithError(service.compressOne(context.Background(), 1, path, "JPEG", "photo.jpg", false, Settings{
 				Format:     outFormat,
 				Quality:    82,
 				TargetSize: target,
 				Suffix:     "-target",
-			})
+			}))
 			if err != nil {
 				t.Fatal(err)
 			}
-			if result.targetMissed {
+			if result.Snapshot().TargetMissed {
 				t.Fatalf("target %d reported missed; floor encode was %d bytes", target, len(floor))
 			}
-			if result.size > target {
-				t.Fatalf("wrote %d bytes over the %d-byte target", result.size, target)
+			if result.Snapshot().CompressedSize > target {
+				t.Fatalf("wrote %d bytes over the %d-byte target", result.Snapshot().CompressedSize, target)
 			}
-			if result.targetBytes != target {
-				t.Fatalf("targetBytes = %d, want %d", result.targetBytes, target)
+			if result.Snapshot().TargetBytes != target {
+				t.Fatalf("targetBytes = %d, want %d", result.Snapshot().TargetBytes, target)
 			}
-			if result.ssim <= 0 || result.ssim > 1 {
-				t.Fatalf("ssim = %v, want (0,1]", result.ssim)
+			if result.Snapshot().SSIM <= 0 || result.Snapshot().SSIM > 1 {
+				t.Fatalf("ssim = %v, want (0,1]", result.Snapshot().SSIM)
 			}
-			if !result.ssimMeasured {
+			if !result.Snapshot().SSIMMeasured {
 				t.Fatal("a still result was reported as not measured")
 			}
-			if result.targetQuality <= 0 {
-				t.Fatalf("targetQuality = %d, want the searched quality", result.targetQuality)
+			if result.Snapshot().TargetQuality <= 0 {
+				t.Fatalf("targetQuality = %d, want the searched quality", result.Snapshot().TargetQuality)
 			}
-			atQuality, err := encodeStill(decoded, strings.ToUpper(outFormat), result.targetQuality)
+			atQuality, err := encodeStill(decoded, strings.ToUpper(outFormat), result.Snapshot().TargetQuality)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if int64(len(atQuality)) != result.size {
-				t.Fatalf("result size %d is not the encode at quality %d (%d bytes)", result.size, result.targetQuality, len(atQuality))
+			if int64(len(atQuality)) != result.Snapshot().CompressedSize {
+				t.Fatalf("result size %d is not the encode at quality %d (%d bytes)", result.Snapshot().CompressedSize, result.Snapshot().TargetQuality, len(atQuality))
 			}
-			if result.targetQuality < targetMaxQuality {
-				higher, err := encodeStill(decoded, strings.ToUpper(outFormat), result.targetQuality+1)
+			if result.Snapshot().TargetQuality < targetMaxQuality {
+				higher, err := encodeStill(decoded, strings.ToUpper(outFormat), result.Snapshot().TargetQuality+1)
 				if err != nil {
 					t.Fatal(err)
 				}
 				if int64(len(higher)) <= target {
-					t.Fatalf("quality %d also fits (%d bytes), result used %d", result.targetQuality+1, len(higher), result.targetQuality)
+					t.Fatalf("quality %d also fits (%d bytes), result used %d", result.Snapshot().TargetQuality+1, len(higher), result.Snapshot().TargetQuality)
 				}
 			}
-			written, err := os.Stat(result.path)
+			written, err := os.Stat(result.Path())
 			if err != nil {
 				t.Fatal(err)
 			}
-			if written.Size() != result.size {
-				t.Fatalf("reported %d bytes, file is %d", result.size, written.Size())
+			if written.Size() != result.Snapshot().CompressedSize {
+				t.Fatalf("reported %d bytes, file is %d", result.Snapshot().CompressedSize, written.Size())
 			}
 		})
 	}
@@ -135,35 +135,35 @@ func TestTargetSizeReportsTheSmallestWhenUnreachable(t *testing.T) {
 		t.Fatal("fixture is too small")
 	}
 
-	result, err := service.compressOne(context.Background(), 1, path, "JPEG", "photo.jpg", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 1, path, "JPEG", "photo.jpg", false, Settings{
 		Format:     "jpeg",
 		Quality:    82,
 		TargetSize: target,
 		Suffix:     "-target",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.targetMissed {
+	if !result.Snapshot().TargetMissed {
 		t.Fatalf("target %d reported reached, but the floor encode is %d bytes", target, len(floor))
 	}
-	if result.size <= target {
-		t.Fatalf("missed result is %d bytes, inside the %d-byte target", result.size, target)
+	if result.Snapshot().CompressedSize <= target {
+		t.Fatalf("missed result is %d bytes, inside the %d-byte target", result.Snapshot().CompressedSize, target)
 	}
-	if result.targetBytes != target {
-		t.Fatalf("targetBytes = %d, want %d", result.targetBytes, target)
+	if result.Snapshot().TargetBytes != target {
+		t.Fatalf("targetBytes = %d, want %d", result.Snapshot().TargetBytes, target)
 	}
-	if result.ssim <= 0 {
-		t.Fatalf("smallest result was not measured: ssim %v", result.ssim)
+	if result.Snapshot().SSIM <= 0 {
+		t.Fatalf("smallest result was not measured: ssim %v", result.Snapshot().SSIM)
 	}
-	if !result.ssimMeasured {
+	if !result.Snapshot().SSIMMeasured {
 		t.Fatal("the smallest result was reported as not measured")
 	}
-	if result.targetQuality <= 0 {
-		t.Fatalf("targetQuality = %d, want the smallest probed quality", result.targetQuality)
+	if result.Snapshot().TargetQuality <= 0 {
+		t.Fatalf("targetQuality = %d, want the smallest probed quality", result.Snapshot().TargetQuality)
 	}
-	if result.targetQuality >= targetMaxQuality {
-		t.Fatalf("missed target used quality %d, want a searched value", result.targetQuality)
+	if result.Snapshot().TargetQuality >= targetMaxQuality {
+		t.Fatalf("missed target used quality %d, want a searched value", result.Snapshot().TargetQuality)
 	}
 }
 
@@ -173,32 +173,32 @@ func TestPNGTargetOnlyReportsTheMiss(t *testing.T) {
 	path, _ := targetFixture(t)
 	service := newTestService(t)
 
-	result, err := service.compressOne(context.Background(), 1, path, "JPEG", "photo.jpg", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 1, path, "JPEG", "photo.jpg", false, Settings{
 		Format:     "png",
 		Quality:    82,
 		TargetSize: 1024,
 		Suffix:     "-target",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.format != "PNG" {
-		t.Fatalf("output format = %s, want PNG", result.format)
+	if result.Snapshot().OutputFormat != "PNG" {
+		t.Fatalf("output format = %s, want PNG", result.Snapshot().OutputFormat)
 	}
-	if !result.targetMissed {
+	if !result.Snapshot().TargetMissed {
 		t.Fatal("a lossless PNG larger than 1 KB reported reaching the target")
 	}
-	if result.size <= 1024 {
-		t.Fatalf("PNG result is %d bytes, expected over the 1 KB target", result.size)
+	if result.Snapshot().CompressedSize <= 1024 {
+		t.Fatalf("PNG result is %d bytes, expected over the 1 KB target", result.Snapshot().CompressedSize)
 	}
-	if result.ssim <= 0 {
-		t.Fatalf("PNG result was not measured: ssim %v", result.ssim)
+	if result.Snapshot().SSIM <= 0 {
+		t.Fatalf("PNG result was not measured: ssim %v", result.Snapshot().SSIM)
 	}
-	if !result.ssimMeasured {
+	if !result.Snapshot().SSIMMeasured {
 		t.Fatal("PNG result was reported as not measured")
 	}
-	if result.targetQuality != 0 {
-		t.Fatalf("PNG targetQuality = %d, want 0: PNG has no quality knob", result.targetQuality)
+	if result.Snapshot().TargetQuality != 0 {
+		t.Fatalf("PNG targetQuality = %d, want 0: PNG has no quality knob", result.Snapshot().TargetQuality)
 	}
 }
 
@@ -252,31 +252,31 @@ func TestTargetSizeFormatMatrix(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.format, func(t *testing.T) {
-			result, err := service.compressOne(context.Background(), 1, path, "JPEG", "photo.jpg", false, Settings{
+			result, err := outcomeWithError(service.compressOne(context.Background(), 1, path, "JPEG", "photo.jpg", false, Settings{
 				Format:     tc.format,
 				Quality:    82,
 				TargetSize: tc.target,
 				Suffix:     "-matrix",
-			})
+			}))
 			if err != nil {
 				t.Fatal(err)
 			}
-			if result.targetMissed != tc.wantMissed {
-				t.Fatalf("targetMissed = %v, want %v for %s at %d bytes (result %d)", result.targetMissed, tc.wantMissed, tc.format, tc.target, result.size)
+			if result.Snapshot().TargetMissed != tc.wantMissed {
+				t.Fatalf("targetMissed = %v, want %v for %s at %d bytes (result %d)", result.Snapshot().TargetMissed, tc.wantMissed, tc.format, tc.target, result.Snapshot().CompressedSize)
 			}
-			if !tc.wantMissed && result.size > tc.target {
-				t.Fatalf("%s wrote %d bytes over its %d-byte target", tc.format, result.size, tc.target)
+			if !tc.wantMissed && result.Snapshot().CompressedSize > tc.target {
+				t.Fatalf("%s wrote %d bytes over its %d-byte target", tc.format, result.Snapshot().CompressedSize, tc.target)
 			}
-			if tc.wantMissed && result.size <= tc.target {
-				t.Fatalf("%s reported a miss at %d bytes, inside the %d-byte target", tc.format, result.size, tc.target)
+			if tc.wantMissed && result.Snapshot().CompressedSize <= tc.target {
+				t.Fatalf("%s reported a miss at %d bytes, inside the %d-byte target", tc.format, result.Snapshot().CompressedSize, tc.target)
 			}
-			if tc.wantQuality && result.targetQuality <= 0 {
-				t.Fatalf("%s targetQuality = %d, want the searched quality", tc.format, result.targetQuality)
+			if tc.wantQuality && result.Snapshot().TargetQuality <= 0 {
+				t.Fatalf("%s targetQuality = %d, want the searched quality", tc.format, result.Snapshot().TargetQuality)
 			}
-			if !tc.wantQuality && result.targetQuality != 0 {
-				t.Fatalf("%s targetQuality = %d, want 0: no quality knob", tc.format, result.targetQuality)
+			if !tc.wantQuality && result.Snapshot().TargetQuality != 0 {
+				t.Fatalf("%s targetQuality = %d, want 0: no quality knob", tc.format, result.Snapshot().TargetQuality)
 			}
-			if !result.ssimMeasured {
+			if !result.Snapshot().SSIMMeasured {
 				t.Fatalf("%s result was reported as not measured", tc.format)
 			}
 		})
@@ -289,32 +289,32 @@ func TestTargetSizeKeepsAnOriginalAlreadyInsideTheCap(t *testing.T) {
 	path, original := targetFixture(t)
 	service := newTestService(t)
 
-	result, err := service.compressOne(context.Background(), 1, path, "JPEG", "photo.jpg", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 1, path, "JPEG", "photo.jpg", false, Settings{
 		Format:     "auto",
 		Quality:    82,
 		TargetSize: original + 4096,
 		Suffix:     "-target",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.passedThrough {
+	if result.Kind() != OutcomePassedThrough {
 		t.Fatal("an image already under its target was re-encoded")
 	}
-	if result.path != path {
-		t.Fatalf("result path = %s, want the original %s", result.path, path)
+	if result.Path() != path {
+		t.Fatalf("result path = %s, want the original %s", result.Path(), path)
 	}
-	if result.targetMissed {
+	if result.Snapshot().TargetMissed {
 		t.Fatal("an image under its target was marked missed")
 	}
-	if result.ssim != 1 {
-		t.Fatalf("passed-through ssim = %v, want 1", result.ssim)
+	if result.Snapshot().SSIM != 1 {
+		t.Fatalf("passed-through ssim = %v, want 1", result.Snapshot().SSIM)
 	}
-	if !result.ssimMeasured {
+	if !result.Snapshot().SSIMMeasured {
 		t.Fatal("passed-through result should report an exact score, not unmeasured")
 	}
-	if result.targetQuality != 0 {
-		t.Fatalf("passed-through targetQuality = %d, want 0 (no encode ran)", result.targetQuality)
+	if result.Snapshot().TargetQuality != 0 {
+		t.Fatalf("passed-through targetQuality = %d, want 0 (no encode ran)", result.Snapshot().TargetQuality)
 	}
 }
 
@@ -331,56 +331,56 @@ func TestTargetSizeAnimatedHonorsTheCap(t *testing.T) {
 
 	// q95 measured on the same resized frames gives a cap the encoder can
 	// reach; the target pass must honor it without dropping frames.
-	baseline, err := service.compressOne(context.Background(), 1, path, "GIF", "anim.gif", true, Settings{
+	baseline, err := outcomeWithError(service.compressOne(context.Background(), 1, path, "GIF", "anim.gif", true, Settings{
 		Format: "auto", Quality: 95, MaxDimension: 160, Suffix: "-anim",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	target := baseline.size
+	target := baseline.Snapshot().CompressedSize
 
-	result, err := service.compressOne(context.Background(), 2, path, "GIF", "anim.gif", true, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 2, path, "GIF", "anim.gif", true, Settings{
 		Format: "auto", Quality: 82, MaxDimension: 160, TargetSize: target, Suffix: "-anim",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.targetMissed {
-		t.Fatalf("target %d reported missed; q95 produced %d bytes", target, baseline.size)
+	if result.Snapshot().TargetMissed {
+		t.Fatalf("target %d reported missed; q95 produced %d bytes", target, baseline.Snapshot().CompressedSize)
 	}
-	if result.size > target {
-		t.Fatalf("animation wrote %d bytes over the %d-byte target", result.size, target)
+	if result.Snapshot().CompressedSize > target {
+		t.Fatalf("animation wrote %d bytes over the %d-byte target", result.Snapshot().CompressedSize, target)
 	}
-	if result.targetBytes != target {
-		t.Fatalf("targetBytes = %d, want %d", result.targetBytes, target)
+	if result.Snapshot().TargetBytes != target {
+		t.Fatalf("targetBytes = %d, want %d", result.Snapshot().TargetBytes, target)
 	}
-	if result.format != "WEBP" {
-		t.Fatalf("animated output = %s, want WEBP", result.format)
+	if result.Snapshot().OutputFormat != "WEBP" {
+		t.Fatalf("animated output = %s, want WEBP", result.Snapshot().OutputFormat)
 	}
-	if result.ssim != 0 {
-		t.Fatalf("animated ssim = %v, want 0 (not measured)", result.ssim)
+	if result.Snapshot().SSIM != 0 {
+		t.Fatalf("animated ssim = %v, want 0 (not measured)", result.Snapshot().SSIM)
 	}
-	if result.ssimMeasured {
+	if result.Snapshot().SSIMMeasured {
 		t.Fatal("animated result was reported as measured")
 	}
-	if result.targetQuality <= 0 {
-		t.Fatalf("animated targetQuality = %d, want the searched quality", result.targetQuality)
+	if result.Snapshot().TargetQuality <= 0 {
+		t.Fatalf("animated targetQuality = %d, want the searched quality", result.Snapshot().TargetQuality)
 	}
 
-	miss, err := service.compressOne(context.Background(), 3, path, "GIF", "anim.gif", true, Settings{
+	miss, err := outcomeWithError(service.compressOne(context.Background(), 3, path, "GIF", "anim.gif", true, Settings{
 		Format: "auto", Quality: 82, MaxDimension: 160, TargetSize: 100, Suffix: "-anim",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !miss.targetMissed || miss.size <= 100 {
-		t.Fatalf("tiny target: missed=%v size=%d, want an honest miss above 100 bytes", miss.targetMissed, miss.size)
+	if !miss.Snapshot().TargetMissed || miss.Snapshot().CompressedSize <= 100 {
+		t.Fatalf("tiny target: missed=%v size=%d, want an honest miss above 100 bytes", miss.Snapshot().TargetMissed, miss.Snapshot().CompressedSize)
 	}
-	if miss.targetBytes != 100 {
-		t.Fatalf("tiny target: targetBytes = %d, want 100", miss.targetBytes)
+	if miss.Snapshot().TargetBytes != 100 {
+		t.Fatalf("tiny target: targetBytes = %d, want 100", miss.Snapshot().TargetBytes)
 	}
-	if miss.targetQuality <= 0 {
-		t.Fatalf("tiny target: targetQuality = %d, want the smallest probed quality", miss.targetQuality)
+	if miss.Snapshot().TargetQuality <= 0 {
+		t.Fatalf("tiny target: targetQuality = %d, want the smallest probed quality", miss.Snapshot().TargetQuality)
 	}
 }
 
@@ -398,23 +398,23 @@ func TestTargetSizePassthroughMissHasNoQuality(t *testing.T) {
 	}
 	service := newTestService(t)
 
-	result, err := service.compressOne(context.Background(), 1, path, "JPEG", "already-small.jpg", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 1, path, "JPEG", "already-small.jpg", false, Settings{
 		Format:     "jpeg",
 		Quality:    82,
 		TargetSize: target,
 		Suffix:     "-target",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.passedThrough {
-		t.Fatalf("result was re-encoded (%d bytes vs original %d); fixture no longer exercises passthrough", result.size, original)
+	if result.Kind() != OutcomePassedThrough {
+		t.Fatalf("result was re-encoded (%d bytes vs original %d); fixture no longer exercises passthrough", result.Snapshot().CompressedSize, original)
 	}
-	if !result.targetMissed {
+	if !result.Snapshot().TargetMissed {
 		t.Fatalf("passthrough original %d exceeds the %d-byte target but no miss was reported", original, target)
 	}
-	if result.targetQuality != 0 {
-		t.Fatalf("passthrough miss targetQuality = %d, want 0 (no encode ran)", result.targetQuality)
+	if result.Snapshot().TargetQuality != 0 {
+		t.Fatalf("passthrough miss targetQuality = %d, want 0 (no encode ran)", result.Snapshot().TargetQuality)
 	}
 }
 

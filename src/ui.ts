@@ -4,7 +4,7 @@
    accessors for the few words it formats (#32). */
 
 import { t } from "./i18n";
-import type { Item } from "./mygo";
+import type { MetadataReport } from "./mygo";
 
 export const $ = <T extends HTMLElement = HTMLElement>(selector: string): T => {
   const el = document.querySelector<T>(selector);
@@ -39,7 +39,7 @@ export const pct = (value: number) => `${Math.round(Math.max(0, value))}%`;
    sentence: which profile/EXIF the output kept, and what was removed. It is
    shared by the queue row and the preview details so both tell the same
    story. */
-export function metadataSummary(report: Item["metadata"]): { text: string; title: string } | null {
+export function metadataSummary(report: Readonly<MetadataReport> | undefined | null): { text: string; title: string } | null {
   if (!report) return null;
   const parts: string[] = [];
   if (report.iccKept) parts.push(t.metadataICCKept());

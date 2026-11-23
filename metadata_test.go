@@ -249,19 +249,19 @@ func TestPNGICCProfileSurvivesReencode(t *testing.T) {
 	sourceChunk := writePNGWithICC(t, src, gradientImage(320, 240, false), profile)
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 1, src, "PNG", "shot.png", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 1, src, "PNG", "shot.png", false, Settings{
 		Format: "png", Quality: 82, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.passedThrough {
+	if result.Kind() == OutcomePassedThrough {
 		t.Fatal("BestSpeed source should be beaten by a BestCompression re-encode")
 	}
-	if result.metadata == nil || !result.metadata.ICCKept {
-		t.Fatalf("metadata = %+v, want ICCKept", result.metadata)
+	if result.Snapshot().Metadata == nil || !result.Snapshot().Metadata.ICCKept {
+		t.Fatalf("metadata = %+v, want ICCKept", result.Snapshot().Metadata)
 	}
-	data, err := os.ReadFile(result.path)
+	data, err := os.ReadFile(result.Path())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,19 +286,19 @@ func TestJPEGMetadataSelective(t *testing.T) {
 	_, sourceICC, gpsValues := writeJPEGWithEXIFAndICC(t, src, gradientImage(640, 480, false), 95, 6, profile)
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 2, src, "JPEG", "photo.jpg", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 2, src, "JPEG", "photo.jpg", false, Settings{
 		Format: "jpeg", Quality: 50, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.passedThrough {
+	if result.Kind() == OutcomePassedThrough {
 		t.Fatal("q50 re-encode should beat a q95 source")
 	}
-	if result.metadata == nil {
+	if result.Snapshot().Metadata == nil {
 		t.Fatal("source had ICC and EXIF, output must report metadata")
 	}
-	m := result.metadata
+	m := result.Snapshot().Metadata
 	if !m.ICCKept || !m.EXIFKept || !m.GPSRemoved || !m.OrientationReset {
 		t.Fatalf("metadata = %+v, want ICC kept, EXIF kept, GPS removed, orientation reset", m)
 	}
@@ -306,7 +306,7 @@ func TestJPEGMetadataSelective(t *testing.T) {
 		t.Fatalf("metadata = %+v, nothing should have been dropped", m)
 	}
 
-	data, err := os.ReadFile(result.path)
+	data, err := os.ReadFile(result.Path())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -385,19 +385,19 @@ func TestJPEGIncompleteICCPIsDropped(t *testing.T) {
 	}
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 3, src, "JPEG", "photo.jpg", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 3, src, "JPEG", "photo.jpg", false, Settings{
 		Format: "jpeg", Quality: 50, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.metadata == nil || result.metadata.ICCKept {
-		t.Fatalf("metadata = %+v, incomplete ICC must not be reported as kept", result.metadata)
+	if result.Snapshot().Metadata == nil || result.Snapshot().Metadata.ICCKept {
+		t.Fatalf("metadata = %+v, incomplete ICC must not be reported as kept", result.Snapshot().Metadata)
 	}
-	if result.metadata == nil || !result.metadata.Dropped {
-		t.Fatalf("metadata = %+v, incomplete ICC must be reported as dropped", result.metadata)
+	if result.Snapshot().Metadata == nil || !result.Snapshot().Metadata.Dropped {
+		t.Fatalf("metadata = %+v, incomplete ICC must be reported as dropped", result.Snapshot().Metadata)
 	}
-	data, err := os.ReadFile(result.path)
+	data, err := os.ReadFile(result.Path())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -435,17 +435,17 @@ func TestLosslessGuardKeepsOriginalWhenPixelsChange(t *testing.T) {
 	}
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 4, src, "PNG", "shot.png", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 4, src, "PNG", "shot.png", false, Settings{
 		Format: "png", Quality: 82, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.passedThrough || result.keptOriginalReason != "pixels_changed" {
-		t.Fatalf("passthrough = %v reason = %q, want true/pixels_changed", result.passedThrough, result.keptOriginalReason)
+	if result.Kind() != OutcomePassedThrough || result.Snapshot().Reason != "pixels_changed" {
+		t.Fatalf("passthrough = %v reason = %q, want true/pixels_changed", (result.Kind() == OutcomePassedThrough), result.Snapshot().Reason)
 	}
-	if result.path != src {
-		t.Fatalf("guard fallback path = %q, want original %q", result.path, src)
+	if result.Path() != src {
+		t.Fatalf("guard fallback path = %q, want original %q", result.Path(), src)
 	}
 }
 
@@ -476,9 +476,9 @@ func TestLosslessGuardFailsCrossFormatHonestly(t *testing.T) {
 	}
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	_, err := service.compressOne(context.Background(), 5, src, "JPEG", "photo.jpg", false, Settings{
+	_, err := outcomeWithError(service.compressOne(context.Background(), 5, src, "JPEG", "photo.jpg", false, Settings{
 		Format: "png", Quality: 82, Suffix: "-anypic",
-	})
+	}))
 	if err == nil || !strings.HasPrefix(err.Error(), tr().GoErrLosslessCheckFailed()) {
 		t.Fatalf("error = %v, want %q", err, tr().GoErrLosslessCheckFailed())
 	}
@@ -490,14 +490,14 @@ func TestPassthroughReasons(t *testing.T) {
 		src := filepath.Join(dir, "tiny.jpg")
 		writeJPEG(t, src, gradientImage(640, 480, false), 30)
 		service := &AnyPic{tempDir: t.TempDir()}
-		result, err := service.compressOne(context.Background(), 6, src, "JPEG", "tiny.jpg", false, Settings{
+		result, err := outcomeWithError(service.compressOne(context.Background(), 6, src, "JPEG", "tiny.jpg", false, Settings{
 			Format: "jpeg", Quality: 100, Suffix: "-anypic",
-		})
+		}))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !result.passedThrough || result.keptOriginalReason != "not_smaller" {
-			t.Fatalf("passthrough = %v reason = %q, want true/not_smaller", result.passedThrough, result.keptOriginalReason)
+		if result.Kind() != OutcomePassedThrough || result.Snapshot().Reason != "not_smaller" {
+			t.Fatalf("passthrough = %v reason = %q, want true/not_smaller", (result.Kind() == OutcomePassedThrough), result.Snapshot().Reason)
 		}
 	})
 
@@ -506,14 +506,14 @@ func TestPassthroughReasons(t *testing.T) {
 		src := filepath.Join(dir, "shot.png")
 		size := writePNG(t, src, gradientImage(200, 150, false))
 		service := &AnyPic{tempDir: t.TempDir()}
-		result, err := service.compressOne(context.Background(), 7, src, "PNG", "shot.png", false, Settings{
+		result, err := outcomeWithError(service.compressOne(context.Background(), 7, src, "PNG", "shot.png", false, Settings{
 			Format: "png", Quality: 82, Suffix: "-anypic", TargetSize: size + 1,
-		})
+		}))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !result.passedThrough || result.keptOriginalReason != "target_met" {
-			t.Fatalf("passthrough = %v reason = %q, want true/target_met", result.passedThrough, result.keptOriginalReason)
+		if result.Kind() != OutcomePassedThrough || result.Snapshot().Reason != "target_met" {
+			t.Fatalf("passthrough = %v reason = %q, want true/target_met", (result.Kind() == OutcomePassedThrough), result.Snapshot().Reason)
 		}
 	})
 }
@@ -552,19 +552,19 @@ func TestRealScreenshotKeepsItsP3Profile(t *testing.T) {
 	}
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 8, src, "PNG", "screenshot-real.png", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 8, src, "PNG", "screenshot-real.png", false, Settings{
 		Format: "png", Quality: 82, MaxDimension: 1000, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.passedThrough {
+	if result.Kind() == OutcomePassedThrough {
 		t.Fatal("MaxDimension forces a re-encode; passthrough means the test is not exercising the metadata path")
 	}
-	if result.metadata == nil || !result.metadata.ICCKept {
-		t.Fatalf("metadata = %+v, want ICCKept", result.metadata)
+	if result.Snapshot().Metadata == nil || !result.Snapshot().Metadata.ICCKept {
+		t.Fatalf("metadata = %+v, want ICCKept", result.Snapshot().Metadata)
 	}
-	data, err := os.ReadFile(result.path)
+	data, err := os.ReadFile(result.Path())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -587,23 +587,23 @@ func TestReportedFalseOptimalFilesAreNowHonest(t *testing.T) {
 	t.Run("logo.png", func(t *testing.T) {
 		src := filepath.Join(benchmarkDir, "logo.png")
 		service := &AnyPic{tempDir: t.TempDir()}
-		result, err := service.compressOne(context.Background(), 9, src, "PNG", "logo.png", false, Settings{
+		result, err := outcomeWithError(service.compressOne(context.Background(), 9, src, "PNG", "logo.png", false, Settings{
 			Format: "png", Quality: 82, Suffix: "-anypic",
-		})
+		}))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !result.passedThrough {
-			t.Fatalf("expected even the filter search to lose to the original, got %d bytes", result.size)
+		if result.Kind() != OutcomePassedThrough {
+			t.Fatalf("expected even the filter search to lose to the original, got %d bytes", result.Snapshot().CompressedSize)
 		}
-		if result.keptOriginalReason != "not_smaller" {
-			t.Fatalf("reason = %q, want not_smaller — the UI must not claim the original is already optimal", result.keptOriginalReason)
+		if result.Snapshot().Reason != "not_smaller" {
+			t.Fatalf("reason = %q, want not_smaller — the UI must not claim the original is already optimal", result.Snapshot().Reason)
 		}
-		if result.path != src {
-			t.Fatalf("passthrough path = %q, want the original", result.path)
+		if result.Path() != src {
+			t.Fatalf("passthrough path = %q, want the original", result.Path())
 		}
-		if result.metadata != nil {
-			t.Fatalf("passthrough is the untouched original, so it has no metadata report: %+v", result.metadata)
+		if result.Snapshot().Metadata != nil {
+			t.Fatalf("passthrough is the untouched original, so it has no metadata report: %+v", result.Snapshot().Metadata)
 		}
 	})
 
@@ -614,20 +614,20 @@ func TestReportedFalseOptimalFilesAreNowHonest(t *testing.T) {
 			t.Fatal(err)
 		}
 		service := &AnyPic{tempDir: t.TempDir()}
-		result, err := service.compressOne(context.Background(), 10, src, "PNG", "screenshot-real.png", false, Settings{
+		result, err := outcomeWithError(service.compressOne(context.Background(), 10, src, "PNG", "screenshot-real.png", false, Settings{
 			Format: "png", Quality: 82, Suffix: "-anypic",
-		})
+		}))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if result.passedThrough {
-			t.Fatalf("filter search should now beat the %d-byte original; got passthrough (%s)", info.Size(), result.keptOriginalReason)
+		if result.Kind() == OutcomePassedThrough {
+			t.Fatalf("filter search should now beat the %d-byte original; got passthrough (%s)", info.Size(), result.Snapshot().Reason)
 		}
-		if result.size >= info.Size() {
-			t.Fatalf("result is %d bytes, not smaller than the %d-byte original", result.size, info.Size())
+		if result.Snapshot().CompressedSize >= info.Size() {
+			t.Fatalf("result is %d bytes, not smaller than the %d-byte original", result.Snapshot().CompressedSize, info.Size())
 		}
-		if result.metadata == nil || !result.metadata.ICCKept {
-			t.Fatalf("metadata = %+v, want the real screenshot's ICC profile kept", result.metadata)
+		if result.Snapshot().Metadata == nil || !result.Snapshot().Metadata.ICCKept {
+			t.Fatalf("metadata = %+v, want the real screenshot's ICC profile kept", result.Snapshot().Metadata)
 		}
 	})
 }
@@ -642,14 +642,14 @@ func TestLosslessGuardAcceptsJPEGToPNG(t *testing.T) {
 	src := filepath.Join(dir, "photo.jpg")
 	writeJPEG(t, src, gradientImage(320, 240, false), 85)
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 10, src, "JPEG", "photo.jpg", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 10, src, "JPEG", "photo.jpg", false, Settings{
 		Format: "png", Quality: 82, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatalf("JPEG -> PNG was rejected by the lossless guard: %v", err)
 	}
-	if result.format != "PNG" || result.passedThrough {
-		t.Fatalf("format = %s passedThrough = %v, want a PNG re-encode", result.format, result.passedThrough)
+	if result.Snapshot().OutputFormat != "PNG" || (result.Kind() == OutcomePassedThrough) {
+		t.Fatalf("format = %s passedThrough = %v, want a PNG re-encode", result.Snapshot().OutputFormat, (result.Kind() == OutcomePassedThrough))
 	}
 }
 
@@ -668,26 +668,26 @@ func TestJPEGTargetBudgetIncludesMetadata(t *testing.T) {
 
 	const target = 40 << 10
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 11, src, "JPEG", "photo.jpg", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 11, src, "JPEG", "photo.jpg", false, Settings{
 		Format: "jpeg", Quality: 82, Suffix: "-anypic", TargetSize: target,
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.passedThrough {
+	if result.Kind() == OutcomePassedThrough {
 		t.Fatal("q95 source is larger than 40 KB; the target pass must re-encode")
 	}
-	if result.metadata == nil || !result.metadata.ICCKept {
-		t.Fatalf("metadata = %+v, want ICCKept", result.metadata)
+	if result.Snapshot().Metadata == nil || !result.Snapshot().Metadata.ICCKept {
+		t.Fatalf("metadata = %+v, want ICCKept", result.Snapshot().Metadata)
 	}
-	if result.targetMissed {
+	if result.Snapshot().TargetMissed {
 		t.Fatalf("target %d was reported unreachable; the test needs a reachable cap to prove the budget", target)
 	}
-	data, err := os.ReadFile(result.path)
+	data, err := os.ReadFile(result.Path())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.targetMissed && int64(len(data)) > target {
+	if !result.Snapshot().TargetMissed && int64(len(data)) > target {
 		t.Fatalf("result is %d bytes including metadata, over the %d-byte cap it claims to meet", len(data), target)
 	}
 }

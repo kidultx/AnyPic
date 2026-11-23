@@ -63,19 +63,19 @@ func TestP0AAPNGIsKeptWhole(t *testing.T) {
 	}
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 1, path, "PNG", "apng-6frames.png", true, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 1, path, "PNG", "apng-6frames.png", true, Settings{
 		Format: "png", Quality: 82, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.passedThrough || result.keptOriginalReason != "animated_png" {
-		t.Fatalf("passthrough=%v reason=%q, want true/animated_png", result.passedThrough, result.keptOriginalReason)
+	if result.Kind() != OutcomePassedThrough || result.Snapshot().Reason != "animated_png" {
+		t.Fatalf("passthrough=%v reason=%q, want true/animated_png", (result.Kind() == OutcomePassedThrough), result.Snapshot().Reason)
 	}
-	if result.path != path {
-		t.Fatalf("result path = %q, want the original %q", result.path, path)
+	if result.Path() != path {
+		t.Fatalf("result path = %q, want the original %q", result.Path(), path)
 	}
-	out, err := os.ReadFile(result.path)
+	out, err := os.ReadFile(result.Path())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestP0AAPNGIsKeptWhole(t *testing.T) {
 	if !bytes.Contains(out, []byte("acTL")) {
 		t.Fatal("output lost acTL: the animation control chunk is gone")
 	}
-	if frames, err := animationFrameCount(result.path); err != nil || frames != 6 {
+	if frames, err := animationFrameCount(result.Path()); err != nil || frames != 6 {
 		t.Fatalf("output frames = %d, %v; want 6", frames, err)
 	}
 }
@@ -109,19 +109,19 @@ func TestP0ARenamedGIFStaysAnimated(t *testing.T) {
 		t.Fatalf("format = %q, want the sniffed GIF", item.Format)
 	}
 
-	result, err := service.compressOne(context.Background(), item.ID, path, item.Format, item.Name, item.Animated, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), item.ID, path, item.Format, item.Name, item.Animated, Settings{
 		Format: "auto", Quality: 82, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.passedThrough {
-		t.Fatalf("expected an animated WebP conversion, got passthrough (%q)", result.keptOriginalReason)
+	if result.Kind() == OutcomePassedThrough {
+		t.Fatalf("expected an animated WebP conversion, got passthrough (%q)", result.Snapshot().Reason)
 	}
-	if result.format != "WEBP" || result.outputName != "renamed-gif-anypic.webp" {
-		t.Fatalf("format=%q name=%q, want WEBP/renamed-gif-anypic.webp", result.format, result.outputName)
+	if result.Snapshot().OutputFormat != "WEBP" || result.Snapshot().OutputName != "renamed-gif-anypic.webp" {
+		t.Fatalf("format=%q name=%q, want WEBP/renamed-gif-anypic.webp", result.Snapshot().OutputFormat, result.Snapshot().OutputName)
 	}
-	f, err := os.Open(result.path)
+	f, err := os.Open(result.Path())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,19 +147,19 @@ func TestP0BCMYKJPEGKeepsOriginal(t *testing.T) {
 	}
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 1, path, "JPEG", "cmyk-icc.jpg", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 1, path, "JPEG", "cmyk-icc.jpg", false, Settings{
 		Format: "jpeg", Quality: 50, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.passedThrough || result.keptOriginalReason != "color_space" {
-		t.Fatalf("passthrough=%v reason=%q, want true/color_space", result.passedThrough, result.keptOriginalReason)
+	if result.Kind() != OutcomePassedThrough || result.Snapshot().Reason != "color_space" {
+		t.Fatalf("passthrough=%v reason=%q, want true/color_space", (result.Kind() == OutcomePassedThrough), result.Snapshot().Reason)
 	}
-	if result.path != path {
-		t.Fatalf("result path = %q, want the original %q", result.path, path)
+	if result.Path() != path {
+		t.Fatalf("result path = %q, want the original %q", result.Path(), path)
 	}
-	out, err := os.ReadFile(result.path)
+	out, err := os.ReadFile(result.Path())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,16 +175,16 @@ func TestP0BGrayJPEGWithRGBProfileDropsICC(t *testing.T) {
 	path := regressionPath("gray-rgb-icc.jpg")
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 2, path, "JPEG", "gray-rgb-icc.jpg", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 2, path, "JPEG", "gray-rgb-icc.jpg", false, Settings{
 		Format: "jpeg", Quality: 10, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.passedThrough {
-		t.Fatalf("q10 re-encode should beat the fixture; got passthrough (%q)", result.keptOriginalReason)
+	if result.Kind() == OutcomePassedThrough {
+		t.Fatalf("q10 re-encode should beat the fixture; got passthrough (%q)", result.Snapshot().Reason)
 	}
-	m := result.metadata
+	m := result.Snapshot().Metadata
 	if m == nil {
 		t.Fatal("the source carried an ICC profile; the drop must be reported")
 	}
@@ -195,7 +195,7 @@ func TestP0BGrayJPEGWithRGBProfileDropsICC(t *testing.T) {
 		t.Fatalf("metadata = %+v, Dropped must be true", m)
 	}
 
-	data, err := os.ReadFile(result.path)
+	data, err := os.ReadFile(result.Path())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,19 +237,19 @@ func TestP0BGrayPNGWithRGBProfileDropsICC(t *testing.T) {
 	}
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 3, src, "PNG", "gray.png", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 3, src, "PNG", "gray.png", false, Settings{
 		Format: "png", Quality: 82, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.passedThrough {
-		t.Fatalf("BestSpeed source should be beaten by a BestCompression re-encode (reason %q)", result.keptOriginalReason)
+	if result.Kind() == OutcomePassedThrough {
+		t.Fatalf("BestSpeed source should be beaten by a BestCompression re-encode (reason %q)", result.Snapshot().Reason)
 	}
-	if result.metadata == nil || result.metadata.ICCKept || !result.metadata.ICCDroppedIncompatible {
-		t.Fatalf("metadata = %+v, want RGB profile dropped as incompatible", result.metadata)
+	if result.Snapshot().Metadata == nil || result.Snapshot().Metadata.ICCKept || !result.Snapshot().Metadata.ICCDroppedIncompatible {
+		t.Fatalf("metadata = %+v, want RGB profile dropped as incompatible", result.Snapshot().Metadata)
 	}
-	out, err := os.ReadFile(result.path)
+	out, err := os.ReadFile(result.Path())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,20 +318,20 @@ func TestP0CLargePNGCompressibleContentGetsBestSearch(t *testing.T) {
 	baseline := info.Size()
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 1, path, "PNG", "large.png", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 1, path, "PNG", "large.png", false, Settings{
 		Format: "png", Quality: 82, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.passedThrough {
-		t.Fatalf("search result was not smaller than the source? reason=%q", result.keptOriginalReason)
+	if result.Kind() == OutcomePassedThrough {
+		t.Fatalf("search result was not smaller than the source? reason=%q", result.Snapshot().Reason)
 	}
-	if result.largeFastMode {
+	if result.Snapshot().LargeImageFastMode {
 		t.Fatal("a compressible 6K-class PNG was labelled fast mode instead of searched")
 	}
-	if result.size >= baseline/2 {
-		t.Fatalf("result %d bytes, baseline %d: the large-image search did not run", result.size, baseline)
+	if result.Snapshot().CompressedSize >= baseline/2 {
+		t.Fatalf("result %d bytes, baseline %d: the large-image search did not run", result.Snapshot().CompressedSize, baseline)
 	}
 }
 
@@ -345,16 +345,16 @@ func TestP0CLargePNGDenseContentReportsFastMode(t *testing.T) {
 	path, _ := largePNGFixture(t, dense, png.NoCompression)
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 1, path, "PNG", "large.png", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 1, path, "PNG", "large.png", false, Settings{
 		Format: "png", Quality: 82, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.passedThrough {
-		t.Fatalf("source was written uncompressed; the fast baseline should still beat it (reason %q)", result.keptOriginalReason)
+	if result.Kind() == OutcomePassedThrough {
+		t.Fatalf("source was written uncompressed; the fast baseline should still beat it (reason %q)", result.Snapshot().Reason)
 	}
-	if !result.largeFastMode {
+	if !result.Snapshot().LargeImageFastMode {
 		t.Fatal("large dense PNG silently used the fast path")
 	}
 }
@@ -457,23 +457,23 @@ func TestP0FWebPICCDropIsReported(t *testing.T) {
 	path := regressionPath("webp-icc.webp")
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 1, path, "WEBP", "webp-icc.webp", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 1, path, "WEBP", "webp-icc.webp", false, Settings{
 		Format: "webp", Quality: 10, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.passedThrough {
-		t.Fatalf("q10 re-encode should beat the fixture; got passthrough (%q)", result.keptOriginalReason)
+	if result.Kind() == OutcomePassedThrough {
+		t.Fatalf("q10 re-encode should beat the fixture; got passthrough (%q)", result.Snapshot().Reason)
 	}
-	m := result.metadata
+	m := result.Snapshot().Metadata
 	if m == nil {
 		t.Fatal("the source carried an ICCP chunk; the drop must be reported")
 	}
 	if m.ICCKept || !m.ICCDroppedUnsupported || !m.Dropped {
 		t.Fatalf("metadata = %+v, want unsupported ICC drop reported", m)
 	}
-	data, err := os.ReadFile(result.path)
+	data, err := os.ReadFile(result.Path())
 	if err != nil {
 		t.Fatal(err)
 	}

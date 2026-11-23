@@ -293,9 +293,9 @@ func countAPNGFrames(path string) (int, error) {
 // preserving frames, delays, loop count and transparency (#8). Like the
 // still pipeline it is honest about the result: an output that would be
 // larger keeps the original and reports the item as already optimal.
-func (a *AnyPic) compressAnimated(ctx context.Context, id int64, path, srcFormat, name string, s Settings) (compressResult, error) {
+func (a *AnyPic) compressAnimated(ctx context.Context, id int64, path, srcFormat, name string, s Settings) *Outcome {
 	if err := ctx.Err(); err != nil {
-		return compressResult{}, err
+		return newFailedOutcome(err)
 	}
 
 	// The re-encoded container is fresh, so an animated WebP's ICC profile
@@ -316,33 +316,33 @@ func (a *AnyPic) compressAnimated(ctx context.Context, id int64, path, srcFormat
 	case "GIF":
 		f, err := os.Open(path)
 		if err != nil {
-			return compressResult{}, errors.New(tr().GoErrReadOriginal())
+			return newFailedOutcome(compressionError{reason: ReasonReadOriginal})
 		}
 		anim, err := gif.DecodeAll(f)
 		f.Close()
 		if err != nil {
-			return compressResult{}, errors.New(tr().GoErrDecodeCorrupt())
+			return newFailedOutcome(compressionError{reason: ReasonDecodeCorrupt})
 		}
 		frames, delays = compositeGIF(anim)
 		loop = webpLoopCount(anim.LoopCount)
 	case "WEBP":
 		f, err := os.Open(path)
 		if err != nil {
-			return compressResult{}, errors.New(tr().GoErrReadOriginal())
+			return newFailedOutcome(compressionError{reason: ReasonReadOriginal})
 		}
 		anim, err := webp.DecodeAll(f)
 		f.Close()
 		if err != nil {
-			return compressResult{}, errors.New(tr().GoErrDecodeCorrupt())
+			return newFailedOutcome(compressionError{reason: ReasonDecodeCorrupt})
 		}
 		frames, delays = anim.Image, make([]int, len(anim.Delay))
 		copy(delays, anim.Delay)
 		loop = anim.LoopCount
 	default:
-		return compressResult{}, errors.New(tr().GoErrUnsupportedAnimation())
+		return newFailedOutcome(compressionError{reason: ReasonUnsupportedAnimation})
 	}
 	if len(frames) == 0 {
-		return compressResult{}, errors.New(tr().GoErrNoAnimationFrames())
+		return newFailedOutcome(compressionError{reason: ReasonNoAnimationFrames})
 	}
 	for i := range delays {
 		// libwebp rejects zero-length frames; GIF encoders use 0 or 1
@@ -371,7 +371,7 @@ func (a *AnyPic) compressAnimated(ctx context.Context, id int64, path, srcFormat
 	encodeAt := func(quality int) ([]byte, error) {
 		var buf bytes.Buffer
 		if err := webp.EncodeAll(&buf, &webp.WEBP{Image: frames, Delay: delays, LoopCount: loop}, webp.Options{Quality: quality, Method: 4}); err != nil {
-			return nil, errors.New(tr().GoErrEncodeWebP())
+			return nil, compressionError{reason: ReasonEncodeWebP}
 		}
 		return buf.Bytes(), nil
 	}
@@ -389,63 +389,45 @@ func (a *AnyPic) compressAnimated(ctx context.Context, id int64, path, srcFormat
 		data, err = encodeAt(s.Quality)
 	}
 	if err != nil {
-		return compressResult{}, err
+		return newFailedOutcome(err)
 	}
 	if err := ctx.Err(); err != nil {
-		return compressResult{}, err
+		return newFailedOutcome(err)
 	}
 
 	info, err := os.Stat(path)
 	if err != nil {
-		return compressResult{}, errors.New(tr().GoErrReadOriginal())
+		return newFailedOutcome(compressionError{reason: ReasonReadOriginal})
 	}
 	if !resized && int64(len(data)) >= info.Size() {
-		return compressResult{
-			path:               path,
-			size:               info.Size(),
-			format:             displayFormat(srcFormat),
-			outputName:         outputFilename(name, s.Suffix, extForFormat(srcFormat)),
-			width:              width,
-			height:             height,
-			hasAlpha:           true,
-			passedThrough:      true,
-			keptOriginalReason: "not_smaller",
-			targetBytes:        target,
-			targetMissed:       target > 0 && info.Size() > target,
-		}, nil
+		return newPassedThroughOutcome(path, name, srcFormat, s, ReasonNotSmaller, OutcomeSnapshot{
+			Width: width, Height: height, HasAlpha: true,
+		})
 	}
 
 	dir, err := a.ensureTempDir()
 	if err != nil {
-		return compressResult{}, errors.New(tr().GoErrCreateTemp())
+		return newFailedOutcome(compressionError{reason: ReasonCreateTemp})
 	}
 	tmp, err := os.CreateTemp(dir, fmt.Sprintf("%d-*.webp", id))
 	if err != nil {
-		return compressResult{}, errors.New(tr().GoErrCreateTemp())
+		return newFailedOutcome(compressionError{reason: ReasonCreateTemp})
 	}
 	outPath := tmp.Name()
 	tmp.Close()
 	if err := os.WriteFile(outPath, data, 0o600); err != nil {
 		_ = os.Remove(outPath)
-		return compressResult{}, errors.New(tr().GoErrWriteResult())
+		return newFailedOutcome(compressionError{reason: ReasonWriteResult})
 	}
 	if target == 0 {
 		quality = 0
 	}
 	_, metadataReport := meta.prepare("WEBP", srcFormat, "RGB")
-	return compressResult{
-		path:          outPath,
-		size:          int64(len(data)),
-		format:        "WEBP",
-		outputName:    outputFilename(name, s.Suffix, "webp"),
-		width:         width,
-		height:        height,
-		hasAlpha:      true,
-		metadata:      metadataReport,
-		targetBytes:   target,
-		targetQuality: quality,
-		targetMissed:  missed,
-	}, nil
+	return newEncodedOutcome(outPath, info.Size(), OutcomeSnapshot{
+		CompressedSize: int64(len(data)), OutputFormat: "WEBP", OutputName: outputFilename(name, s.Suffix, "webp"),
+		Width: width, Height: height, HasAlpha: true, Metadata: metadataReport,
+		TargetBytes: target, TargetQuality: quality, TargetMissed: missed,
+	})
 }
 
 // compositeGIF renders every GIF frame onto one canvas, honouring disposal,

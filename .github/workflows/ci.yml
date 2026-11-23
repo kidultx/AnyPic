@@ -29,6 +29,9 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      - name: Outcome presentation tests
+        run: bun run test
+
       - name: Go vet
         run: go vet ./...
 

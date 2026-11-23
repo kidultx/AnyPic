@@ -132,8 +132,7 @@ export interface FrameStyle {
   ratio: string;
 }
 
-/** Item is one image in the queue. */
-export interface Item {
+export interface ItemSnapshot {
   id: number;
   name: string;
   path: string;
@@ -142,66 +141,15 @@ export interface Item {
   width: number;
   height: number;
   originalSize: number;
-  compressedSize: number;
   status: string;
-  error?: string;
-  outputFormat: string;
-  outputName: string;
   thumb?: string;
   hasAlpha: boolean;
-  passedThrough: boolean;
-  /**
-   * KeptOriginalReason says why a passthrough result kept the original
-   * instead of the re-encode: "target_met" (the original already fits the
-   * target), "not_smaller" (the re-encode was not smaller) or
-   * "pixels_changed" (the lossless check caught a re-encode that changed
-   * pixels). Empty when the result is a real re-encode. The page uses it so
-   * a passthrough never claims more than "we did not make it smaller".
-   */
-  keptOriginalReason?: string;
-  /**
-   * Metadata reports what happened to the source's ICC profile and EXIF.
-   * Nil when the source had no metadata worth reporting.
-   */
-  metadata?: MetadataReport;
-  /**
-   * TransparencyKept reports that the user chose JPG but the image has
-   * transparency, so the output was saved as PNG instead of being
-   * flattened onto a background (#15). Passthrough results carry it too,
-   * because the reason still holds.
-   */
-  transparencyKept: boolean;
-  savedPercent: number;
   /**
    * Animated marks a multi-frame GIF/WebP that converts to animated WebP
    * instead of a still re-encode (#8).
    */
   animated: boolean;
-  /**
-   * SSIM is the structural similarity between the source handed to the
-   * encoder and the decoded result, measured on grayscale at up to
-   * ssimMaxSide pixels. SSIMMeasured separates "not measured" (animations)
-   * from a real score, so a measured 0 is never hidden as unmeasured.
-   */
-  ssim: number;
-  ssimMeasured: boolean;
-  /**
-   * LargeImageFastMode reports that a PNG above the pixel budget used the
-   * fast encoding path because a full filter search would cost seconds on
-   * this content. The row says so instead of silently delivering a larger
-   * file (P0-C).
-   */
-  largeImageFastMode: boolean;
-  /**
-   * TargetBytes is the per-image cap this result was produced under, or 0
-   * when the pass ran in quality mode. TargetQuality is the quality the
-   * search settled on (or the fixed quality when PNG could only report a
-   * miss). TargetMissed reports that no probed quality could reach it; the
-   * page then says the smallest result and its quality.
-   */
-  targetBytes?: number;
-  targetQuality?: number;
-  targetMissed?: boolean;
+  outcome: OutcomeSnapshot | null;
 }
 
 /**
@@ -254,6 +202,31 @@ export interface MetadataReport {
    * format cannot hold the source's representation).
    */
   dropped: boolean;
+}
+
+export type OutcomeKind = "encoded" | "passed_through" | "failed" | "canceled";
+
+export type OutcomeReason = "" | "not_smaller" | "target_met" | "pixels_changed" | "animated_png" | "color_space" | "canceled" | "unknown_error" | "read_original" | "decode_corrupt" | "encode_jpeg" | "encode_png" | "encode_webp" | "unsupported_output" | "lossless_check_failed" | "create_temp" | "write_result" | "unsupported_animation" | "no_animation_frames";
+
+export interface OutcomeSnapshot {
+  kind: OutcomeKind;
+  reason: OutcomeReason;
+  compressedSize: number;
+  outputFormat: string;
+  outputName: string;
+  width: number;
+  height: number;
+  hasAlpha: boolean;
+  metadata?: MetadataReport;
+  transparencyKept: boolean;
+  savedPercent: number;
+  ssim: number;
+  ssimMeasured: boolean;
+  largeImageFastMode: boolean;
+  targetBytes: number;
+  targetQuality: number;
+  targetMissed: boolean;
+  errorDetail?: string;
 }
 
 /**
@@ -349,7 +322,7 @@ export interface SkippedFile {
 
 /** Snapshot is everything the page needs to draw the queue. */
 export interface Snapshot {
-  items: Item[];
+  items: ItemSnapshot[];
   settings: Settings;
   batch: Batch;
 }
@@ -668,7 +641,7 @@ export const AnyPic = {
 /** Events sent by the Go side. Subscribe with `events.name.on(listener)`. */
 export const events = {
   /** ItemChanged is sent whenever an image changes while a batch runs. */
-  anypicItem: event<Item>("anypic:item"),
+  anypicItem: event<ItemSnapshot>("anypic:item"),
   /**
    * OpenRequested tells the page that the OS handed the app a file: a file
    * association, a Dock drop, or a command line path.

@@ -189,22 +189,22 @@ func TestCompressJPEGProducesSmallerFile(t *testing.T) {
 	original := writeJPEG(t, src, gradientImage(1200, 800, false), 96)
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 1, src, "JPEG", "photo.jpg", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 1, src, "JPEG", "photo.jpg", false, Settings{
 		Format: "jpeg", Quality: 55, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.passedThrough {
+	if result.Kind() == OutcomePassedThrough {
 		t.Fatal("expected a re-encoded JPEG, got passthrough")
 	}
-	if result.size >= original {
-		t.Fatalf("compressed size %d is not smaller than original %d", result.size, original)
+	if result.Snapshot().CompressedSize >= original {
+		t.Fatalf("compressed size %d is not smaller than original %d", result.Snapshot().CompressedSize, original)
 	}
-	if result.outputName != "photo-anypic.jpg" {
-		t.Fatalf("output name = %q", result.outputName)
+	if result.Snapshot().OutputName != "photo-anypic.jpg" {
+		t.Fatalf("output name = %q", result.Snapshot().OutputName)
 	}
-	f, err := os.Open(result.path)
+	f, err := os.Open(result.Path())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,17 +224,17 @@ func TestCompressResizesLongEdge(t *testing.T) {
 	writePNG(t, src, gradientImage(1600, 900, false))
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 2, src, "PNG", "wide.png", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 2, src, "PNG", "wide.png", false, Settings{
 		Format: "jpeg", Quality: 80, MaxDimension: 800, Suffix: "-min",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.width != 800 || result.height != 450 {
-		t.Fatalf("resized to %dx%d, want 800x450", result.width, result.height)
+	if result.Snapshot().Width != 800 || result.Snapshot().Height != 450 {
+		t.Fatalf("resized to %dx%d, want 800x450", result.Snapshot().Width, result.Snapshot().Height)
 	}
-	if result.outputName != "wide-min.jpg" {
-		t.Fatalf("output name = %q", result.outputName)
+	if result.Snapshot().OutputName != "wide-min.jpg" {
+		t.Fatalf("output name = %q", result.Snapshot().OutputName)
 	}
 }
 
@@ -244,19 +244,19 @@ func TestPNGKeepsTransparency(t *testing.T) {
 	writePNG(t, src, gradientImage(320, 240, true))
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 3, src, "PNG", "alpha.png", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 3, src, "PNG", "alpha.png", false, Settings{
 		Format: "auto", Quality: 82, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.hasAlpha {
+	if !result.Snapshot().HasAlpha {
 		t.Fatal("expected alpha to survive")
 	}
-	if result.format != "PNG" {
-		t.Fatalf("format = %s, want PNG", result.format)
+	if result.Snapshot().OutputFormat != "PNG" {
+		t.Fatalf("format = %s, want PNG", result.Snapshot().OutputFormat)
 	}
-	f, err := os.Open(result.path)
+	f, err := os.Open(result.Path())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,17 +276,17 @@ func TestJPEGPassthroughWhenOriginalIsBetter(t *testing.T) {
 	original := writeJPEG(t, src, gradientImage(800, 600, false), 30)
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 4, src, "JPEG", "tiny.jpg", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 4, src, "JPEG", "tiny.jpg", false, Settings{
 		Format: "jpeg", Quality: 100, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.passedThrough {
-		t.Fatalf("expected passthrough, got %d bytes (original %d)", result.size, original)
+	if result.Kind() != OutcomePassedThrough {
+		t.Fatalf("expected passthrough, got %d bytes (original %d)", result.Snapshot().CompressedSize, original)
 	}
-	if result.path != src {
-		t.Fatalf("passthrough path = %q, want %q", result.path, src)
+	if result.Path() != src {
+		t.Fatalf("passthrough path = %q, want %q", result.Path(), src)
 	}
 }
 
@@ -296,16 +296,16 @@ func TestWebPOutput(t *testing.T) {
 	writePNG(t, src, gradientImage(900, 600, false))
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 5, src, "PNG", "photo.png", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 5, src, "PNG", "photo.png", false, Settings{
 		Format: "webp", Quality: 72, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.format != "WEBP" || result.outputName != "photo-anypic.webp" {
-		t.Fatalf("got format %s, name %s", result.format, result.outputName)
+	if result.Snapshot().OutputFormat != "WEBP" || result.Snapshot().OutputName != "photo-anypic.webp" {
+		t.Fatalf("got format %s, name %s", result.Snapshot().OutputFormat, result.Snapshot().OutputName)
 	}
-	f, err := os.Open(result.path)
+	f, err := os.Open(result.Path())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -345,26 +345,26 @@ func TestIssue15JPEGKeepsTransparency(t *testing.T) {
 			tc.write(t, src, logoImage(w, h))
 
 			service := &AnyPic{tempDir: t.TempDir()}
-			result, err := service.compressOne(context.Background(), 15, src, tc.srcFormat, "logo"+tc.ext, false, Settings{
+			result, err := outcomeWithError(service.compressOne(context.Background(), 15, src, tc.srcFormat, "logo"+tc.ext, false, Settings{
 				Format: "jpeg", Quality: 82, Suffix: "-anypic",
-			})
+			}))
 			if err != nil {
 				t.Fatal(err)
 			}
-			if result.format != "PNG" {
-				t.Fatalf("format = %s, want PNG (JPG must not flatten transparency)", result.format)
+			if result.Snapshot().OutputFormat != "PNG" {
+				t.Fatalf("format = %s, want PNG (JPG must not flatten transparency)", result.Snapshot().OutputFormat)
 			}
-			if !strings.HasSuffix(result.outputName, "-anypic.png") {
-				t.Fatalf("output name = %q, want a .png name", result.outputName)
+			if !strings.HasSuffix(result.Snapshot().OutputName, "-anypic.png") {
+				t.Fatalf("output name = %q, want a .png name", result.Snapshot().OutputName)
 			}
-			if !result.transparencyKept {
+			if !result.Snapshot().TransparencyKept {
 				t.Fatal("transparencyKept = false, want true")
 			}
-			if !result.hasAlpha {
+			if !result.Snapshot().HasAlpha {
 				t.Fatal("result reports no alpha; PNG output must keep it")
 			}
 
-			decoded := decodePNGFile(t, result.path)
+			decoded := decodePNGFile(t, result.Path())
 			if _, _, _, a := decoded.At(0, 0).RGBA(); a != 0 {
 				t.Fatalf("background alpha = %#x, want fully transparent", a)
 			}
@@ -394,22 +394,22 @@ func TestIssue15JPEGKeepsTransparency(t *testing.T) {
 		writePNG(t, src, logoImage(600, 400))
 
 		service := &AnyPic{tempDir: t.TempDir()}
-		result, err := service.compressOne(context.Background(), 16, src, "PNG", "logo.png", false, Settings{
+		result, err := outcomeWithError(service.compressOne(context.Background(), 16, src, "PNG", "logo.png", false, Settings{
 			Format: "jpeg", Quality: 82, MaxDimension: 100, Suffix: "-anypic",
-		})
+		}))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if result.format != "PNG" {
-			t.Fatalf("format = %s, want PNG", result.format)
+		if result.Snapshot().OutputFormat != "PNG" {
+			t.Fatalf("format = %s, want PNG", result.Snapshot().OutputFormat)
 		}
-		if max(result.width, result.height) != 100 {
-			t.Fatalf("resized to %dx%d, want long edge 100", result.width, result.height)
+		if max(result.Snapshot().Width, result.Snapshot().Height) != 100 {
+			t.Fatalf("resized to %dx%d, want long edge 100", result.Snapshot().Width, result.Snapshot().Height)
 		}
-		if !result.transparencyKept || !result.hasAlpha {
-			t.Fatalf("transparencyKept=%v hasAlpha=%v, want both true", result.transparencyKept, result.hasAlpha)
+		if !result.Snapshot().TransparencyKept || !result.Snapshot().HasAlpha {
+			t.Fatalf("transparencyKept=%v hasAlpha=%v, want both true", result.Snapshot().TransparencyKept, result.Snapshot().HasAlpha)
 		}
-		decoded := decodePNGFile(t, result.path)
+		decoded := decodePNGFile(t, result.Path())
 		if _, _, _, a := decoded.At(0, 0).RGBA(); a != 0 {
 			t.Fatalf("background alpha after resize = %#x, want fully transparent", a)
 		}
@@ -461,20 +461,20 @@ func TestIssue15JPEGWithoutTransparencyStaysJPEG(t *testing.T) {
 			}
 
 			service := &AnyPic{tempDir: t.TempDir()}
-			result, err := service.compressOne(context.Background(), 17, src, tc.srcFormat, "input.png", false, Settings{
+			result, err := outcomeWithError(service.compressOne(context.Background(), 17, src, tc.srcFormat, "input.png", false, Settings{
 				Format: tc.format, Quality: 82, Suffix: "-anypic",
-			})
+			}))
 			if err != nil {
 				t.Fatal(err)
 			}
-			if result.format != tc.want {
-				t.Fatalf("format = %s, want %s", result.format, tc.want)
+			if result.Snapshot().OutputFormat != tc.want {
+				t.Fatalf("format = %s, want %s", result.Snapshot().OutputFormat, tc.want)
 			}
-			if result.transparencyKept {
+			if result.Snapshot().TransparencyKept {
 				t.Fatal("transparencyKept = true, want false")
 			}
-			if !strings.HasSuffix(result.outputName, tc.wantExt) {
-				t.Fatalf("output name = %q, want a %s name", result.outputName, tc.wantExt)
+			if !strings.HasSuffix(result.Snapshot().OutputName, tc.wantExt) {
+				t.Fatalf("output name = %q, want a %s name", result.Snapshot().OutputName, tc.wantExt)
 			}
 		})
 	}
@@ -496,22 +496,22 @@ func TestIssue15PassthroughKeepsTransparency(t *testing.T) {
 	}
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 19, src, "PNG", "logo.png", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 19, src, "PNG", "logo.png", false, Settings{
 		Format: "jpeg", Quality: 82, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.passedThrough {
-		t.Fatalf("expected passthrough, got %d bytes", result.size)
+	if result.Kind() != OutcomePassedThrough {
+		t.Fatalf("expected passthrough, got %d bytes", result.Snapshot().CompressedSize)
 	}
-	if result.path != src {
-		t.Fatalf("passthrough path = %q, want %q", result.path, src)
+	if result.Path() != src {
+		t.Fatalf("passthrough path = %q, want %q", result.Path(), src)
 	}
-	if result.format != "PNG" {
-		t.Fatalf("format = %s, want PNG", result.format)
+	if result.Snapshot().OutputFormat != "PNG" {
+		t.Fatalf("format = %s, want PNG", result.Snapshot().OutputFormat)
 	}
-	if !result.transparencyKept {
+	if !result.Snapshot().TransparencyKept {
 		t.Fatal("passthrough must still report transparencyKept")
 	}
 }
@@ -534,13 +534,13 @@ func TestIssue15TransparencyFlagReachesItemAndResets(t *testing.T) {
 	})
 	item := service.State().Items[0]
 	if item.Status != statusDone {
-		t.Fatalf("status = %s (%s)", item.Status, item.Error)
+		t.Fatalf("status = %s (%s)", item.Status, item.Outcome.Reason)
 	}
-	if item.OutputFormat != "PNG" || !item.TransparencyKept {
-		t.Fatalf("after JPG pass: format=%s transparencyKept=%v", item.OutputFormat, item.TransparencyKept)
+	if item.Outcome.OutputFormat != "PNG" || !item.Outcome.TransparencyKept {
+		t.Fatalf("after JPG pass: format=%s transparencyKept=%v", item.Outcome.OutputFormat, item.Outcome.TransparencyKept)
 	}
-	if !strings.HasSuffix(item.OutputName, "-anypic.png") {
-		t.Fatalf("output name = %q", item.OutputName)
+	if !strings.HasSuffix(item.Outcome.OutputName, "-anypic.png") {
+		t.Fatalf("output name = %q", item.Outcome.OutputName)
 	}
 
 	// A new pass recomputes the flags from its own result; the WebP pass must
@@ -554,8 +554,8 @@ func TestIssue15TransparencyFlagReachesItemAndResets(t *testing.T) {
 		return !state.Batch.Running && state.Batch.Total == 1 && allStatus(state, statusDone, statusError)
 	})
 	item = service.State().Items[0]
-	if item.OutputFormat != "WEBP" || item.TransparencyKept {
-		t.Fatalf("after WebP pass: format=%s transparencyKept=%v", item.OutputFormat, item.TransparencyKept)
+	if item.Outcome.OutputFormat != "WEBP" || item.Outcome.TransparencyKept {
+		t.Fatalf("after WebP pass: format=%s transparencyKept=%v", item.Outcome.OutputFormat, item.Outcome.TransparencyKept)
 	}
 }
 
@@ -567,16 +567,16 @@ func TestIssue15AnimatedKeepsItsOwnPath(t *testing.T) {
 	threeFrameGIFFixture(t, src, 48, 32)
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 20, src, "GIF", "loop.gif", true, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 20, src, "GIF", "loop.gif", true, Settings{
 		Format: "jpeg", Quality: 82, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.format == "PNG" {
+	if result.Snapshot().OutputFormat == "PNG" {
 		t.Fatal("animated path must not switch to PNG")
 	}
-	if result.transparencyKept {
+	if result.Snapshot().TransparencyKept {
 		t.Fatal("animated path must not report transparencyKept")
 	}
 }
@@ -650,14 +650,14 @@ func TestWebPInputDecodes(t *testing.T) {
 	f.Close()
 
 	service := &AnyPic{tempDir: t.TempDir()}
-	result, err := service.compressOne(context.Background(), 7, src, "WEBP", "input.webp", false, Settings{
+	result, err := outcomeWithError(service.compressOne(context.Background(), 7, src, "WEBP", "input.webp", false, Settings{
 		Format: "auto", Quality: 70, Suffix: "-anypic",
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.format != "WEBP" || result.width != 200 || result.height != 150 {
-		t.Fatalf("got %s %dx%d", result.format, result.width, result.height)
+	if result.Snapshot().OutputFormat != "WEBP" || result.Snapshot().Width != 200 || result.Snapshot().Height != 150 {
+		t.Fatalf("got %s %dx%d", result.Snapshot().OutputFormat, result.Snapshot().Width, result.Snapshot().Height)
 	}
 }
 
@@ -745,10 +745,10 @@ func TestQueueCompressExportFlow(t *testing.T) {
 	state := service.State()
 	for _, item := range state.Items {
 		if item.Status != statusDone {
-			t.Fatalf("%s: status %s (%s)", item.Name, item.Status, item.Error)
+			t.Fatalf("%s: status %s (%s)", item.Name, item.Status, item.Outcome.Reason)
 		}
-		if item.OutputFormat != "WEBP" || item.CompressedSize <= 0 {
-			t.Fatalf("%s: format %s size %d", item.Name, item.OutputFormat, item.CompressedSize)
+		if item.Outcome.OutputFormat != "WEBP" || item.Outcome.CompressedSize <= 0 {
+			t.Fatalf("%s: format %s size %d", item.Name, item.Outcome.OutputFormat, item.Outcome.CompressedSize)
 		}
 		if item.Width > 400 || item.Height > 400 {
 			t.Fatalf("%s: not resized: %dx%d", item.Name, item.Width, item.Height)
@@ -1049,13 +1049,13 @@ func TestIssue11CompressFailedRetriesOnlyFailures(t *testing.T) {
 	state := service.State()
 	for _, item := range state.Items {
 		if item.Name == "good.jpg" && item.Status != statusDone {
-			t.Fatalf("good.jpg: %s (%s)", item.Status, item.Error)
+			t.Fatalf("good.jpg: %s (%s)", item.Status, item.Outcome.Reason)
 		}
 		if item.Name == "broken.png" && item.Status != statusError {
 			t.Fatalf("broken.png: %s", item.Status)
 		}
 	}
-	var goodBefore Item
+	var goodBefore ItemSnapshot
 	for _, item := range state.Items {
 		if item.Name == "good.jpg" {
 			goodBefore = item
@@ -1071,11 +1071,11 @@ func TestIssue11CompressFailedRetriesOnlyFailures(t *testing.T) {
 	})
 	for _, item := range service.State().Items {
 		if item.Name == "broken.png" && item.Status != statusError {
-			t.Fatalf("broken.png after retry: %s (%s)", item.Status, item.Error)
+			t.Fatalf("broken.png after retry: %s (%s)", item.Status, item.Outcome.Reason)
 		}
 		if item.Name == "good.jpg" {
-			if item.Status != statusDone || item.CompressedSize != goodBefore.CompressedSize {
-				t.Fatalf("good.jpg was re-encoded: size %d → %d", goodBefore.CompressedSize, item.CompressedSize)
+			if item.Status != statusDone || item.Outcome.CompressedSize != goodBefore.Outcome.CompressedSize {
+				t.Fatalf("good.jpg was re-encoded: size %d → %d", goodBefore.Outcome.CompressedSize, item.Outcome.CompressedSize)
 			}
 		}
 	}

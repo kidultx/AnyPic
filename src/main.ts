@@ -1,4 +1,5 @@
-import { AnyPic, events, type AddResult, type Batch, type Item, type Preview, type Settings, type Snapshot, type UpdateInfo } from "./mygo";
+import { AnyPic, events, type AddResult, type Batch, type ItemSnapshot, type Preview, type Settings, type Snapshot, type UpdateInfo } from "./mygo";
+import { presentOutcome, readItem, readOutcome, type Item } from "./outcome";
 import { isMyGo, onFileDrop, runtime } from "mygo-runtime";
 import { $, $$, closeModal, esc, formatBytes, formatDimensions, icon, metadataSummary, openModal, pct, showError, shortenPath, showToast } from "./ui";
 import { errorCodes, language, onSystemLanguageChange, setLanguage, t } from "./i18n";
@@ -82,11 +83,13 @@ function defaultSettings(): Settings {
   };
 }
 
-function upsertItem(item: Item) {
+function upsertItem(snapshot: ItemSnapshot): Item {
+  const item = readItem(snapshot);
   const index = items.findIndex((existing) => existing.id === item.id);
   if (index === -1) items.push(item);
   else items[index] = item;
   invalidatePreview(item.id);
+  return item;
 }
 
 /* ------------------------------------------------------------------ */
@@ -268,7 +271,8 @@ function applySnapshot(snapshot: Snapshot, includeSettings = true) {
   // A thumbnail may have arrived before the method's response. Keep it when
   // the queue-only snapshot was taken just before the thumbnail finished.
   const previousThumbs = new Map(items.map((item) => [item.id, item.thumb]));
-  items = snapshot.items.map((item) => {
+  items = snapshot.items.map((snapshotItem) => {
+    const item = readItem(snapshotItem);
     if (item.thumb) return item;
     const thumb = previousThumbs.get(item.id);
     return thumb ? { ...item, thumb } : item;
@@ -322,20 +326,17 @@ function applyDemoState(browserPreview = false) {
       width,
       height,
       originalSize: original,
-      compressedSize: ready ? 0 : compressed,
       status: ready ? "ready" : "done",
-      outputFormat: ready ? "" : outputFormat,
-      outputName: ready ? "" : name.replace(/\.(jpg|png|tiff)$/i, "-anypic.webp"),
       thumb,
       hasAlpha: name.endsWith(".png"),
-      passedThrough: false,
-      transparencyKept: false,
-      savedPercent: ready ? 0 : saved,
       animated: false,
-      ssim: ready ? 0 : 0.978,
-      ssimMeasured: !ready,
-      largeImageFastMode: false,
-      targetQuality: 0,
+      outcome: ready ? null : readOutcome({
+        kind: "encoded", reason: "", compressedSize: compressed, outputFormat,
+        outputName: name.replace(/\.(jpg|png|tiff)$/i, "-anypic.webp"),
+        width, height, hasAlpha: name.endsWith(".png"), transparencyKept: false,
+        savedPercent: saved, ssim: 0.978, ssimMeasured: true, largeImageFastMode: false,
+        targetBytes: 0, targetQuality: 0, targetMissed: false,
+      }),
     };
   });
   batch = { running: false, total: items.length, done: 2, failed: 0, canceled: false };
@@ -527,43 +528,6 @@ function targetCustomKB(): number {
   return kb > 0 ? kb : TARGET_CUSTOM_DEFAULT_KB;
 }
 
-/* The quality tiers the queue shows beside the saving figure. SSIM is the
-   measured structural similarity to the source, so the tier says what the
-   compression actually cost instead of trusting the quality number alone.
-   Thresholds are calibrated against testdata/benchmark at quality 82: real
-   screenshots and the transparent logo score 0.999–0.991, real photos
-   0.994–0.987, the synthetic photo 0.933 and a target-sized photo 0.942.
-   0.98 keeps "nearly identical" for the first two clusters without putting a
-   q82 photo on the boundary; 0.92 keeps "slight loss" for the photo cluster
-   with headroom on both sides. A measured zero is a real score and still gets
-   a tier; "not measured" is a separate flag (SSIMMeasured) so it is never
-   hidden as zero. */
-function qualityTier(ssim: number): { label: string; className: string } {
-  if (ssim >= 0.98) return { label: t.qualityNearlyIdentical(), className: "" };
-  if (ssim >= 0.92) return { label: t.qualitySlightLoss(), className: "slight" };
-  return { label: t.qualityVisibleLoss(), className: "visible" };
-}
-
-/* A passthrough keeps the original for one of five reasons, and the pill
-   must say which one. "Already optimal" was the old word for all of them; it
-   was a claim about the original, not about this run, and it was wrong
-   whenever another encoder could still beat us. The new words only describe
-   what this run did. */
-function keptOriginalLabel(item: Item): { label: string; title: string } {
-  switch (item.keptOriginalReason) {
-    case "target_met":
-      return { label: t.bestWithinTarget(), title: t.bestWithinTargetTitle() };
-    case "pixels_changed":
-      return { label: t.bestGuardFailed(), title: t.bestGuardFailedTitle() };
-    case "animated_png":
-      return { label: t.keptAnimatedPNG(), title: t.keptAnimatedPNGTitle() };
-    case "color_space":
-      return { label: t.keptColorSpace(), title: t.keptColorSpaceTitle() };
-    default:
-      return { label: t.keptOriginal(), title: t.keptOriginalTitle() };
-  }
-}
-
 function renderStage() {
   const done = items.filter((item) => item.status === "done");
 
@@ -578,7 +542,7 @@ function renderStage() {
 function renderStats() {
   const done = items.filter((item) => item.status === "done");
   const doneOriginal = done.reduce((sum, item) => sum + item.originalSize, 0);
-  const doneCompressed = done.reduce((sum, item) => sum + item.compressedSize, 0);
+  const doneCompressed = done.reduce((sum, item) => sum + (item.outcome?.compressedSize ?? 0), 0);
   const saved = Math.max(0, doneOriginal - doneCompressed);
   const savedPercent = doneOriginal > 0 ? (saved / doneOriginal) * 100 : 0;
   const pending = items.length - done.length;
@@ -696,7 +660,10 @@ function activateItem(id: number) {
   const item = items.find((entry) => entry.id === id);
   if (!item) return;
   if (item.status === "done" || item.status === "ready") void openPreview(item.id);
-  else if (item.status === "error" && item.error) showToast(item.error, "error");
+  else if (item.status === "error") {
+    const error = presentOutcome(item.outcome, t).error;
+    if (error) showToast(error, "error");
+  }
 }
 
 /* The context menu's "show in folder"; the browser demo has no backend. */
@@ -797,6 +764,8 @@ function labelRow(row: HTMLElement) {
 }
 
 function updateRow(row: HTMLElement, item: Item) {
+  const outcome = item.outcome;
+  const display = presentOutcome(outcome, t);
   if (row.dataset.lang !== language) {
     labelRow(row);
     row.dataset.lang = language;
@@ -856,14 +825,14 @@ function updateRow(row: HTMLElement, item: Item) {
   const meta = row.querySelector<HTMLElement>(".item-meta")!;
   const formatClass = item.format.toLowerCase();
   const animated = item.animated ? `<span class="animated-badge">${esc(t.animatedBadge())}</span>` : "";
-  const output = item.status === "done" && item.outputFormat
-    ? item.transparencyKept
+  const output = item.status === "done" && outcome?.outputFormat
+    ? outcome.transparencyKept
       ? `<span class="output-format" title="${esc(t.transparencyKeptTitle())}">${esc(t.transparencyKeptOutput())}</span>`
-      : `<span class="output-format">→ ${esc(item.outputFormat)}</span>`
+      : `<span class="output-format">→ ${esc(outcome.outputFormat)}</span>`
     : "";
   // What the output kept or dropped from the source's metadata, so stripping
   // GPS is a visible promise rather than a hidden side effect.
-  const metadata = item.status === "done" ? metadataSummary(item.metadata) : null;
+  const metadata = item.status === "done" ? metadataSummary(outcome?.metadata) : null;
   const metadataChip = metadata
     ? `<span class="output-format" title="${esc(metadata.title)}">${esc(metadata.text)}</span>`
     : "";
@@ -871,7 +840,7 @@ function updateRow(row: HTMLElement, item: Item) {
   // seconds; the row says so rather than letting the user believe this is the
   // smallest possible file (P0-C).
   const fastModeChip =
-    item.status === "done" && item.largeImageFastMode
+    item.status === "done" && outcome?.largeImageFastMode
       ? `<span class="output-format" title="${esc(t.largeImageFastModeTitle())}">${esc(t.largeImageFastMode())}</span>`
       : "";
   meta.innerHTML = `<span class="format-chip ${esc(formatClass)}">${esc(item.format || "IMG")}</span><span>${formatDimensions(
@@ -880,9 +849,9 @@ function updateRow(row: HTMLElement, item: Item) {
   )}</span>${animated}${output}${metadataChip}${fastModeChip}`;
 
   const error = row.querySelector<HTMLElement>(".item-error")!;
-  if (item.status === "error" && item.error) {
+  if (item.status === "error" && display.error) {
     error.hidden = false;
-    error.textContent = item.error;
+    error.textContent = display.error;
   } else {
     error.hidden = true;
   }
@@ -902,18 +871,17 @@ function updateRow(row: HTMLElement, item: Item) {
   pill.hidden = false;
   pill.removeAttribute("title");
 
-  if (item.status === "done") {
-    if (item.passedThrough) {
+  if (item.status === "done" && outcome) {
+    if (display.kept) {
       sizes.innerHTML = `<strong>${formatBytes(item.originalSize)}</strong><span>${esc(t.originalWord())}</span>`;
       pill.classList.add("neutral");
-      const kept = keptOriginalLabel(item);
-      pill.textContent = kept.label;
-      pill.title = kept.title;
+      pill.textContent = display.kept.label;
+      pill.title = display.kept.title;
     } else {
-      const saved = item.originalSize - item.compressedSize;
+      const saved = item.originalSize - outcome.compressedSize;
       const savedPct = item.originalSize > 0 ? (saved / item.originalSize) * 100 : 0;
       sizes.innerHTML = `<span>${formatBytes(item.originalSize)}</span><svg class="icon arrow" aria-hidden="true"><use href="#i-arrow-right"></use></svg><strong>${formatBytes(
-        item.compressedSize,
+        outcome.compressedSize,
       )}</strong>`;
       if (saved >= 0) {
         pill.textContent = `−${pct(savedPct)}`;
@@ -924,34 +892,24 @@ function updateRow(row: HTMLElement, item: Item) {
       // The measured quality of this result, not the quality setting: the
       // row should say what the image actually lost. Unmeasured results
       // (animations) say so instead of borrowing a tier they did not earn.
-      if (item.ssimMeasured) {
-        const tier = qualityTier(item.ssim);
+      if (display.quality) {
         qualityPill.hidden = false;
-        qualityPill.textContent = tier.label;
-        if (tier.className) qualityPill.classList.add(tier.className);
-        qualityPill.title = t.ssimTitle(item.ssim.toFixed(3));
-      } else {
-        qualityPill.hidden = false;
-        qualityPill.textContent = t.qualityNotMeasured();
-        qualityPill.title = t.qualityNotMeasuredTitle();
+        qualityPill.textContent = display.quality.label;
+        if (display.quality.className) qualityPill.classList.add(display.quality.className);
+        qualityPill.title = display.quality.title;
       }
     }
     // A result can miss its cap even when the original was kept (no smaller
     // encoding exists); the honesty badge belongs to both cases and names
     // both the bytes it reached and the quality it used.
-    if (item.targetMissed && (item.targetBytes ?? 0) > 0) {
-      const qualityLabel =
-        item.passedThrough
-          ? t.targetQualityOriginal()
-          : (item.targetQuality ?? 0) > 0
-            ? t.targetQualityValue(item.targetQuality ?? 0)
-            : t.targetQualityLossless();
+    if (display.target) {
+      const target = display.target;
       targetBadge.hidden = false;
-      targetBadge.textContent = t.targetMissedBadge(formatBytes(item.compressedSize), qualityLabel);
+      targetBadge.textContent = t.targetMissedBadge(formatBytes(target.bytes), target.qualityLabel);
       targetBadge.title = t.targetMissedTitle(
-        formatBytes(item.targetBytes ?? 0),
-        formatBytes(item.compressedSize),
-        qualityLabel,
+        formatBytes(target.cap),
+        formatBytes(target.bytes),
+        target.qualityLabel,
       );
     }
   } else if (item.status === "working") {
@@ -1709,18 +1667,7 @@ async function compressAll(auto = false) {
     items = items.map((item) => ({
       ...item,
       status: "ready",
-      error: "",
-      compressedSize: 0,
-      savedPercent: 0,
-      passedThrough: false,
-      transparencyKept: false,
-      outputFormat: "",
-      outputName: "",
-      ssim: 0,
-      ssimMeasured: false,
-      targetBytes: 0,
-      targetQuality: 0,
-      targetMissed: false,
+      outcome: null,
     }));
   }
   if (total === 0) {
@@ -1928,14 +1875,14 @@ async function exportOne(id: number) {
   if (!item || item.status !== "done" || batch.running) return;
   await flushSave();
   if (demoMode) {
-    showToast(t.demoExportOne(item.outputName || item.name), "success");
+    showToast(t.demoExportOne(item.outcome?.outputName || item.name), "success");
     return;
   }
   try {
     const result = await AnyPic.exportOne(id);
     if (result.canceled) return;
     const path = result.paths[0];
-    showToast(t.exportedOne(item.outputName || item.name), "success", path
+    showToast(t.exportedOne(item.outcome?.outputName || item.name), "success", path
       ? { label: t.showInFolder(), onClick: () => void AnyPic.revealPath(path) }
       : undefined);
   } catch (error) {
@@ -2245,8 +2192,8 @@ function handleBatch(next: Batch) {
 /* One image changed mid-batch (status, sizes, thumbnail): repaint its row and
    the aggregates instead of every row of the queue (#9). Rows outside the
    active filter are not cached, so those fall back to a full render. */
-function renderItemUpdate(item: Item) {
-  upsertItem(item);
+function renderItemUpdate(snapshot: ItemSnapshot) {
+  const item = upsertItem(snapshot);
   const row = rowCache.get(item.id);
   if (!row || !queueShows(item)) {
     scheduleRender();
@@ -2278,10 +2225,10 @@ function showBatchResult(next: Batch) {
     return;
   }
   const original = done.reduce((sum, item) => sum + item.originalSize, 0);
-  const compressed = done.reduce((sum, item) => sum + item.compressedSize, 0);
+  const compressed = done.reduce((sum, item) => sum + (item.outcome?.compressedSize ?? 0), 0);
   const saved = Math.max(0, original - compressed);
   showToast(t.batchSaved(formatBytes(saved)), "success");
-  const missed = done.filter((item) => item.targetMissed).length;
+  const missed = done.filter((item) => item.outcome?.targetMissed).length;
   if (missed > 0) showToast(t.targetMissedCount(missed), "info");
 }
 
@@ -2297,7 +2244,7 @@ async function finishAutoRun() {
   const idSet = new Set(ids);
   const done = items.filter((item) => idSet.has(item.id) && item.status === "done");
   const failed = items.filter((item) => idSet.has(item.id) && item.status === "error");
-  const missed = done.filter((item) => item.targetMissed).length;
+  const missed = done.filter((item) => item.outcome?.targetMissed).length;
 
   if (done.length === 0) {
     if (failed.length > 0) showToast(t.notProcessed(failed.length), "error");
@@ -2332,7 +2279,7 @@ async function finishAutoRun() {
   }
 
   const original = done.reduce((sum, item) => sum + item.originalSize, 0);
-  const compressed = done.reduce((sum, item) => sum + item.compressedSize, 0);
+  const compressed = done.reduce((sum, item) => sum + (item.outcome?.compressedSize ?? 0), 0);
   // Signed on purpose: a pass that made files larger must reach the footer
   // as "增大 N%" instead of being clamped into a misleading "省 0%".
   const saved = original - compressed;
@@ -2595,53 +2542,60 @@ async function demoCompress() {
       continue;
     }
     item.status = "working";
+    item.outcome = null;
     scheduleRender();
     await wait(700 + Math.random() * 450);
     if (demoCanceled) break;
     item.status = "done";
-    item.compressedSize = Math.round(item.originalSize * (0.19 + Math.random() * 0.12));
+    let compressedSize = Math.round(item.originalSize * (0.19 + Math.random() * 0.12));
     // Mirror the backend's target mode: fit the cap when the encoder can,
     // and say so honestly when the source is already smaller than the cap,
     // the format is lossless PNG, or even the lowest lossy quality cannot
     // reach it. The floor is what makes the last case visible in the demo:
     // without it every non-PNG cap would look reachable.
-    item.targetBytes = settings.targetSize > 0 ? settings.targetSize : 0;
-    item.targetMissed = false;
+    const targetBytes = settings.targetSize > 0 ? settings.targetSize : 0;
+    let targetMissed = false;
     const demoFloor = Math.max(1024, Math.round(item.originalSize * 0.04));
-    if (settings.targetSize > 0 && item.compressedSize > settings.targetSize) {
+    if (settings.targetSize > 0 && compressedSize > settings.targetSize) {
       if (settings.format === "png" || item.originalSize <= settings.targetSize) {
-        item.targetMissed = true;
+        targetMissed = true;
       } else if (settings.targetSize < demoFloor) {
-        item.targetMissed = true;
-        item.compressedSize = demoFloor;
+        targetMissed = true;
+        compressedSize = demoFloor;
       } else {
-        item.compressedSize = Math.round(settings.targetSize * (0.86 + Math.random() * 0.08));
+        compressedSize = Math.round(settings.targetSize * (0.86 + Math.random() * 0.08));
       }
     }
-    item.savedPercent = ((item.originalSize - item.compressedSize) / item.originalSize) * 100;
+    const savedPercent = ((item.originalSize - compressedSize) / item.originalSize) * 100;
     // The demo has no encoder to measure, so the quality tier follows the
     // compression ratio: more aggressive passes read as more loss.
-    item.ssim = Math.min(0.999, Math.max(0.8, 1 - (item.compressedSize / item.originalSize) * 0.16 - Math.random() * 0.01));
-    item.ssimMeasured = true;
+    const ssim = Math.min(0.999, Math.max(0.8, 1 - (compressedSize / item.originalSize) * 0.16 - Math.random() * 0.01));
     // A miss that hit the floor was encoded at the lowest quality the search
     // tries; a reachable cap lands somewhere in the usual range.
-    item.targetQuality =
-      item.targetBytes > 0 && settings.format !== "png"
-        ? item.targetMissed
+    const targetQuality =
+      targetBytes > 0 && settings.format !== "png"
+        ? targetMissed
           ? 10
           : Math.round(55 + Math.random() * 30)
         : 0;
-    if (settings.format === "jpeg" && item.hasAlpha) {
+    const transparencyKept = settings.format === "jpeg" && item.hasAlpha;
+    let outputFormat: string;
+    let outputName: string;
+    if (transparencyKept) {
       // JPG cannot carry transparency; the demo mirrors the backend, which
       // saves a transparent image as lossless PNG instead (#15).
-      item.outputFormat = "PNG";
-      item.transparencyKept = true;
-      item.outputName = item.name.replace(/\.[^.]+$/, `${settings.suffix}.png`);
+      outputFormat = "PNG";
+      outputName = item.name.replace(/\.[^.]+$/, `${settings.suffix}.png`);
     } else {
-      item.outputFormat = settings.format === "auto" ? "WEBP" : settings.format.toUpperCase();
-      item.transparencyKept = false;
-      item.outputName = item.name.replace(/\.[^.]+$/, `${settings.suffix}.${settings.format === "png" ? "png" : settings.format === "jpeg" ? "jpg" : "webp"}`);
+      outputFormat = settings.format === "auto" ? "WEBP" : settings.format.toUpperCase();
+      outputName = item.name.replace(/\.[^.]+$/, `${settings.suffix}.${settings.format === "png" ? "png" : settings.format === "jpeg" ? "jpg" : "webp"}`);
     }
+    item.outcome = readOutcome({
+      kind: "encoded", reason: "", compressedSize, outputFormat, outputName,
+      width: item.width, height: item.height, hasAlpha: item.hasAlpha,
+      transparencyKept, savedPercent, ssim, ssimMeasured: true, largeImageFastMode: false,
+      targetBytes, targetQuality, targetMissed,
+    });
     batch.done++;
     scheduleRender();
   }

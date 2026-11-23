@@ -1475,21 +1475,19 @@ func TestPassthroughCopyDoesNotClaimAlreadyOptimal(t *testing.T) {
 		t.Fatal(err)
 	}
 	if bytes.Contains(main, []byte("bestAlready")) {
-		t.Error("src/main.ts still calls bestAlready(); use keptOriginalLabel(item) so the pill names the actual reason")
+		t.Error("src/main.ts still calls bestAlready(); render the outcome's reason instead")
 	}
 	src := stripTSComments(string(main))
-	for _, want := range []string{"keptOriginalLabel", "keptOriginal()", "bestWithinTarget()", "bestGuardFailed()"} {
-		if !strings.Contains(src, want) {
-			t.Errorf("src/main.ts is missing %s; a passthrough must say why the original was kept", want)
-		}
+	if !strings.Contains(src, "presentOutcome(outcome, t)") {
+		t.Error("src/main.ts does not render the centralized outcome presentation")
 	}
 	compressor, err := os.ReadFile("compressor.go")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, reason := range []string{`"not_smaller"`, `"target_met"`, `"pixels_changed"`} {
+	for _, reason := range []string{"ReasonNotSmaller", "ReasonTargetMet", "ReasonPixelsChanged"} {
 		if !bytes.Contains(compressor, []byte(reason)) {
-			t.Errorf("compressor.go never sets keptOriginalReason %s", reason)
+			t.Errorf("compressor.go never constructs a passthrough for %s", reason)
 		}
 	}
 }

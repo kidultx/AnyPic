@@ -19,15 +19,15 @@ func unsavedQuitFixture(t *testing.T) *AnyPic {
 		t.Fatal(err)
 	}
 	item := &Item{
-		ID:             7,
-		Name:           "photo.jpg",
-		Path:           filepath.Join(t.TempDir(), "photo.jpg"),
-		Dir:            t.TempDir(),
-		Format:         "JPEG",
-		Status:         statusDone,
-		OutputFormat:   "WEBP",
-		OutputName:     "photo-anypic.webp",
-		compressedPath: comp,
+		ID:     7,
+		Name:   "photo.jpg",
+		Path:   filepath.Join(t.TempDir(), "photo.jpg"),
+		Dir:    t.TempDir(),
+		Format: "JPEG",
+		Status: statusDone,
+		Outcome: newEncodedOutcome(comp, 0, OutcomeSnapshot{
+			CompressedSize: 6, OutputFormat: "WEBP", OutputName: "photo-anypic.webp", Width: 1, Height: 1,
+		}),
 	}
 	service.items = []*Item{item}
 	service.byID = map[int64]*Item{item.ID: item}

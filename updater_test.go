@@ -581,14 +581,12 @@ func TestIssue14UnsavedResultsExportProcessed(t *testing.T) {
 
 	service.mu.Lock()
 	passthrough := &Item{
-		ID:             999,
-		Name:           "two.png",
-		Path:           src,
-		Dir:            filepath.Dir(src),
-		Status:         statusDone,
-		PassedThrough:  true,
-		compressedPath: src,
-		OutputName:     "two-anypic.png",
+		ID:      999,
+		Name:    "two.png",
+		Path:    src,
+		Dir:     filepath.Dir(src),
+		Status:  statusDone,
+		Outcome: newPassedThroughOutcome(src, "two.png", "PNG", settings, ReasonNotSmaller, OutcomeSnapshot{SSIMMeasured: true}),
 	}
 	service.items = append(service.items, passthrough)
 	service.byID[passthrough.ID] = passthrough

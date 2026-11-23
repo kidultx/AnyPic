@@ -77,6 +77,7 @@ bun run dev:web
 
 ```bash
 bun run typecheck    # TypeScript 类型检查
+bun run test         # Outcome 前端值语义与展示测试
 go vet ./...
 go test -race -count=1 -timeout 25m ./...  # 后端单元与集成测试（含压缩基准集对比）
 bun run build        # 生成 build/ 下的应用包与安装包
@@ -132,6 +133,7 @@ macOS 发布包用一张固定不变的自签名证书「AnyPic Release Signing�
 ```text
 main.go            应用入口、窗口、原生菜单、托盘与命令事件
 compressor.go      图片队列、压缩管线、预览、导出、设置持久化
+outcome.go         一次压缩的不可变结果、稳定原因与 IPC 快照
 quality.go         目标体积质量搜索与 SSIM 画质测量
 metadata.go        色彩配置兼容性检查与透传、EXIF 选择性保留与无损 PNG 逐像素校验
 png_lossless.go    纯 Go PNG filter 搜索编码器（无损输出，标准库编码作为基线）
@@ -152,6 +154,7 @@ i18n.go            语言选择解析、Go 侧 tr() 与页面识别的稳定错�
 locales/           中英文文案目录（zh-Hans.json / en.json）与生成的 Go 访问器
 index.html         应用界面结构
 src/main.ts        状态管理、渲染与交互
+src/outcome.ts     只读结果与保留原图、画质、目标未达、错误的统一展示
 src/i18n.ts        页面语言选择、data-i18n 标记填充与错误码
 src/locales.ts     由 locales/*.json 生成的类型化文案访问器
 src/style.css      设计系统与响应式布局
